@@ -13,6 +13,10 @@ import re
 import zipfile
 import xml.etree.ElementTree as ET
 from datetime import date, datetime
+import base64
+
+import benutzer
+from kern import ApiFehler, de, de_datum, jl, zahl
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS bank_auszuege (
@@ -33,6 +37,8 @@ CREATE INDEX IF NOT EXISTS ix_bank_umsaetze_buchung ON bank_umsaetze(buchung);
 CREATE INDEX IF NOT EXISTS ix_bank_umsaetze_status ON bank_umsaetze(status);
 """
 
+# von app.py gesetzt: prot, op_zahlung_buchen, zahlungseingang_loeschen, ich_login, daten
+HILFE = {}
 MAX_DATEI = 50 * 1024 * 1024
 MAX_ENTPACKT = 200 * 1024 * 1024
 
@@ -415,3 +421,138 @@ def kandidaten(con):
     return {"op": [{"id": o["id"], "text": f"{o['art']} {o['nummer']} · {o['kurzname'] or ''}", "offen": o["offen"], "faellig": o["faellig"]} for o in offene_posten(con)],
             "zahlung": [{"id": z["id"], "text": f"{z['nummer']} · {z['lieferant'] or ''} · {z['belegnr'] or ''}", "offen": z["betrag"], "faellig": z["faellig"]}
                         for z in zahlungsauftraege(con)]}
+
+
+# ---------------------------------------------------------------- Zuordnen, Lösen, Schnittstelle
+def eingang_entfernt(con, zid):
+    """Ein aus dem Kontoauszug gebuchter Zahlungseingang wurde von Hand gelöscht: den Umsatz wieder zur Zuordnung anbieten."""
+    for r in con.execute("SELECT id, ziel FROM bank_umsaetze WHERE status='zugeordnet' AND ziel LIKE ?", (f"%{zid}%",)).fetchall():
+        ziele = jl(r["ziel"], [])
+        geaendert = False
+        for t in ziele:
+            if t.get("art") == "op" and zid in (t.get("eingaenge") or []):
+                t["eingaenge"] = [i for i in t["eingaenge"] if i != zid]
+                geaendert = True
+        if not geaendert:
+            continue
+        rest = [t for t in ziele if t.get("art") == "zahlung" or t.get("eingaenge")]
+        if rest:
+            con.execute("UPDATE bank_umsaetze SET ziel=? WHERE id=?", (json.dumps(ziele, ensure_ascii=False), r["id"]))
+        else:
+            con.execute("UPDATE bank_umsaetze SET status='offen', ziel='[]', zugeordnet='', von='' WHERE id=?", (r["id"],))
+
+
+def zuordnen(con, uid, ziele):
+    u = con.execute("SELECT * FROM bank_umsaetze WHERE id=?", (uid,)).fetchone()
+    if not u:
+        raise ApiFehler("Umsatz nicht gefunden.", 404)
+    if u["status"] != "offen":
+        raise ApiFehler("Dieser Umsatz ist schon zugeordnet oder erledigt.", 409)
+    ziele = [t for t in (ziele or []) if isinstance(t, dict) and t.get("art") in ("op", "zahlung") and str(t.get("id") or "").isdigit()]
+    if not ziele:
+        raise ApiFehler("Bitte einen offenen Posten oder Zahlungsauftrag wählen.")
+    gutschrift = u["betrag"] > 0
+    if any((t["art"] == "op") != gutschrift for t in ziele):
+        raise ApiFehler("Gutschriften gehören zu offenen Posten (Kundenzahlungen), Abbuchungen zu Zahlungsaufträgen.")
+    erg, texte = [], []
+    if gutschrift:
+        summe = round(sum(zahl(t.get("betrag"), float) for t in ziele), 2)
+        if abs(summe - round(u["betrag"], 2)) > 0.009:
+            raise ApiFehler(f"Die aufgeteilten Beträge ({de(summe)} €) ergeben nicht den Umsatz ({de(u['betrag'])} €).")
+        for t in ziele:
+            b = round(zahl(t.get("betrag"), float), 2)
+            if b <= 0:
+                continue
+            op = con.execute("SELECT nummer FROM offene_posten WHERE id=?", (int(t["id"]),)).fetchone()
+            ids = HILFE["op_zahlung_buchen"](con, int(t["id"]), {"betrag": b, "datum": u["buchung"] or date.today().isoformat(), "art": "Überweisung",
+                                                        "bemerkung": f"Kontoauszug {de_datum(u['buchung'])}: {u['name']}"[:200]})
+            erg.append({"art": "op", "id": int(t["id"]), "betrag": b, "eingaenge": ids, "nummer": op["nummer"] if op else ""})
+            texte.append(f"{op['nummer'] if op else t['id']} {de(b)} €")
+    else:
+        if len(ziele) != 1:
+            raise ApiFehler("Eine Abbuchung gehört zu genau einem Zahlungsauftrag.")
+        t = ziele[0]
+        z = con.execute("SELECT id, nummer, bezahlt, betrag FROM zahlungen WHERE id=?", (int(t["id"]),)).fetchone()
+        if not z:
+            raise ApiFehler("Zahlungsauftrag nicht gefunden.", 404)
+        gesetzt = not z["bezahlt"]
+        if gesetzt:
+            tag = u["buchung"] or date.today().isoformat()
+            con.execute("UPDATE zahlungen SET bezahlt=?, geaendert=? WHERE id=?", (tag, jetzt(), z["id"]))
+            HILFE["prot"](con, "zahlungsauftrag_bezahlt", z["nummer"], f"Als bezahlt am {de_datum(tag)} markiert (Kontoauszug, damit gesperrt): {z['nummer']}",
+                 {"nummern": [z["nummer"]], "bezahlt": tag, "bank_umsatz": uid})
+        erg.append({"art": "zahlung", "id": z["id"], "betrag": -u["betrag"], "gesetzt": gesetzt, "nummer": z["nummer"]})
+        texte.append(z["nummer"])
+    con.execute("UPDATE bank_umsaetze SET status='zugeordnet', ziel=?, zugeordnet=?, von=? WHERE id=?",
+                (json.dumps(erg, ensure_ascii=False), jetzt(), HILFE["ich_login"](), uid))
+    HILFE["prot"](con, "bank_zuordnung", ", ".join(texte)[:80], f"Kontoumsatz {de_datum(u['buchung'])} {de(u['betrag'])} € ({u['name']}) zugeordnet: {', '.join(texte)}",
+         {"umsatz": uid, "schluessel": u["schluessel"], "ziele": erg})
+    return erg
+
+
+def loesen(con, uid):
+    u = con.execute("SELECT * FROM bank_umsaetze WHERE id=?", (uid,)).fetchone()
+    if not u:
+        raise ApiFehler("Umsatz nicht gefunden.", 404)
+    ziele = jl(u["ziel"], [])
+    if any(t.get("art") == "zahlung" and t.get("gesetzt") for t in ziele) and not benutzer.ist_inhaber():
+        raise ApiFehler("„Bezahlt“ bei einem Zahlungsauftrag zurücknehmen kann nur der Inhaber.", 403)
+    for t in ziele:
+        if t.get("art") == "op":
+            for zid in t.get("eingaenge") or []:
+                HILFE["zahlungseingang_loeschen"](con, zid, aus_bank=True)
+        elif t.get("art") == "zahlung" and t.get("gesetzt"):
+            z = con.execute("SELECT nummer, bezahlt, betrag FROM zahlungen WHERE id=?", (t["id"],)).fetchone()
+            if z and z["bezahlt"]:
+                con.execute("UPDATE zahlungen SET bezahlt='', geaendert=? WHERE id=?", (jetzt(), t["id"]))
+                HILFE["prot"](con, "zahlungsauftrag_geoeffnet", z["nummer"], f"„Bezahlt“ zurückgenommen (Zuordnung zum Kontoauszug gelöst): {z['nummer']}",
+                     {"bezahlt_alt": z["bezahlt"], "betrag": z["betrag"], "bank_umsatz": uid})
+    con.execute("UPDATE bank_umsaetze SET status='offen', ziel='[]', notiz='', zugeordnet='', von='' WHERE id=?", (uid,))
+    if u["status"] == "zugeordnet":
+        HILFE["prot"](con, "bank_loesung", str(uid), f"Zuordnung des Kontoumsatzes {de_datum(u['buchung'])} {de(u['betrag'])} € ({u['name']}) gelöst", {"umsatz": uid, "ziele": ziele})
+    return {"ok": True}
+
+
+def web_api(con, methode, teile, q, d):
+    sub = teile[1] if len(teile) > 1 else None
+    uid = int(sub) if sub and sub.isdigit() else None
+    aktion = teile[2] if len(teile) > 2 else None
+    if methode == "GET" and sub is None:
+        return liste(con, q)
+    if methode == "GET" and sub == "kandidaten":
+        return kandidaten(con)
+    if methode == "POST" and sub == "einlesen":
+        if not d.get("daten"):
+            raise ApiFehler("Keine Datei übergeben.")
+        roh = base64.b64decode(d["daten"])
+        erg = einlesen(con, roh, str(d.get("dateiname") or "kontoauszug.xml")[:120], os.path.join(HILFE["daten"], "bank"), HILFE["ich_login"]())
+        HILFE["prot"](con, "bank_import", str(d.get("dateiname") or "")[:80], f"Kontoauszug eingelesen: {d.get('dateiname') or ''} · {erg['neu']} neue Umsätze"
+             + (f", {erg['doppelt']} schon vorhanden" if erg["doppelt"] else ""), {"sha256": erg["sha256"], "ablage": erg["ablage"], "neu": erg["neu"], "doppelt": erg["doppelt"]})
+        return erg
+    if methode == "POST" and sub == "sichere":
+        # alle sicheren Vorschläge auf einmal übernehmen
+        daten_ = liste(con, {"status": "offen"})
+        n, fehler = 0, []
+        for u in daten_["umsaetze"]:
+            v = u.get("vorschlag")
+            if v and v["sicher"]:
+                try:
+                    zuordnen(con, u["id"], v["ziele"])
+                    n += 1
+                except ApiFehler as f:
+                    fehler.append(f"{de_datum(u['buchung'])} {u['name']}: {f}")
+        return {"zugeordnet": n, "fehler": fehler}
+    if methode == "POST" and uid and aktion == "zuordnen":
+        return {"ziele": zuordnen(con, uid, d.get("ziele"))}
+    if methode == "POST" and uid and aktion == "loesen":
+        return loesen(con, uid)
+    if methode == "POST" and uid and aktion == "ignorieren":
+        u = con.execute("SELECT status FROM bank_umsaetze WHERE id=?", (uid,)).fetchone()
+        if not u:
+            raise ApiFehler("Umsatz nicht gefunden.", 404)
+        if u["status"] == "zugeordnet":
+            raise ApiFehler("Bitte zuerst die Zuordnung lösen.", 409)
+        con.execute("UPDATE bank_umsaetze SET status='ignoriert', notiz=?, zugeordnet=?, von=? WHERE id=?",
+                    (str(d.get("notiz") or "")[:200], jetzt(), HILFE["ich_login"](), uid))
+        return {"ok": True}
+    raise ApiFehler("Unbekannte Anfrage", 404)

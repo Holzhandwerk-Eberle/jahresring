@@ -10,6 +10,14 @@ import calendar
 import json
 from datetime import date, timedelta
 
+import bank
+import benutzer
+import personal
+from kern import ApiFehler
+
+# von app.py gesetzt: einstellungen, auftrag_rechnen, beleg_umsatz
+HILFE = {}
+
 STANDARD = {"wochen": 12, "start_manuell": None, "regelmaessig": [], "auftraege": True, "ust": {"rhythmus": "quartal", "dauerfrist": False}, "loehne": True}
 RHYTHMEN = {"monatlich": 1, "quartal": 3, "halbjahr": 6, "jaehrlich": 12}
 
@@ -252,3 +260,36 @@ def berechnen(con, hilfe, cfg=None):
              "aus": round(-sum(p["betrag"] for p in posten if p["ueberfaellig"] and p["betrag"] < 0), 2)}
     return {"start": start, "wochen": aus, "tiefst": tiefst and {"saldo": tiefst["saldo"], "von": tiefst["von"]}, "ueberfaellig": ueber,
             "hinweise": hinweise, "einstellungen": cfg}
+
+
+# ---------------------------------------------------------------- Schnittstelle
+def auftraege_rest(con):
+    """Laufende Aufträge (nicht Anfrage/Angebot, nicht abgeschlossen) mit noch nicht berechnetem Nettobetrag und Termin."""
+    e = HILFE["einstellungen"](con)
+    st_ang = e.get("status_angebot") or ["Anfrage", "Angebot"]
+    st_ende = e.get("status_ende") or []
+    berechnet = {}
+    for b in con.execute("SELECT * FROM belege WHERE status IN ('fest','storniert') AND art IN ('abschlag','rechnung','storno','gutschrift','korrektur')"):
+        berechnet[b["auftrag_id"]] = berechnet.get(b["auftrag_id"], 0) + HILFE["beleg_umsatz"](b)
+    aus = []
+    for a in con.execute("SELECT a.id, a.nummer, a.status, a.plan_bis, a.lieferung, k.kurzname, k.ust FROM auftraege a JOIN kunden k ON k.id=a.kunde_id"):
+        if a["status"] in st_ende or a["status"] in st_ang:
+            continue
+        try:
+            netto = HILFE["auftrag_rechnen"](con, a["id"])["netto"]
+        except ApiFehler:
+            continue
+        termin = con.execute("SELECT MAX(bis) FROM termine WHERE auftrag_id=? AND erledigt=0", (a["id"],)).fetchone()[0]
+        aus.append({"id": a["id"], "nummer": a["nummer"], "kunde": a["kurzname"], "rest_netto": round(max(0, netto - berechnet.get(a["id"], 0)), 2),
+                    "ust_satz": float(a["ust"] if a["ust"] is not None else 19), "termin": a["plan_bis"] or a["lieferung"] or termin or ""})
+    return aus
+
+
+def web_api(con, methode, teile, q, d):
+    if methode == "PUT" and teile[1:] == ["einstellungen"]:
+        einstellungen_speichern(con, d)
+        methode = "GET"
+    if methode == "GET":
+        return berechnen(con, {"kontostand": bank.kontostand_lesen, "auftraege_rest": auftraege_rest,
+                                           "lohn_faelligkeiten": personal.lohn_faelligkeiten, "darf_loehne": benutzer.darf("personal", 1)})
+    raise ApiFehler("Unbekannte Anfrage", 404)

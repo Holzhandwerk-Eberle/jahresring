@@ -46,6 +46,13 @@ import binascii
 import gzip
 import projektsicherung
 import bank
+import testdaten
+import monatsbeleg
+import arbeitsschutz_web
+from monatsbeleg import monatsbeleg_hash, monatsbeleg_hash_v1, monatsbeleg_signaturen, monatsbeleg_unterschreiben, monatsbeleg_sig_bilder  # noqa: F401
+from arbeitsschutz_web import zeichen_liste, arbeitsschutz_api, stempel_arbeitsschutz, as_druck_name, as_druck_html  # noqa: F401
+from kern import ApiFehler, jetzt, zahl, jl, de, de_datum, h, plus_tage
+from sepa import iban_normal, iban_ok, ibanFormat_py, sepa_xml
 import liquiditaet
 import preise
 import wiedervorlage
@@ -522,16 +529,6 @@ SUCHFELDER = {
     "email": ["email1", "email2", "email3", "email4"],
     "merkmale": ["merkmale"],
 }
-
-
-class ApiFehler(Exception):
-    def __init__(self, text, code=400):
-        super().__init__(text)
-        self.code = code
-
-
-def jetzt():
-    return datetime.now().isoformat(timespec="seconds")
 
 
 def verbindung():
@@ -1835,17 +1832,6 @@ def dateifehler(f):
     return ApiFehler(f"Dateifehler: {f}")
 
 
-def zahl(wert, typ):
-    if wert in (None, ""):
-        return 0
-    if isinstance(wert, str):
-        wert = wert.replace(".", "").replace(",", ".") if "," in wert else wert
-    try:
-        return typ(float(wert))
-    except ValueError:
-        raise ApiFehler(f"Ungültige Zahl: {wert}")
-
-
 def kunde_daten(daten):
     werte = {}
     for f in KUNDE_FELDER:
@@ -1859,18 +1845,6 @@ def kunde_daten(daten):
                 v = ""
             werte[f] = v
     return werte
-
-
-def iban_normal(iban):
-    return re.sub(r"\s", "", str(iban or "")).upper()
-
-
-def iban_ok(iban):
-    i = iban_normal(iban)
-    if not re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]{11,30}", i):
-        return False
-    ziffern = "".join(str(int(c, 36)) for c in i[4:] + i[:4])
-    return int(ziffern) % 97 == 1
 
 
 def lieferant_daten(daten):
@@ -1914,13 +1888,6 @@ def naechste_zahlungsnummer(con):
     return f"Z{jahr}-{lfd:04d}"
 
 
-def plus_tage(iso, tage):
-    try:
-        return date.fromordinal(date.fromisoformat(iso[:10]).toordinal() + int(tage or 0)).isoformat()
-    except (ValueError, TypeError):
-        return ""
-
-
 ZAHLUNG_FREI = ("bemerkung", "auftrag_id", "bezahlung")   # auch nach „bezahlt“ änderbar
 
 
@@ -1951,55 +1918,6 @@ def zahlung_laden(con, zid):
     if not z:
         raise ApiFehler("Zahlungsauftrag nicht gefunden", 404)
     return dict(z)
-
-
-SEPA_UMLAUTE = {"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss", "&": "+"}
-
-
-def sepa_text(s, laenge):
-    s = "".join(SEPA_UMLAUTE.get(c, c) for c in str(s or ""))
-    s = re.sub(r"[^A-Za-z0-9/\-?:().,'+ ]", " ", s)
-    return re.sub(r"\s+", " ", s).strip()[:laenge]
-
-
-def sepa_xml(e, posten, ausfuehrung):
-    """Erzeugt eine SEPA-Überweisungsdatei (pain.001.001.09) für das Onlinebanking."""
-    from xml.sax.saxutils import escape as x
-    name = sepa_text(e.get("sepa_name") or e.get("firma"), 70)
-    iban = iban_normal(e.get("sepa_iban"))
-    bic = re.sub(r"\s", "", e.get("sepa_bic") or "").upper()
-    if bic and not re.fullmatch(r"[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?", bic):
-        bic = ""
-    if not name or not iban_ok(iban):
-        raise ApiFehler("Für die SEPA-Datei fehlen in den Einstellungen Kontoinhaber oder eine gültige eigene IBAN.")
-    summe = sum(round(p["zahlbetrag"], 2) for p in posten)
-    msg = "JR" + datetime.now().strftime("%Y%m%d%H%M%S%f")   # eindeutig auch bei zwei Dateien in derselben Sekunde
-    tx = []
-    for p in posten:
-        bic_n = re.sub(r"\s", "", p.get("bic") or "").upper()
-        # BIC ist im SEPA-Raum freiwillig; eine unvollständige BIC würde die ganze Datei ungültig machen
-        bic_p = f"<CdtrAgt><FinInstnId><BICFI>{x(bic_n)}</BICFI></FinInstnId></CdtrAgt>" if re.fullmatch(r"[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?", bic_n) else ""
-        zweck = sepa_text(p["verwendungszweck"], 140)
-        tx.append(
-            f"<CdtTrfTxInf><PmtId><EndToEndId>{x(sepa_text(p['nummer'], 35))}</EndToEndId></PmtId>"
-            f"<Amt><InstdAmt Ccy=\"EUR\">{p['zahlbetrag']:.2f}</InstdAmt></Amt>{bic_p}"
-            f"<Cdtr><Nm>{x(sepa_text(p['empfaenger'], 70))}</Nm></Cdtr>"
-            f"<CdtrAcct><Id><IBAN>{x(p['iban'])}</IBAN></Id></CdtrAcct>"
-            f"<RmtInf><Ustrd>{x(zweck)}</Ustrd></RmtInf></CdtTrfTxInf>")
-    dbtr_agt = f"<FinInstnId><BICFI>{x(bic)}</BICFI></FinInstnId>" if bic else "<FinInstnId><Othr><Id>NOTPROVIDED</Id></Othr></FinInstnId>"
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.09">'
-        f"<CstmrCdtTrfInitn><GrpHdr><MsgId>{msg}</MsgId><CreDtTm>{datetime.now().isoformat(timespec='seconds')}</CreDtTm>"
-        f"<NbOfTxs>{len(posten)}</NbOfTxs><CtrlSum>{summe:.2f}</CtrlSum><InitgPty><Nm>{x(name)}</Nm></InitgPty></GrpHdr>"
-        f"<PmtInf><PmtInfId>{msg}-1</PmtInfId><PmtMtd>TRF</PmtMtd><BtchBookg>true</BtchBookg>"
-        f"<NbOfTxs>{len(posten)}</NbOfTxs><CtrlSum>{summe:.2f}</CtrlSum>"
-        "<PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl></PmtTpInf>"
-        f"<ReqdExctnDt><Dt>{ausfuehrung}</Dt></ReqdExctnDt>"
-        f"<Dbtr><Nm>{x(name)}</Nm></Dbtr><DbtrAcct><Id><IBAN>{iban}</IBAN></Id></DbtrAcct>"
-        f"<DbtrAgt>{dbtr_agt}</DbtrAgt><ChrgBr>SLEV</ChrgBr>"
-        + "".join(tx) + "</PmtInf></CstmrCdtTrfInitn></Document>\n"
-    )
 
 
 def kunde_mit_zaehlern(con, kid):
@@ -2571,14 +2489,6 @@ POS_JSON = ("masse", "zeige", "stueckliste", "beschlaege", "zeiten", "extras", "
 POS_FELDER = ["parent_id", "titel", "sort", "gesperrt", "alternativ", "gruppe", "status", "menge", "einheit", "text", "masse",
               "einzelpreis", "preis_manuell", "zeige", "unterdruck", "stueckliste", "beschlaege", "zeiten",
               "zeitmodus", "extras", "bilder"]
-
-
-def jl(s, standard):
-    try:
-        v = json.loads(s) if isinstance(s, str) and s else s
-        return v if v is not None else standard
-    except ValueError:
-        return standard
 
 
 def pos_dict(r):
@@ -3297,15 +3207,6 @@ BELEG_TEXTE = {
 
 HINWEIS_14B = ("Hinweis für Privatkunden: Sie sind gesetzlich verpflichtet, diese Rechnung zwei Jahre lang "
                "aufzubewahren (§ 14b Abs. 1 Satz 5 UStG).")
-
-
-def de(z, n=2):
-    s = f"{abs(z):,.{n}f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    return ("-" if z < 0 and round(abs(z), n) else "") + s
-
-
-def de_datum(iso):
-    return f"{iso[8:10]}.{iso[5:7]}.{iso[:4]}" if iso and len(iso) >= 10 else ""
 
 
 def kunde_block(k):
@@ -4034,176 +3935,10 @@ def zahlungseingang_loeschen(con, zid, aus_bank=False):
          f"Zahlungseingang {de(z['betrag'])} € vom {de_datum(z['datum'])} zu {op['nummer'] if op else 'OP ' + str(z['op_id'])} gelöscht"
          + (" (Zuordnung zum Kontoauszug gelöst)" if aus_bank else ""), dict(z))
     if not aus_bank:
-        bank_eingang_entfernt(con, zid)
+        bank.eingang_entfernt(con, zid)
 
 
 # ---------------------------------------------------------------- Kontoauszüge (bank.py)
-def bank_eingang_entfernt(con, zid):
-    """Ein aus dem Kontoauszug gebuchter Zahlungseingang wurde von Hand gelöscht: den Umsatz wieder zur Zuordnung anbieten."""
-    for r in con.execute("SELECT id, ziel FROM bank_umsaetze WHERE status='zugeordnet' AND ziel LIKE ?", (f"%{zid}%",)).fetchall():
-        ziele = jl(r["ziel"], [])
-        geaendert = False
-        for t in ziele:
-            if t.get("art") == "op" and zid in (t.get("eingaenge") or []):
-                t["eingaenge"] = [i for i in t["eingaenge"] if i != zid]
-                geaendert = True
-        if not geaendert:
-            continue
-        rest = [t for t in ziele if t.get("art") == "zahlung" or t.get("eingaenge")]
-        if rest:
-            con.execute("UPDATE bank_umsaetze SET ziel=? WHERE id=?", (json.dumps(ziele, ensure_ascii=False), r["id"]))
-        else:
-            con.execute("UPDATE bank_umsaetze SET status='offen', ziel='[]', zugeordnet='', von='' WHERE id=?", (r["id"],))
-
-
-def bank_zuordnen(con, uid, ziele):
-    u = con.execute("SELECT * FROM bank_umsaetze WHERE id=?", (uid,)).fetchone()
-    if not u:
-        raise ApiFehler("Umsatz nicht gefunden.", 404)
-    if u["status"] != "offen":
-        raise ApiFehler("Dieser Umsatz ist schon zugeordnet oder erledigt.", 409)
-    ziele = [t for t in (ziele or []) if isinstance(t, dict) and t.get("art") in ("op", "zahlung") and str(t.get("id") or "").isdigit()]
-    if not ziele:
-        raise ApiFehler("Bitte einen offenen Posten oder Zahlungsauftrag wählen.")
-    gutschrift = u["betrag"] > 0
-    if any((t["art"] == "op") != gutschrift for t in ziele):
-        raise ApiFehler("Gutschriften gehören zu offenen Posten (Kundenzahlungen), Abbuchungen zu Zahlungsaufträgen.")
-    erg, texte = [], []
-    if gutschrift:
-        summe = round(sum(zahl(t.get("betrag"), float) for t in ziele), 2)
-        if abs(summe - round(u["betrag"], 2)) > 0.009:
-            raise ApiFehler(f"Die aufgeteilten Beträge ({de(summe)} €) ergeben nicht den Umsatz ({de(u['betrag'])} €).")
-        for t in ziele:
-            b = round(zahl(t.get("betrag"), float), 2)
-            if b <= 0:
-                continue
-            op = con.execute("SELECT nummer FROM offene_posten WHERE id=?", (int(t["id"]),)).fetchone()
-            ids = op_zahlung_buchen(con, int(t["id"]), {"betrag": b, "datum": u["buchung"] or date.today().isoformat(), "art": "Überweisung",
-                                                        "bemerkung": f"Kontoauszug {de_datum(u['buchung'])}: {u['name']}"[:200]})
-            erg.append({"art": "op", "id": int(t["id"]), "betrag": b, "eingaenge": ids, "nummer": op["nummer"] if op else ""})
-            texte.append(f"{op['nummer'] if op else t['id']} {de(b)} €")
-    else:
-        if len(ziele) != 1:
-            raise ApiFehler("Eine Abbuchung gehört zu genau einem Zahlungsauftrag.")
-        t = ziele[0]
-        z = con.execute("SELECT id, nummer, bezahlt, betrag FROM zahlungen WHERE id=?", (int(t["id"]),)).fetchone()
-        if not z:
-            raise ApiFehler("Zahlungsauftrag nicht gefunden.", 404)
-        gesetzt = not z["bezahlt"]
-        if gesetzt:
-            tag = u["buchung"] or date.today().isoformat()
-            con.execute("UPDATE zahlungen SET bezahlt=?, geaendert=? WHERE id=?", (tag, jetzt(), z["id"]))
-            prot(con, "zahlungsauftrag_bezahlt", z["nummer"], f"Als bezahlt am {de_datum(tag)} markiert (Kontoauszug, damit gesperrt): {z['nummer']}",
-                 {"nummern": [z["nummer"]], "bezahlt": tag, "bank_umsatz": uid})
-        erg.append({"art": "zahlung", "id": z["id"], "betrag": -u["betrag"], "gesetzt": gesetzt, "nummer": z["nummer"]})
-        texte.append(z["nummer"])
-    con.execute("UPDATE bank_umsaetze SET status='zugeordnet', ziel=?, zugeordnet=?, von=? WHERE id=?",
-                (json.dumps(erg, ensure_ascii=False), jetzt(), ich_login(), uid))
-    prot(con, "bank_zuordnung", ", ".join(texte)[:80], f"Kontoumsatz {de_datum(u['buchung'])} {de(u['betrag'])} € ({u['name']}) zugeordnet: {', '.join(texte)}",
-         {"umsatz": uid, "schluessel": u["schluessel"], "ziele": erg})
-    return erg
-
-
-def bank_loesen(con, uid):
-    u = con.execute("SELECT * FROM bank_umsaetze WHERE id=?", (uid,)).fetchone()
-    if not u:
-        raise ApiFehler("Umsatz nicht gefunden.", 404)
-    ziele = jl(u["ziel"], [])
-    if any(t.get("art") == "zahlung" and t.get("gesetzt") for t in ziele) and not benutzer.ist_inhaber():
-        raise ApiFehler("„Bezahlt“ bei einem Zahlungsauftrag zurücknehmen kann nur der Inhaber.", 403)
-    for t in ziele:
-        if t.get("art") == "op":
-            for zid in t.get("eingaenge") or []:
-                zahlungseingang_loeschen(con, zid, aus_bank=True)
-        elif t.get("art") == "zahlung" and t.get("gesetzt"):
-            z = con.execute("SELECT nummer, bezahlt, betrag FROM zahlungen WHERE id=?", (t["id"],)).fetchone()
-            if z and z["bezahlt"]:
-                con.execute("UPDATE zahlungen SET bezahlt='', geaendert=? WHERE id=?", (jetzt(), t["id"]))
-                prot(con, "zahlungsauftrag_geoeffnet", z["nummer"], f"„Bezahlt“ zurückgenommen (Zuordnung zum Kontoauszug gelöst): {z['nummer']}",
-                     {"bezahlt_alt": z["bezahlt"], "betrag": z["betrag"], "bank_umsatz": uid})
-    con.execute("UPDATE bank_umsaetze SET status='offen', ziel='[]', notiz='', zugeordnet='', von='' WHERE id=?", (uid,))
-    if u["status"] == "zugeordnet":
-        prot(con, "bank_loesung", str(uid), f"Zuordnung des Kontoumsatzes {de_datum(u['buchung'])} {de(u['betrag'])} € ({u['name']}) gelöst", {"umsatz": uid, "ziele": ziele})
-    return {"ok": True}
-
-
-def bank_api(con, methode, teile, q, d):
-    sub = teile[1] if len(teile) > 1 else None
-    uid = int(sub) if sub and sub.isdigit() else None
-    aktion = teile[2] if len(teile) > 2 else None
-    if methode == "GET" and sub is None:
-        return bank.liste(con, q)
-    if methode == "GET" and sub == "kandidaten":
-        return bank.kandidaten(con)
-    if methode == "POST" and sub == "einlesen":
-        if not d.get("daten"):
-            raise ApiFehler("Keine Datei übergeben.")
-        roh = base64.b64decode(d["daten"])
-        erg = bank.einlesen(con, roh, str(d.get("dateiname") or "kontoauszug.xml")[:120], os.path.join(DATEN, "bank"), ich_login())
-        prot(con, "bank_import", str(d.get("dateiname") or "")[:80], f"Kontoauszug eingelesen: {d.get('dateiname') or ''} · {erg['neu']} neue Umsätze"
-             + (f", {erg['doppelt']} schon vorhanden" if erg["doppelt"] else ""), {"sha256": erg["sha256"], "ablage": erg["ablage"], "neu": erg["neu"], "doppelt": erg["doppelt"]})
-        return erg
-    if methode == "POST" and sub == "sichere":
-        # alle sicheren Vorschläge auf einmal übernehmen
-        daten_ = bank.liste(con, {"status": "offen"})
-        n, fehler = 0, []
-        for u in daten_["umsaetze"]:
-            v = u.get("vorschlag")
-            if v and v["sicher"]:
-                try:
-                    bank_zuordnen(con, u["id"], v["ziele"])
-                    n += 1
-                except ApiFehler as f:
-                    fehler.append(f"{de_datum(u['buchung'])} {u['name']}: {f}")
-        return {"zugeordnet": n, "fehler": fehler}
-    if methode == "POST" and uid and aktion == "zuordnen":
-        return {"ziele": bank_zuordnen(con, uid, d.get("ziele"))}
-    if methode == "POST" and uid and aktion == "loesen":
-        return bank_loesen(con, uid)
-    if methode == "POST" and uid and aktion == "ignorieren":
-        u = con.execute("SELECT status FROM bank_umsaetze WHERE id=?", (uid,)).fetchone()
-        if not u:
-            raise ApiFehler("Umsatz nicht gefunden.", 404)
-        if u["status"] == "zugeordnet":
-            raise ApiFehler("Bitte zuerst die Zuordnung lösen.", 409)
-        con.execute("UPDATE bank_umsaetze SET status='ignoriert', notiz=?, zugeordnet=?, von=? WHERE id=?",
-                    (str(d.get("notiz") or "")[:200], jetzt(), ich_login(), uid))
-        return {"ok": True}
-    raise ApiFehler("Unbekannte Anfrage", 404)
-
-
-def liquiditaet_auftraege_rest(con):
-    """Laufende Aufträge (nicht Anfrage/Angebot, nicht abgeschlossen) mit noch nicht berechnetem Nettobetrag und Termin."""
-    e = einstellungen(con)
-    st_ang = e.get("status_angebot") or ["Anfrage", "Angebot"]
-    st_ende = e.get("status_ende") or []
-    berechnet = {}
-    for b in con.execute("SELECT * FROM belege WHERE status IN ('fest','storniert') AND art IN ('abschlag','rechnung','storno','gutschrift','korrektur')"):
-        berechnet[b["auftrag_id"]] = berechnet.get(b["auftrag_id"], 0) + beleg_umsatz(b)
-    aus = []
-    for a in con.execute("SELECT a.id, a.nummer, a.status, a.plan_bis, a.lieferung, k.kurzname, k.ust FROM auftraege a JOIN kunden k ON k.id=a.kunde_id"):
-        if a["status"] in st_ende or a["status"] in st_ang:
-            continue
-        try:
-            netto = auftrag_rechnen(con, a["id"])["netto"]
-        except ApiFehler:
-            continue
-        termin = con.execute("SELECT MAX(bis) FROM termine WHERE auftrag_id=? AND erledigt=0", (a["id"],)).fetchone()[0]
-        aus.append({"id": a["id"], "nummer": a["nummer"], "kunde": a["kurzname"], "rest_netto": round(max(0, netto - berechnet.get(a["id"], 0)), 2),
-                    "ust_satz": float(a["ust"] if a["ust"] is not None else 19), "termin": a["plan_bis"] or a["lieferung"] or termin or ""})
-    return aus
-
-
-def liquiditaet_api(con, methode, teile, q, d):
-    if methode == "PUT" and teile[1:] == ["einstellungen"]:
-        liquiditaet.einstellungen_speichern(con, d)
-        methode = "GET"
-    if methode == "GET":
-        return liquiditaet.berechnen(con, {"kontostand": bank.kontostand_lesen, "auftraege_rest": liquiditaet_auftraege_rest,
-                                           "lohn_faelligkeiten": personal.lohn_faelligkeiten, "darf_loehne": benutzer.darf("personal", 1)})
-    raise ApiFehler("Unbekannte Anfrage", 404)
-
-
 def prot(con, art, objekt, text, daten=None):
     """Eintrag ins unveränderbare Protokoll (GoBD) mit angemeldetem Benutzer und Programmversion."""
     wer = dict(benutzer.aktuell() or {}).get("login") or "Programm"
@@ -4563,20 +4298,6 @@ def service_cfg(con):
 
 
 # ---------- Service: Testdaten löschen (vor dem Echtbetrieb) ----------
-TESTDATEN_GRUPPEN = {
-    "auftraege": ("Aufträge mit Positionen, Belegen (auch festgeschriebene Rechnungen), Offenen Posten, Mahnungen, Stunden, "
-                  "Auftragskosten, Projekten, Auftragsterminen und auftragsbezogenen Briefen/Notizen/Anhängen", True),
-    "zahlungen": ("Zahlungsaufträge / Eingangsrechnungen samt hochgeladener Rechnungsdateien", True),
-    "personal": ("Arbeitszeiten, Stempelungen, Abwesenheiten, Kontobuchungen und Lohnzahlungen der Mitarbeiter", True),
-    "kunden": ("Kunden mit ihrer Korrespondenz (Briefe, E-Mails), Notizen und Anhängen (setzt „Aufträge“ voraus)", False),
-    "lieferanten": ("Lieferanten mit Notizen, Anhängen und Rechnungs-Zuordnungen (setzt „Zahlungsaufträge“ voraus)", False),
-    "termine": ("Kalendertermine ohne Auftrag", False),
-    "arbeitsschutz": ("Unterweisungen samt Unterschriften und Einträge im Verbandbuch aus der Testphase (Gefährdungsbeurteilungen, "
-                      "Betriebsanweisungen, Unterweisungsthemen und Datenblätter bleiben)", False),
-    "bank": ("Eingelesene Kontoauszüge mit ihren Umsätzen und Zuordnungen", True),
-}
-
-
 def _anzahl(con, sql, *a):
     try:
         return con.execute(sql, a).fetchone()[0] or 0
@@ -4604,7 +4325,7 @@ def testdaten_vorschau(con):
         "(SELECT COUNT(*) FROM belege b WHERE b.auftrag_id=a.id AND b.status IN ('fest','storniert')) AS fest "
         "FROM auftraege a LEFT JOIN kunden k ON k.id=a.kunde_id ORDER BY a.nummer DESC LIMIT 500"))
     return {"echtbetrieb": protokoll.echtbetrieb(con), "auftraege": auftraege, "protokoll": _anzahl(con, "SELECT COUNT(*) FROM protokoll"), "fest": fest,
-            "gruppen": [{"id": k, "text": t, "standard": std, "anzahl": z.get(k, "")} for k, (t, std) in TESTDATEN_GRUPPEN.items()],
+            "gruppen": [{"id": k, "text": t, "standard": std, "anzahl": z.get(k, "")} for k, (t, std) in testdaten.TESTDATEN_GRUPPEN.items()],
             "nummern": {"rechnung": rechnungsnummer_info(con)["naechste"], "auftrag": auftragsnummer_info(con)["naechste"],
                         "kunde": kundennummer_info(con)["naechste"]},
             "zaehler_gesetzt": bool(einstellungen(con).get("zaehler"))}
@@ -4666,171 +4387,6 @@ def auftrag_loeschen(con, aid):
     con.execute("DELETE FROM auftraege WHERE id=?", (aid,))
     prot(con, "auftrag", a["nummer"], f"Auftrag {a['nummer']} gelöscht (nur Entwürfe, kein Schriftverkehr)")
     return {"ok": True}
-
-
-def testdaten_loeschen(con, gruppen, zaehler_zuruecksetzen=False, behalten=()):
-    """behalten: Auftrags-IDs, die samt allem, was an ihnen hängt (Positionen, Belege, Termine, Notizen, Anhänge, Kosten),
-    und samt ihrem Kunden und Projekt erhalten bleiben – für echte Angebote, die schon in der Testphase entstanden sind."""
-    g = set(gruppen or [])
-    keep = sorted({int(x) for x in behalten or [] if str(x).isdigit()} & {r[0] for r in con.execute("SELECT id FROM auftraege")})
-    K = "(" + ",".join(str(i) for i in keep) + ")"          # nur geprüfte Zahlen
-    nicht_k = f"(auftrag_id IS NULL OR auftrag_id NOT IN {K})" if keep else ""
-    und_nicht_k = f" AND auftrag_id NOT IN {K}" if keep else ""
-    if "kunden" in g:
-        g.add("auftraege")
-    if "lieferanten" in g:
-        g.add("zahlungen")
-    spalten = {t: {r[1] for r in con.execute(f'PRAGMA table_info("{t}")')}
-               for (t,) in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-    pflicht = {t: {r[1] for r in con.execute(f'PRAGMA table_info("{t}")') if r[3]} for t in spalten}   # NOT-NULL-Spalten
-    geleert, erg = set(), {}
-
-    def weg(tabelle, wo="", *a):
-        if tabelle not in spalten:
-            return
-        n = con.execute(f"DELETE FROM {tabelle}{' WHERE ' + wo if wo else ''}", a).rowcount
-        erg[tabelle] = erg.get(tabelle, 0) + n
-        if not wo:
-            geleert.add(tabelle)
-
-    def dateien_weg(tabelle, spalte, wo):
-        """Zu löschende Zeilen: zugehörige Dateien (E-Mails als .eml, Brief-PDFs) mit entfernen."""
-        if tabelle not in spalten or spalte not in spalten[tabelle]:
-            return
-        for (d,) in con.execute(f"SELECT {spalte} FROM {tabelle} WHERE IFNULL({spalte},'')<>''" + (f" AND ({wo})" if wo else "")).fetchall():
-            p = os.path.normpath(d if os.path.isabs(d) else os.path.join(DATEN, d))
-            if p.startswith(os.path.join(DATEN, "")):
-                _datei_weg(p)
-
-    def loesen(spalte, ausser=(), ausser_ids=""):
-        """Verweise auf gelöschte Datensätze lösen; ist die Spalte Pflicht (NOT NULL), hängt die Zeile ganz daran
-        (z. B. cad_importe.auftrag_id) und wird mit gelöscht. ausser_ids: „(1,2)“ – Verweise auf diese bleiben."""
-        zusatz = f" AND {spalte} NOT IN {ausser_ids}" if ausser_ids else ""
-        for t, cols in spalten.items():
-            if spalte in cols and t not in ausser:
-                if spalte in pflicht.get(t, ()):
-                    con.execute(f"DELETE FROM {t} WHERE {spalte} IS NOT NULL{zusatz}")
-                else:
-                    con.execute(f"UPDATE {t} SET {spalte}=NULL WHERE {spalte} IS NOT NULL{zusatz}")
-
-    if "auftraege" in g:
-        for r in con.execute("SELECT id FROM auftragskosten" + (f" WHERE {nicht_k}" if keep else "")).fetchall():
-            material.ak_loeschen(con, r["id"])   # bucht Lagerabgänge zurück
-        erg["auftragskosten"] = erg.get("auftragskosten", 0)
-        for r in con.execute("SELECT pdf FROM mahnungen WHERE IFNULL(pdf,'')<>''" + (f" AND {nicht_k}" if keep else "")):
-            _datei_weg(r["pdf"])
-        if keep:
-            weg("zahlungseingaenge", f"op_id NOT IN (SELECT id FROM offene_posten WHERE auftrag_id IN {K})")
-        else:
-            weg("zahlungseingaenge")
-        for t in ("mahnungen", "offene_posten", "belege", "stunden", "positionen", "montageberichte", "bautagebuch"):
-            weg(t, nicht_k) if keep else weg(t)
-        dateien_weg("korrespondenz", "datei", "auftrag_id IS NOT NULL" + und_nicht_k)
-        dateien_weg("briefe", "pdf", "auftrag_id IS NOT NULL" + und_nicht_k)
-        for t in ("termine", "briefe", "notizen", "lagerbewegungen", "korrespondenz", "wiedervorlagen"):
-            weg(t, "auftrag_id IS NOT NULL" + und_nicht_k)
-        for r in con.execute("SELECT pfad FROM anhaenge WHERE auftrag_id IS NOT NULL" + und_nicht_k):
-            _datei_weg(r["pfad"])
-        weg("anhaenge", "auftrag_id IS NOT NULL" + und_nicht_k)
-        loesen("auftrag_id", ausser=("auftraege",), ausser_ids=K if keep else "")
-        if keep:
-            weg("auftraege", f"id NOT IN {K}")
-            weg("projekte", "id NOT IN (SELECT projekt_id FROM auftraege WHERE projekt_id IS NOT NULL)")
-            # Dateien: nur entfernen, was zu keinem behaltenen Auftrag gehört (Archiv-PDFs, Positionsbilder); Rapport-, Bautagebuch-
-            # und Exportordner bleiben dann unangetastet
-            pdfs = {os.path.normcase(os.path.abspath(r["pdf"] if os.path.isabs(r["pdf"]) else os.path.join(DATEN, r["pdf"])))
-                    for r in con.execute("SELECT pdf FROM belege WHERE IFNULL(pdf,'')<>''")}
-            for ordner, _, namen in os.walk(os.path.join(DATEN, "belege")):
-                for n in namen:
-                    if os.path.normcase(os.path.abspath(os.path.join(ordner, n))) not in pdfs:
-                        _datei_weg(os.path.join(ordner, n))
-            text = " ".join(str(v) for t in ("positionen", "belege") for r in con.execute(f"SELECT * FROM {t}") for v in tuple(r) if isinstance(v, str))
-            if os.path.isdir(BILDER):
-                alle = os.listdir(BILDER)
-                benutzt = [os.path.splitext(f)[0] for f in alle if f in text]
-                for f in alle:   # Bildvarianten heißen wie das Original mit Zusatz (<Stamm>_<Art>.jpg) und bleiben mit ihm
-                    if f not in text and not any(f.startswith(st + "_") for st in benutzt):
-                        _datei_weg(os.path.join(BILDER, f))
-        else:
-            weg("auftraege")
-            weg("projekte")
-            shutil.rmtree(os.path.join(DATEN, "belege"), ignore_errors=True)
-            shutil.rmtree(os.path.join(DATEN, "montage"), ignore_errors=True)
-            shutil.rmtree(os.path.join(DATEN, "bautagebuch"), ignore_errors=True)
-            shutil.rmtree(os.path.join(DATEN, "exporte"), ignore_errors=True)
-            if os.path.isdir(BILDER):
-                for f in os.listdir(BILDER):
-                    _datei_weg(os.path.join(BILDER, f))
-    if "zahlungen" in g:
-        for r in con.execute("SELECT datei FROM zahlungen WHERE IFNULL(datei,'')<>''"):
-            d = r["datei"]
-            _datei_weg(d if os.path.isabs(d) else os.path.join(EINGANG_PFAD, d))
-        loesen("zahlung_id", ausser=("zahlungen",))
-        weg("zahlungen")
-        dateien_weg("rechnungspost", "datei", "")
-        weg("rechnungspost")
-    def signaturen_weg(wo, *a):
-        if "signaturen" not in spalten:
-            return
-        for (d,) in con.execute(f"SELECT datei FROM signaturen WHERE {wo}", a).fetchall():
-            if d:
-                _datei_weg(os.path.join(DATEN, "unterschriften", os.path.basename(d)))
-        weg("signaturen", wo, *a)
-
-    if "personal" in g:
-        weg("stunden", "zeit_id IS NOT NULL")
-        for t in ("zeiten", "stempel_ereignisse", "abwesenheiten", "kontobuchungen", "lohn"):
-            weg(t)
-        signaturen_weg("art='monatsbeleg'")
-    if "bank" in g:
-        weg("bank_umsaetze")
-        weg("bank_auszuege")
-        shutil.rmtree(os.path.join(DATEN, "bank"), ignore_errors=True)
-    elif "auftraege" in g or "zahlungen" in g:
-        # Zuordnungen zu gelöschten Rechnungen bzw. Zahlungsaufträgen lösen; die Umsätze werden wieder zur Zuordnung angeboten
-        con.execute("UPDATE bank_umsaetze SET status='offen', ziel='[]', zugeordnet='', von='' WHERE status='zugeordnet'")
-    if "arbeitsschutz" in g:
-        # Nachweise aus der Testphase; Gefährdungsbeurteilungen, Betriebsanweisungen, Themen und Datenblätter bleiben
-        signaturen_weg("art='unterweisung'")
-        weg("as_teilnehmer")
-        weg("as_unterweisungen")
-        weg("as_verbandbuch")
-    if "kunden" in g:
-        # Kunden der behaltenen Aufträge (und der behaltenen Projekte) bleiben mit ihrer Korrespondenz
-        kk = sorted({r[0] for r in con.execute("SELECT kunde_id FROM auftraege WHERE kunde_id IS NOT NULL")}
-                    | {r[0] for r in con.execute("SELECT kunde_id FROM projekte WHERE kunde_id IS NOT NULL")}) if keep else []
-        KK = "(" + ",".join(str(i) for i in kk) + ")"
-        und_nicht_kk = f" AND kunde_id NOT IN {KK}" if kk else ""
-        # Korrespondenz der Kunden (E-Mails mit ihren .eml-Dateien, Briefe mit PDF)
-        dateien_weg("korrespondenz", "datei", "kunde_id IS NOT NULL" + und_nicht_kk)
-        dateien_weg("briefe", "pdf", "kunde_id IS NOT NULL" + und_nicht_kk)
-        weg("korrespondenz", "kunde_id IS NOT NULL" + und_nicht_kk)
-        weg("briefe", "kunde_id IS NOT NULL" + und_nicht_kk)
-        for r in con.execute("SELECT pfad FROM anhaenge WHERE kunde_id IS NOT NULL" + und_nicht_kk):
-            _datei_weg(r["pfad"])
-        for t in ("anhaenge", "notizen", "briefe"):
-            weg(t, "kunde_id IS NOT NULL" + und_nicht_kk)
-        loesen("kunde_id", ausser=("kunden",), ausser_ids=KK if kk else "")
-        weg("kunden", f"id NOT IN {KK}") if kk else weg("kunden")
-    if "lieferanten" in g:
-        dateien_weg("korrespondenz", "datei", "lieferant_id IS NOT NULL")
-        weg("korrespondenz", "lieferant_id IS NOT NULL")
-        for r in con.execute("SELECT pfad FROM anhaenge WHERE lieferant_id IS NOT NULL"):
-            _datei_weg(r["pfad"])
-        for t in ("anhaenge", "notizen"):
-            weg(t, "lieferant_id IS NOT NULL")
-        weg("zuordnungen")
-        loesen("lieferant_id", ausser=("lieferanten",))
-        weg("lieferanten")
-    if "termine" in g:
-        weg("termine", "auftrag_id IS NULL")
-    if zaehler_zuruecksetzen:
-        con.execute("DELETE FROM einstellungen WHERE schluessel='zaehler'")
-    # laufende IDs der geleerten Tabellen wieder bei 1 beginnen lassen
-    for t in geleert:
-        con.execute("DELETE FROM sqlite_sequence WHERE name=?", (t,))
-    return {"geloescht": {k: v for k, v in erg.items() if v}, "gruppen": sorted(g),
-            "behalten": [r["nummer"] for r in con.execute(f"SELECT nummer FROM auftraege WHERE id IN {K} ORDER BY nummer")] if keep else []}
 
 
 def autostart_pfad():
@@ -5763,11 +5319,6 @@ def erste_zeile_fett(html):
 
 
 # ---------- Druckansicht (HTML) ----------
-def h(s):
-    from html import escape
-    return escape(str(s or ""))
-
-
 def text_html(t, fett_erste=True):
     html = rich_html(t)
     return erste_zeile_fett(html) if fett_erste and html else html
@@ -6159,11 +5710,6 @@ img.voll {{ width: 100%; height: 100%; display: block; }}
 {agb_html}
 {druck_js}
 </body></html>"""
-
-
-def ibanFormat_py(i):
-    i = iban_normal(i)
-    return " ".join(i[n:n + 4] for n in range(0, len(i), 4))
 
 
 def op_liste(con, q):
@@ -7307,378 +6853,6 @@ def auftrag_material_nummern(con, aid):
     return nummern, ids
 
 
-def monatsbeleg_hash(con, mid, monat):
-    """Fingerabdruck dessen, was unterschrieben wird: die einzelnen Zeitbuchungen (Beginn, Ende, Auftrag, Tätigkeit),
-    Abwesenheiten, Kontokorrekturen und die daraus gerechneten Tageswerte und Summen. Ändert sich davon etwas, gilt
-    eine vorhandene Unterschrift als „Zeiten danach geändert“."""
-    d = personal.monat_daten(con, mid, monat)
-    von, bis = f"{monat}-01", f"{monat}-31"
-    zeiten = [list(r) for r in con.execute("SELECT datum, beginn, IFNULL(ende,''), IFNULL(auftrag_id,0), kst, taetigkeit FROM zeiten "
-                                           "WHERE mitarbeiter_id=? AND datum BETWEEN ? AND ? ORDER BY datum, beginn, id", (mid, von, bis))]
-    abw = [list(r) for r in con.execute("SELECT art, von, bis, halbtag, status FROM abwesenheiten WHERE mitarbeiter_id=? AND bis>=? AND von<=? "
-                                        "ORDER BY von, id", (mid, von, bis))]
-    korr = [list(r) for r in con.execute("SELECT datum, konto, wert FROM kontobuchungen WHERE mitarbeiter_id=? AND datum BETWEEN ? AND ? "
-                                         "ORDER BY datum, id", (mid, von, bis))]
-    return unterschrift.inhalt_hash({"zeiten": zeiten, "abwesenheiten": abw, "korrekturen": korr,
-                                     "tage": [{k: t.get(k) for k in ("datum", "ist", "soll", "pause", "abw", "urlaubstage", "saldo")} for t in d["tage"]],
-                                     "summe": d["summe"]})
-
-
-def monatsbeleg_hash_v1(con, mid, monat):
-    """Fingerabdruck der Programmversionen bis 2026.11.01-129 (nur Tageswerte). Unterschriften aus dieser Zeit
-    werden damit weiter geprüft, damit sie nach dem Update nicht fälschlich als „geändert“ gelten."""
-    d = personal.monat_daten(con, mid, monat)
-    return unterschrift.inhalt_hash({"tage": [{k: t.get(k) for k in ("datum", "beginn", "ende", "pause", "ist", "soll", "abw", "urlaubstage")} for t in d["tage"]],
-                                     "summe": d["summe"], "korrekturen": [{k: x.get(k) for k in ("datum", "konto", "wert")} for x in d["korrekturen"]]})
-
-
-def monatsbeleg_signaturen(con, mid, monat):
-    """Letzte Unterschrift von Mitarbeiter und Arbeitgeber zu einem Monatsbeleg, mit Hinweis, ob sich die Zeiten seither geändert haben."""
-    aktuell = monatsbeleg_hash(con, mid, monat)
-    alt = None
-    aus = {}
-    for rolle in ("mitarbeiter", "arbeitgeber"):
-        sig = unterschrift.letzte(con, "monatsbeleg", f"{mid}:{monat}", rolle)
-        if not sig:
-            aus[rolle] = None
-            continue
-        geaendert = sig["inhalt_sha256"] != aktuell
-        if geaendert:   # Unterschrift aus einer älteren Version: mit deren Fingerabdruck prüfen (ein neuer kann damit nie übereinstimmen)
-            alt = alt or monatsbeleg_hash_v1(con, mid, monat)
-            geaendert = sig["inhalt_sha256"] != alt
-        aus[rolle] = dict(unterschrift.oeffentlich(sig), geaendert=geaendert)
-    return aus
-
-
-def monatsbeleg_unterschreiben(con, mid, monat, rolle, d, wer, eigener=False):
-    if not re.fullmatch(r"\d{4}-\d{2}", monat or ""):
-        raise ApiFehler("Bitte den Monat angeben.")
-    if monat > date.today().isoformat()[:7]:
-        raise ApiFehler("Ein Monat in der Zukunft kann nicht unterschrieben werden.")
-    m = con.execute("SELECT * FROM mitarbeiter WHERE id=?", (mid,)).fetchone()
-    if not m:
-        raise ApiFehler("Mitarbeiter nicht gefunden.", 404)
-    if rolle not in ("mitarbeiter", "arbeitgeber"):
-        raise ApiFehler("Unbekannte Rolle.")
-    if rolle == "arbeitgeber" and (eigener or not benutzer.darf("personal", 2)):
-        raise ApiFehler("Als Arbeitgeber unterschreibt der Inhaber bzw. wer Mitarbeiter bearbeiten darf.", 403)
-    name = (d.get("name") or (f"{m['vorname']} {m['nachname']}".strip() if rolle == "mitarbeiter" else ich_name())).strip()
-    try:
-        sig = unterschrift.speichern(con, os.path.join(DATEN, "unterschriften"), "monatsbeleg", f"{mid}:{monat}", rolle, name, d.get("png"), wer,
-                                     mitarbeiter_id=mid if rolle == "mitarbeiter" else None, inhalt_sha=monatsbeleg_hash(con, mid, monat), geraet=d.get("geraet"))
-    except unterschrift.Fehler as f:
-        raise ApiFehler(str(f), f.code)
-    prot(con, "unterschrift_monatsbeleg", f"{m['nummer']}:{monat}", f"Monatsbeleg {monat} von {m['vorname']} {m['nachname']} unterschrieben "
-         f"({'Mitarbeiter' if rolle == 'mitarbeiter' else 'Arbeitgeber'}: {name})", {"signatur": sig["id"], "inhalt": sig["inhalt_sha256"]})
-    return monatsbeleg_signaturen(con, mid, monat)
-
-
-def arbeitsschutz_api(con, methode, teile, q, daten):
-    d = daten or {}
-    u = teile[1] if len(teile) > 1 else ""
-    rid = int(teile[2]) if len(teile) > 2 and teile[2].isdigit() else None
-    akt = teile[3] if len(teile) > 3 else ""
-    A = arbeitsschutz
-    wer, inhaber = ich_login(), benutzer.ist_inhaber()
-    schreiben = benutzer.darf("arbeitsschutz", 2)
-    if u == "uebersicht" and methode == "GET":
-        return A.uebersicht(con, inhaber)
-    if u == "vorlagen" and methode == "GET":
-        v = A.vorlagen()
-        if len(teile) == 4 and teile[2] == "gb":
-            x = next((g for g in v["gb"] if g["id"] == teile[3]), None)
-            if not x:
-                raise ApiFehler("Vorlage nicht gefunden.", 404)
-            return x
-        return {"gb": [{k: g[k] for k in ("id", "name", "gruppe", "art", "schreiner")} | {"anzahl": len(g["gef"])} for g in v["gb"]], "gb_gruppen": v["gb_gruppen"],
-                "themen": v["themen"], "psych": v["psych"], "h_saetze": v["h_saetze"], "anlaesse": v["anlaesse"], "notfall": v["notfall"], "stand": v["stand"],
-                "quali": A.QUALI, "datei_arten": A.DATEI_ARTEN, "lagerklassen": A.LAGERKLASSEN, "wgk": A.WGK, "gb_arten": A.GB_ARTEN, "ba_arten": A.BA_ARTEN,
-                "ba_abschnitte": A.BA_ABSCHNITTE, "zeichen": zeichen_liste()}
-    if u == "organisation":
-        if methode == "GET":
-            return {"organisation": A.organisation(con), "notfall": A.notfall(con), "bedarf": A.bedarf(len(A.mitarbeiter_liste(con)))}
-        if methode == "PUT":
-            if "organisation" in d:
-                o = A.organisation(con)
-                for k in A.ORG_STANDARD:
-                    if k in d["organisation"]:
-                        wert = d["organisation"][k]
-                        if k == "bereiche":
-                            liste = wert if isinstance(wert, list) else str(wert or "").splitlines()
-                            o[k] = [str(x).strip()[:120] for x in liste if str(x).strip()][:50]
-                        else:
-                            o[k] = str(wert or "")[:1000]
-                A.daten_schreiben(con, "organisation", o)
-            if "notfall" in d:
-                n = A.notfall(con)
-                n.update({k: str(d["notfall"].get(k) or "")[:300] for k, _ in A.vorlagen()["notfall"] if k in d["notfall"]})
-                A.daten_schreiben(con, "notfall", n)
-            return {"organisation": A.organisation(con), "notfall": A.notfall(con)}
-    if u == "mitarbeiter" and methode == "GET":
-        return [{k: m[k] for k in ("id", "name", "kuerzel", "eintritt", "jugendlich", "inhaber")} for m in A.mitarbeiter_liste(con)]
-    if u == "werkzeuge" and methode == "GET":
-        return [dict(r, vorschlag=A.vorschlag_vorlage(r["bezeichnung"])) for r in con.execute(
-            "SELECT id, nummer, bezeichnung, art, standort, status FROM werkzeuge WHERE IFNULL(status,'')<>'ausgemustert' ORDER BY art<>'Stationäre Maschine', nummer")]
-    if u == "werkzeug" and rid and methode == "GET":
-        gbs = [{"id": g["id"], "nummer": g["nummer"], "titel": g["titel"], "status_name": g["status_name"], "naechste": g["naechste"]} for g in A.gb_liste(con) if rid in g["werkzeug_ids"]]
-        bas = [{"id": b["id"], "nummer": b["nummer"], "titel": b["titel"], "status_name": b["status_name"]} for b in A.ba_liste(con) if rid in b["werkzeug_ids"]]
-        th = [{"id": t["id"], "titel": t["titel"]} for t in A.themen(con) if rid in t["werkzeug_ids"]]
-        w = con.execute("SELECT bezeichnung FROM werkzeuge WHERE id=?", (rid,)).fetchone()
-        return {"gb": gbs, "ba": bas, "themen": th, "dateien": A.dateien(con, {"werkzeug": rid}), "vorschlag": A.vorschlag_vorlage(w["bezeichnung"]) if w else ""}
-    # ---- Gefährdungsbeurteilungen
-    if u == "gb":
-        if methode == "GET" and not rid:
-            return A.gb_liste(con)
-        if methode == "GET" and rid and not akt:
-            g = A.gb_laden(con, rid)
-            g["pruefung"] = A.gb_pruefen(g)
-            return g
-        if methode == "POST" and not rid:
-            return A.gb_anlegen(con, d)
-        if methode == "PUT" and rid:
-            g = A.gb_aendern(con, rid, d)
-            g["pruefung"] = A.gb_pruefen(g)
-            return g
-        if methode == "POST" and rid and akt == "freigeben":
-            if not inhaber:
-                raise ApiFehler("Gefährdungsbeurteilungen gibt der Inhaber (Unternehmer) frei.", 403)
-            g, nr = A.gb_freigeben(con, DATEN, rid, d, wer)
-            prot(con, "as_gb_freigabe", g["nummer"], f"Gefährdungsbeurteilung {g['nummer']} {g['titel']} freigegeben (Fassung {nr}, Stand {de_datum(g['stand'])})",
-                 {"fassung": g["fassungen"][0]["id"], "sha256": g["fassungen"][0]["sha256"]})
-            g["pruefung"] = []
-            return g
-        if methode == "DELETE" and rid:
-            A.gb_loeschen(con, rid)
-            return {"ok": True}
-    # ---- Betriebsanweisungen
-    if u == "ba":
-        if methode == "GET" and not rid:
-            return A.ba_liste(con)
-        if methode == "GET" and rid:
-            return A.ba_laden(con, rid)
-        if methode == "POST" and not rid:
-            return A.ba_anlegen(con, d)
-        if methode == "PUT" and rid:
-            return A.ba_aendern(con, rid, d)
-        if methode == "POST" and rid and akt == "freigeben":
-            if not inhaber:
-                raise ApiFehler("Betriebsanweisungen gibt der Inhaber (Unternehmer) frei.", 403)
-            b, nr = A.ba_freigeben(con, DATEN, rid, d, wer)
-            prot(con, "as_ba_freigabe", b["nummer"], f"Betriebsanweisung {b['nummer']} {b['titel']} freigegeben (Fassung {nr})", {"fassung": b["fassungen"][0]["id"]})
-            return b
-        if methode == "DELETE" and rid:
-            A.ba_loeschen(con, rid)
-            return {"ok": True}
-    # ---- Unterweisungen
-    if u == "themen":
-        if methode == "GET":
-            return A.themen(con, q.get("alle") == "1")
-        if methode == "POST" and not rid:
-            return A.thema_anlegen(con, d)
-        if methode == "PUT" and rid:
-            return A.thema_aendern(con, rid, d)
-        if methode == "DELETE" and rid:
-            return A.thema_loeschen(con, rid)
-    if u == "matrix" and methode == "GET":
-        return A.matrix(con)
-    if u == "unterweisungen":
-        if methode == "GET" and not rid:
-            return A.unterweisungen(con)
-        if methode == "GET" and rid:
-            return A.unterweisung_laden(con, rid)
-        if methode == "POST" and not rid:
-            return A.unterweisung_anlegen(con, d, wer, ich_name())
-        if methode == "PUT" and rid:
-            return A.unterweisung_aendern(con, rid, d)
-        if methode == "POST" and rid and akt == "unterschreiben":
-            try:
-                return A.unterweisung_unterschreiben(con, DATEN, rid, d, wer)
-            except unterschrift.Fehler as f:
-                raise ApiFehler(str(f), f.code)
-        if methode == "POST" and rid and akt == "abschliessen":
-            uw, entfernt = A.unterweisung_abschliessen(con, rid)
-            prot(con, "as_unterweisung", uw["nummer"], f"Unterweisung {uw['nummer']} „{uw['titel']}“ vom {de_datum(uw['datum'])} abgeschlossen: "
-                 + ", ".join(t["name"] for t in uw["teilnehmer"]), {"inhalt": uw["inhalt_hash"], "teilnehmer": [t["name"] for t in uw["teilnehmer"]]})
-            uw["entfernt"] = entfernt
-            return uw
-        if methode == "DELETE" and rid:
-            A.unterweisung_loeschen(con, rid)
-            return {"ok": True}
-    # ---- Gefahrstoffe und Dateien
-    if u == "gefahrstoffe" and methode == "GET":
-        return A.verzeichnis(con)
-    if u == "gefahrstoff" and rid:
-        if methode == "GET":
-            erg = A.material_sicherheit(con, rid)
-            return erg
-        if methode == "PUT":
-            return A.gefahrstoff_speichern(con, rid, d)
-    if u == "ghs" and methode == "GET":
-        return {"ghs": A.ghs_vorschlag(q.get("h", "")), "codes": A.h_codes(q.get("h", ""))}
-    if u == "dateien":
-        if methode == "GET":
-            return A.dateien(con, q)
-        if methode == "POST" and not rid:
-            if d.get("qualifikation_id") and not schreiben:
-                raise ApiFehler("Dafür fehlt die Berechtigung.", 403)
-            return A.datei_hochladen(con, DATEN, d, wer)
-        if methode == "PUT" and rid:
-            r, _ = A.datei_pfad(con, DATEN, rid)
-            w = {}
-            if "titel" in d:
-                w["titel"] = str(d["titel"] or "")[:200]
-            if "ausgabe" in d:
-                w["ausgabe"] = A.datum_ok(d["ausgabe"])
-            if "art" in d and d["art"] in A.DATEI_ARTEN:
-                w["art"] = d["art"]
-            if "aktuell" in d:
-                w["aktuell"] = 1 if d["aktuell"] else 0
-            if w:
-                con.execute(f"UPDATE as_dateien SET {','.join(k + '=?' for k in w)} WHERE id=?", list(w.values()) + [rid])
-            return A.datei_info(con.execute("SELECT * FROM as_dateien WHERE id=?", (rid,)).fetchone())
-        if methode == "DELETE" and rid:
-            r, pfad = A.datei_pfad(con, DATEN, rid)
-            con.execute("DELETE FROM as_dateien WHERE id=?", (rid,))
-            if not con.execute("SELECT 1 FROM as_dateien WHERE pfad=?", (r["pfad"],)).fetchone():
-                try:
-                    os.remove(pfad)
-                except OSError:
-                    pass
-            return {"ok": True}
-    if u == "auftrag" and rid and methode == "GET":
-        nummern, ids = auftrag_material_nummern(con, rid)
-        return A.auftrag_materialien(con, nummern, ids)
-    # ---- Nachweise, Verbandbuch
-    if u == "qualifikationen":
-        if methode == "GET":
-            return A.qualifikationen(con)
-        if methode == "POST" and not rid:
-            return A.quali_speichern(con, None, d)
-        if methode == "PUT" and rid:
-            return A.quali_speichern(con, rid, d)
-        if methode == "DELETE" and rid:
-            for f in con.execute("SELECT id FROM as_dateien WHERE qualifikation_id=?", (rid,)).fetchall():
-                arbeitsschutz_api(con, "DELETE", ["arbeitsschutz", "dateien", str(f["id"])], {}, {})
-            con.execute("DELETE FROM as_qualifikationen WHERE id=?", (rid,))
-            return {"ok": True}
-    if u == "verbandbuch":
-        if methode == "GET":
-            return A.verbandbuch(con)
-        if methode == "POST" and not rid:
-            return A.verbandbuch_eintragen(con, d, wer)
-        if methode == "DELETE" and rid:
-            A.verbandbuch_loeschen(con, rid)
-            return {"ok": True}
-    raise ApiFehler("Unbekannte Anfrage", 404)
-
-
-def monatsbeleg_sig_bilder(con, mid, monat):
-    aus = {}
-    sig = monatsbeleg_signaturen(con, mid, monat)
-    for rolle in ("mitarbeiter", "arbeitgeber"):
-        x = unterschrift.letzte(con, "monatsbeleg", f"{mid}:{monat}", rolle)
-        if x:
-            aus[rolle] = {"name": x["name"], "zeit": x["zeit"], "bild": unterschrift.bild_url(os.path.join(DATEN, "unterschriften"), x),
-                          "geaendert": sig[rolle]["geaendert"]}
-    return aus
-
-
-def as_druck_name(con, teil, nr):
-    if teil == "gb":
-        r = con.execute("SELECT nummer, titel FROM as_gb WHERE id=?", (nr,)).fetchone()
-        return f"Gefährdungsbeurteilung {r['nummer']} {r['titel']}" if r else "Gefährdungsbeurteilung"
-    if teil == "ba":
-        r = con.execute("SELECT nummer, titel FROM as_ba WHERE id=?", (nr,)).fetchone()
-        return f"Betriebsanweisung {r['nummer']} {r['titel']}" if r else "Betriebsanweisung"
-    if teil == "unterweisung":
-        r = con.execute("SELECT nummer, titel FROM as_unterweisungen WHERE id=?", (nr,)).fetchone()
-        return f"Unterweisung {r['nummer']} {r['titel']}" if r else "Unterweisung"
-    if teil == "fassung":
-        r = con.execute("SELECT art, nr, inhalt FROM as_fassungen WHERE id=?", (nr,)).fetchone()
-        i = jl(r["inhalt"], {}) if r else {}
-        return f"{'Gefährdungsbeurteilung' if r and r['art'] == 'gb' else 'Betriebsanweisung'} {i.get('nummer', '')} Fassung {r['nr'] if r else ''}"
-    return {"gefahrstoffverzeichnis": "Gefahrstoffverzeichnis", "notfall": "Notfall-Aushang"}.get(teil, "Arbeitsschutz")
-
-
-def as_druck_html(con, teil, nr, q, als_pdf):
-    A = arbeitsschutz
-    firma = einstellungen(con).get("firma", "")
-    try:
-        if teil == "gb":
-            return A.gb_html(con, DATEN, A.gb_laden(con, nr), firma, als_pdf)
-        if teil == "fassung":
-            f = A.fassung(con, nr)
-            if f["art"] == "gb":
-                return A.gb_html(con, DATEN, f["inhalt"], firma, als_pdf, fassung_info=f)
-            return A.ba_html(con, DATEN, f["inhalt"], firma, als_pdf, fassung_info=f)
-        if teil == "ba":
-            b = A.ba_laden(con, nr)
-            f = None if q.get("entwurf") == "1" else A.letzte_fassung(con, "ba", nr)
-            if not f and not benutzer.darf("arbeitsschutz", 1):
-                raise A.Fehler("Diese Betriebsanweisung ist noch nicht freigegeben.", 403)
-            return A.ba_html(con, DATEN, f["inhalt"], firma, als_pdf, fassung_info=f) if f else A.ba_html(con, DATEN, b, firma, als_pdf)
-        if teil == "unterweisung":
-            return A.unterweisung_html(con, DATEN, A.unterweisung_laden(con, nr), firma, als_pdf)
-        if teil == "gefahrstoffverzeichnis":
-            return A.verzeichnis_html(con, firma, als_pdf)
-        if teil == "notfall":
-            return A.notfall_html(con, firma, als_pdf)
-    except A.Fehler as f:
-        return f"<!doctype html><meta charset=utf-8><p style='font:16px sans-serif;margin:40px'>{h(str(f))}</p>"
-    return "<!doctype html><meta charset=utf-8><p>Unbekannte Seite</p>"
-
-
-def zeichen_liste():
-    try:
-        with open(os.path.join(STATIC, "arbeitsschutz", "zeichen", "zeichen.json"), encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return []
-
-
-def stempel_arbeitsschutz(con, methode, teile, q, d):
-    """Stempeluhr: offene Unterschriften (Unterweisungen, Monatsbelege), Betriebsanweisungen, Gefahrstoffe, Verbandbuch."""
-    m = personal.eigener_mitarbeiter(con)
-    wer = ich_login()
-    if teile[1] == "unterschriften" and methode == "GET":
-        erg = arbeitsschutz.fuer_mitarbeiter(con, m["id"])
-        heute_m = date.today().isoformat()[:7]
-        monate = []
-        for i in range(1, 4):
-            mo = (date.today().replace(day=1) - timedelta(days=1 + 31 * (i - 1))).isoformat()[:7]
-            if m["eintritt"] and mo < m["eintritt"][:7]:
-                continue
-            s = monatsbeleg_signaturen(con, m["id"], mo)
-            if not s["mitarbeiter"] or s["mitarbeiter"]["geaendert"]:
-                monate.append({"monat": mo, "erneut": bool(s["mitarbeiter"])})
-        erg["monatsbelege"] = sorted({x["monat"]: x for x in monate}.values(), key=lambda x: x["monat"])
-        erg["heute_monat"] = heute_m
-        return erg
-    if teile[1] == "unterweisung" and len(teile) >= 3 and teile[2].isdigit():
-        uid = int(teile[2])
-        uw = arbeitsschutz.unterweisung_laden(con, uid)
-        if not any(t["mitarbeiter_id"] == m["id"] for t in uw["teilnehmer"]):
-            raise ApiFehler("Diese Unterweisung betrifft dich nicht.", 403)
-        if methode == "GET":
-            return {k: uw[k] for k in ("id", "nummer", "datum", "titel", "anlass", "unterweiser", "inhalt", "ergaenzung", "status")} | \
-                {"unterschrieben": next((t["unterschrieben"] for t in uw["teilnehmer"] if t["mitarbeiter_id"] == m["id"]), "")}
-        if methode == "POST":
-            try:
-                arbeitsschutz.unterweisung_unterschreiben(con, DATEN, uid, {**d, "rolle": "teilnehmer", "name": f"{m['vorname']} {m['nachname']}".strip()}, wer,
-                                                         eigener_mitarbeiter=m["id"])
-            except unterschrift.Fehler as f:
-                raise ApiFehler(str(f), f.code)
-            return {"ok": True}
-    if teile[1] == "monatsbeleg" and methode == "POST":
-        return monatsbeleg_unterschreiben(con, m["id"], str(d.get("monat") or ""), "mitarbeiter", {**d, "name": f"{m['vorname']} {m['nachname']}".strip()}, wer, eigener=True)
-    if teile[1] == "monatsbeleg" and methode == "GET":
-        mo = q.get("monat") or ""
-        return {"signaturen": monatsbeleg_signaturen(con, m["id"], mo)} if re.fullmatch(r"\d{4}-\d{2}", mo) else {}
-    if teile[1] == "verbandbuch" and methode == "POST":
-        return arbeitsschutz.verbandbuch_eintragen(con, {**d, "name": d.get("name") or f"{m['vorname']} {m['nachname']}".strip()}, wer)
-    raise ApiFehler("Unbekannte Anfrage", 404)
-
-
 def api(methode, teile, q, daten):
     with verbindung() as con:
         res = teile[0] if teile else ""
@@ -8094,7 +7268,7 @@ def api(methode, teile, q, daten):
                     vorher_nr = testdaten_vorschau(con)
                     con.commit()
                     sich = service.sicherung_erstellen(cfg, "vor-Testdaten-Loeschen")
-                    erg = testdaten_loeschen(con, d.get("gruppen") or [], bool(d.get("zaehler")), d.get("behalten") or [])
+                    erg = testdaten.testdaten_loeschen(con, d.get("gruppen") or [], bool(d.get("zaehler")), d.get("behalten") or [])
                     con.commit()
                     try:
                         con.execute("VACUUM")
@@ -8776,9 +7950,9 @@ def api(methode, teile, q, daten):
                     con.execute("UPDATE offene_posten SET mahnkosten=0 WHERE id=?", (rid,))
                 return {"ok": True}
         if res == "bank":
-            return bank_api(con, methode, teile, q, daten or {})
+            return bank.web_api(con, methode, teile, q, daten or {})
         if res == "liquiditaet":
-            return liquiditaet_api(con, methode, teile, q, daten or {})
+            return liquiditaet.web_api(con, methode, teile, q, daten or {})
         if res == "wiedervorlagen":
             return wiedervorlage.api(con, methode, teile, q, daten or {}, ich_login())
         if res == "preisimport" and methode == "POST" and teile[1:] in (["lesen"], ["uebernehmen"]):
@@ -10642,6 +9816,14 @@ material.PREISREGEL["methode"] = lambda con: einstellungen(con).get("lagerpreis_
 projekte.HILFE.update({"soll_ist": lambda con, aid: soll_ist(con, aid), "beleg_umsatz": lambda b: beleg_umsatz(b)})
 export.HILFE.update({"daten": DATEN, "basis": BASIS, "version": VERSION, "einstellungen": lambda con: einstellungen(con),
                      "archiv_pdf": lambda con, bid: beleg_pdf(con, bid), "klartext": lambda t: montage.klartext(t, 1000)})
+bank.HILFE.update({"daten": DATEN, "prot": lambda *a, **k: prot(*a, **k), "ich_login": lambda: ich_login(),
+                   "op_zahlung_buchen": lambda *a, **k: op_zahlung_buchen(*a, **k), "zahlungseingang_loeschen": lambda *a, **k: zahlungseingang_loeschen(*a, **k)})
+liquiditaet.HILFE.update({"einstellungen": lambda con: einstellungen(con), "auftrag_rechnen": lambda con, aid: auftrag_rechnen(con, aid),
+                          "beleg_umsatz": lambda b: beleg_umsatz(b)})
+monatsbeleg.HILFE.update({"daten": DATEN, "prot": lambda *a, **k: prot(*a, **k), "ich_name": lambda: ich_name()})
+arbeitsschutz_web.HILFE.update({"daten": DATEN, "static": STATIC, "prot": lambda *a, **k: prot(*a, **k), "ich_name": lambda: ich_name(), "ich_login": lambda: ich_login(),
+                                "auftrag_material_nummern": lambda con, aid: auftrag_material_nummern(con, aid), "einstellungen": lambda con: einstellungen(con)})
+testdaten.HILFE.update({"daten": DATEN, "bilder": BILDER, "eingang_pfad": EINGANG_PFAD, "datei_weg": lambda p: _datei_weg(p)})
 
 
 montage.HILFE.update({"daten": DATEN, "auftrag_laden": lambda con, aid: auftrag_laden(con, aid),
