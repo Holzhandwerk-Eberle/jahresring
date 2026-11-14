@@ -161,7 +161,7 @@ async function serviceSeite(z, sub) {
           <button class="btn prim" id="exPr">Datenträger erstellen</button></div>
         <div class="kachel"><h3 style="margin-top:0">DATEV-Buchungsstapel für die Steuerberatung</h3>
           <p>Ausgangs- und Eingangsrechnungen des Zeitraums als Buchungsstapel im DATEV-Format (zum Einlesen in DATEV Rechnungswesen), dazu die Belegdateien.
-          Löhne und Bankumsätze sind nicht enthalten.</p>
+          Bankumsätze mit ihrer Zuordnung auf Wunsch (DATEV-Einstellungen), Löhne nicht.</p>
           <p class="hinweis">${dv.berater && dv.mandant ? `Berater ${esc(dv.berater)} · Mandant ${esc(dv.mandant)} · SKR ${esc(dv.skr)}` : "Zuerst unten Berater- und Mandantennummer eintragen."}</p>
           <button class="btn prim" id="exDv">DATEV-Stapel erstellen</button></div>
       </div>
@@ -170,13 +170,16 @@ async function serviceSeite(z, sub) {
           ${zeile("Beraternummer", `<input id="dvB" value="${esc(dv.berater)}" inputmode="numeric" style="max-width:140px"> Mandantennummer <input id="dvM" value="${esc(dv.mandant)}" inputmode="numeric" style="max-width:120px">`)}
           ${zeile("Kontenrahmen", `<select id="dvS"><option value="03" ${dv.skr === "03" ? "selected" : ""}>SKR 03</option><option value="04" ${dv.skr === "04" ? "selected" : ""}>SKR 04</option></select>
             Wirtschaftsjahr beginnt im Monat <input id="dvW" type="number" min="1" max="12" value="${dv.wj_beginn}" style="width:60px"> Sachkontenlänge <input id="dvL" type="number" min="4" max="8" value="${dv.sachkontenlaenge}" style="width:60px">`)}
-          ${zeile("Enthalten", `<label><input type="checkbox" id="dvA" ${dv.ausgang ? "checked" : ""}> Ausgangsrechnungen</label> <label><input type="checkbox" id="dvE" ${dv.eingang ? "checked" : ""}> Eingangsrechnungen</label>`)}
+          ${zeile("Enthalten", `<label><input type="checkbox" id="dvA" ${dv.ausgang ? "checked" : ""}> Ausgangsrechnungen</label> <label><input type="checkbox" id="dvE" ${dv.eingang ? "checked" : ""}> Eingangsrechnungen</label>
+            <label title="Zugeordnete Kontoumsätze: Bank an Debitor/Kreditor bzw. an das Sachkonto. Nur, wenn die Kanzlei die Bankumsätze nicht selbst abruft."><input type="checkbox" id="dvK" ${dv.bankumsaetze ? "checked" : ""}> Bankumsätze</label>`)}
         </div>
         <table class="liste" style="margin-top:8px"><tr><th>Konto für</th><th>Kontonummer</th><th class="hinweis">Vorgabe SKR ${esc(dv.skr)}</th></tr>
           ${Object.keys(dv.texte).map(k => `<tr><td>${esc(dv.texte[k])}</td><td><input data-dvk="${k}" value="${dv.konten[k]}" inputmode="numeric" style="width:110px"></td><td class="hinweis">${dv.standard[k]}</td></tr>`).join("")}</table>
         <p class="hinweis">Abweichende Aufwandskonten für einzelne Lieferanten (z. B. Fremdleistungen, Werkzeuge, Bürobedarf) beim Lieferanten unter „DATEV-Aufwandskonto“ eintragen.
           Die Vorgaben sind übliche Automatikkonten; maßgeblich ist der Kontenplan der Kanzlei.</p>
         <button class="btn" id="dvSp">DATEV-Einstellungen speichern</button></details>
+      <details class="kachel" style="margin-top:12px" id="kontenplan"><summary><b>Kontenplan (SKR ${esc(dv.skr)})</b> <span class="hinweis">– Sachkonten für Kontoumsätze und Lieferanten</span></summary>
+        <div id="kpInhalt" style="margin-top:8px"></div></details>
       <div id="exErg" style="margin-top:12px"></div>
       <div class="sektion" style="margin-top:16px">Erstellte Exporte</div>
       ${d.liste.length ? `<table class="liste"><tr><th>Datei</th><th>erstellt</th><th class="r">Größe</th></tr>
@@ -214,13 +217,38 @@ async function serviceSeite(z, sub) {
           ${r.buchungen} Buchungen · Ausgangsrechnungen ${eur(r.ausgang)} · Eingangsrechnungen ${eur(r.eingang)}${r.warnungen.map(w => `<div style="color:var(--rot)">${esc(w)}</div>`).join("")}</div>`;
       } catch (x) { toast(x.message, true); btn.disabled = false; btn.textContent = alt; }
     };
-    $("#dvS").onchange = () => $$("[data-dvk]").forEach(i => { i.dataset.geaendert = ""; });
+    const kpZeigen = async () => {
+      const kp = await api("sachkonten?alle=1");
+      const stOpt = v => Object.entries(kp.steuer).map(([k, t]) => `<option value="${k}" ${k === v ? "selected" : ""}>${esc(t)}</option>`).join("");
+      const artOpt = v => Object.entries(kp.arten).map(([k, t]) => `<option value="${k}" ${k === v ? "selected" : ""}>${esc(t)}</option>`).join("");
+      $("#kpInhalt").innerHTML = `<p class="hinweis" style="margin-top:0">Vorbelegt mit den üblichen Konten eines Handwerksbetriebs. Eigene Konten unten anlegen; Konten, die gebraucht wurden, werden beim Entfernen nur ausgeblendet.
+          „Steuer“ bestimmt im DATEV-Export den BU-Schlüssel (Automatikkonten ohne). Mit der Kanzlei abstimmen.</p>
+        <table class="liste"><tr><th>Nummer</th><th>Bezeichnung</th><th>Art</th><th>Steuer</th><th>aktiv</th><th></th></tr>
+        ${kp.konten.map(k => `<tr style="${k.aktiv ? "" : "opacity:.5"}"><td><b>${String(k.nummer).padStart(4, "0")}</b></td><td><input data-kp="${k.id}" data-kk="bezeichnung" value="${esc(k.bezeichnung)}" style="width:100%;min-width:220px"></td>
+          <td><select data-kp="${k.id}" data-kk="art">${artOpt(k.art)}</select></td><td><select data-kp="${k.id}" data-kk="steuer">${stOpt(k.steuer)}</select></td>
+          <td><input type="checkbox" data-kp="${k.id}" data-kk="aktiv" ${k.aktiv ? "checked" : ""}></td><td>${k.eigen ? `<button class="btn" data-kpweg="${k.id}" title="Entfernen">✕</button>` : `<span class="hinweis">Vorgabe</span>`}</td></tr>`).join("")}
+        <tr><td><input id="kpNr" placeholder="Nr." inputmode="numeric" style="width:80px"></td><td><input id="kpBez" placeholder="Bezeichnung des neuen Kontos" style="width:100%"></td>
+          <td><select id="kpArt">${artOpt("aufwand")}</select></td><td><select id="kpSt">${stOpt("")}</select></td><td></td><td><button class="btn prim" id="kpNeu">＋ Anlegen</button></td></tr></table>`;
+      $$("[data-kp]").forEach(el => el.onchange = async () => {
+        try { await api("sachkonten/" + el.dataset.kp, {method: "PUT", body: {[el.dataset.kk]: el.type === "checkbox" ? el.checked : el.value}}); toast("Gespeichert"); if (el.type === "checkbox") kpZeigen(); }
+        catch (x) { toast(x.message, true); }
+      });
+      $$("[data-kpweg]").forEach(b => b.onclick = async () => { const r = await api("sachkonten/" + b.dataset.kpweg, {method: "DELETE"}); toast(r.ausgeblendet ? "Konto wurde verwendet und ist jetzt ausgeblendet" : "Konto entfernt"); kpZeigen(); });
+      $("#kpNeu").onclick = async () => {
+        try { const k = await api("sachkonten", {method: "POST", body: {nummer: $("#kpNr").value, bezeichnung: $("#kpBez").value, art: $("#kpArt").value, steuer: $("#kpSt").value}}); toast(`Konto ${k.nummer} angelegt`); kpZeigen(); }
+        catch (x) { toast(x.message, true); }
+      };
+    };
+    $("#kontenplan").ontoggle = () => { if ($("#kontenplan").open && !$("#kpInhalt").innerHTML) kpZeigen(); };
+    let kpOffen = false;
+    try { kpOffen = !!sessionStorage.getItem("kpOffen"); sessionStorage.removeItem("kpOffen"); } catch (e) { /* ohne Speicher: zugeklappt */ }
+    if (kpOffen) { $("#kontenplan").open = true; $("#kontenplan").scrollIntoView(); }
     $("#dvSp").onclick = async () => {
       const konten = {};
       $$("[data-dvk]").forEach(i => { konten[i.dataset.dvk] = i.value.trim(); });
       const skrNeu = $("#dvS").value !== dv.skr;
       await api("einstellungen", {method: "PUT", body: {datev: {berater: $("#dvB").value.trim(), mandant: $("#dvM").value.trim(), skr: $("#dvS").value,
-        wj_beginn: +$("#dvW").value || 1, sachkontenlaenge: +$("#dvL").value || 4, ausgang: $("#dvA").checked, eingang: $("#dvE").checked,
+        wj_beginn: +$("#dvW").value || 1, sachkontenlaenge: +$("#dvL").value || 4, ausgang: $("#dvA").checked, eingang: $("#dvE").checked, bankumsaetze: $("#dvK").checked,
         konten: skrNeu ? {} : Object.fromEntries(Object.entries(konten).filter(([k, v]) => String(v) !== String(dv.standard[k])))}}});
       toast(skrNeu ? "Gespeichert – Konten auf die Vorgaben des neuen Kontenrahmens gesetzt" : "DATEV-Einstellungen gespeichert"); serviceSeite(z, sub);
     };

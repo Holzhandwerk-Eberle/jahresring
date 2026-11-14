@@ -14,24 +14,24 @@ async function ansichtBank() {
   const kann = darf("op", 2);
   const zielText = u => (u.ziel || []).map(t => `<div>${t.art === "op" ? "Zahlungseingang" : "Zahlungsauftrag"} <b>${esc(t.nummer || "")}</b> ${eur(Math.abs(t.betrag))}${t.art === "zahlung" && !t.gesetzt ? ` <span class="hinweis">(war schon bezahlt)</span>` : ""}</div>`).join("");
   const vorschlagText = v => !v ? `<span class="hinweis">kein Vorschlag</span>`
-    : `<div class="bk-vs ${v.sicher ? "sicher" : "pruefen"}"><span class="tag">${v.sicher ? "sicher" : "prüfen"}</span> ${v.ziele.map(t => `${esc(t.text)}${v.ziele.length > 1 ? ` (${eur(t.betrag)})` : ""}`).join("<br>")}<div class="hinweis">${esc(v.grund)}</div></div>`;
+    : `<div class="bk-vs ${v.sicher ? "sicher" : "pruefen"}"><span class="tag">${v.sicher ? "sicher" : "prüfen"}</span> ${v.konto ? `Konto <b>${esc(v.konto_text)}</b>` : v.ziele.map(t => `${esc(t.text)}${v.ziele.length > 1 ? ` (${eur(t.betrag)})` : ""}`).join("<br>")}<div class="hinweis">${esc(v.grund)}</div></div>`;
   const zeilen = d.umsaetze.map(u => `<tr data-u="${u.id}">
       <td class="nw">${datum(u.buchung)}</td>
       <td><b>${esc(u.name || "–")}</b><div class="hinweis bk-zweck">${esc(u.zweck)}</div></td>
       <td class="r nw"><b style="color:${u.betrag < 0 ? "var(--rot)" : "var(--gruen)"}">${eur(u.betrag)}</b></td>
-      <td>${u.status === "offen" ? vorschlagText(u.vorschlag) : u.status === "zugeordnet" ? zielText(u) : `<span class="hinweis">ignoriert${u.notiz ? ": " + esc(u.notiz) : ""}</span>`}</td>
-      <td class="r">${!kann ? "" : u.status === "offen" ? `<span class="bk-kn">${u.vorschlag ? `<button class="btn${u.vorschlag.sicher ? " prim" : ""}" data-ok="${u.id}">Übernehmen</button>` : ""}<button class="btn" data-zu="${u.id}">Zuordnen …</button><button class="btn" data-ign="${u.id}" title="Kein Kunden- oder Lieferantenbezug, z. B. Kontoführung, Privatentnahme">Ohne Zuordnung</button></span>`
-        : `<button class="btn" data-los="${u.id}">${u.status === "zugeordnet" ? "Zuordnung lösen" : "Zurückholen"}</button>`}</td></tr>`).join("");
+      <td>${u.status === "offen" ? vorschlagText(u.vorschlag) : u.status === "zugeordnet" ? zielText(u) : (u.konto ? `<div>Konto <b>${esc(u.konto_text)}</b></div>` : `<span class="hinweis">ohne Konto</span>`) + (u.notiz ? `<div class="hinweis">${esc(u.notiz)}</div>` : "")}</td>
+      <td class="r">${!kann ? "" : u.status === "offen" ? `<span class="bk-kn">${u.vorschlag ? `<button class="btn${u.vorschlag.sicher ? " prim" : ""}" data-ok="${u.id}">Übernehmen</button>` : ""}<button class="btn" data-zu="${u.id}">Zuordnen …</button><button class="btn" data-ign="${u.id}" title="Umsatz ohne Rechnung (Miete, Kontoführung, Versicherung, Privatentnahme …) einem Sachkonto zuordnen">Konto …</button></span>`
+        : `<span class="bk-kn">${u.status === "ignoriert" ? `<button class="btn" data-ign="${u.id}">Konto ändern</button>` : ""}<button class="btn" data-los="${u.id}">${u.status === "zugeordnet" ? "Zuordnung lösen" : "Zurückholen"}</button></span>`}</td></tr>`).join("");
   z.innerHTML = `<div class="titel"><h2>Kontoauszüge</h2><div class="rechts">
       ${kann ? `<label class="btn prim" title="CAMT-Datei (camt.053 oder camt.052, auch als ZIP) aus dem Onlinebanking">📥 Kontoauszug einlesen<input type="file" id="bkDatei" accept=".xml,.zip,application/xml,text/xml,application/zip" hidden multiple></label>` : ""}</div></div>
     <p class="hinweis" style="margin-top:-6px">Im Onlinebanking den Kontoauszug als <b>CAMT-Datei</b> (camt.053, bei manchen Banken „XML“ oder „ISO 20022“) herunterladen und hier einlesen.
       Gutschriften werden offenen Rechnungen zugeordnet, Abbuchungen den Zahlungsaufträgen. Schon eingelesene Umsätze erkennt das Programm und legt sie nicht doppelt an.</p>
     <div class="kachel" style="margin-bottom:12px">${ks ? `Kontostand laut Auszug vom <b>${datum(ks.saldo_datum)}</b>: <b style="font-size:17px">${eur(ks.saldo_ende)}</b> <span class="hinweis">${esc(ks.iban || "")}</span>` : `<span class="hinweis">Noch kein Kontoauszug mit Kontostand eingelesen.</span>`}
-      · <a href="#/op/liquiditaet">Liquiditätsvorschau ›</a></div>
+      · <a href="#/op/liquiditaet">Liquiditätsvorschau ›</a>${benutzerIstInhaber() ? ` · <a href="#/einstellungen/service/export" id="bkKp" title="Sachkonten, DATEV-Einstellungen">Kontenplan ›</a>` : ""}</div>
     ${sicher.length && kann && BANK_FILTER.status === "offen" ? `<div class="kachel" style="border-left:4px solid var(--gruen);margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-      <span><b>${sicher.length}</b> ${sicher.length === 1 ? "Umsatz passt" : "Umsätze passen"} eindeutig zu Rechnung bzw. Zahlungsauftrag.</span><button class="btn prim" id="bkAlle">Alle sicheren übernehmen</button></div>` : ""}
+      <span><b>${sicher.length}</b> ${sicher.length === 1 ? "Umsatz passt" : "Umsätze passen"} eindeutig zu Rechnung, Zahlungsauftrag oder einer Kontoregel.</span><button class="btn prim" id="bkAlle">Alle sicheren übernehmen</button></div>` : ""}
     <div class="filterleiste" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-      ${[["offen", `Offen (${n.offen || 0})`], ["zugeordnet", `Zugeordnet (${n.zugeordnet || 0})`], ["ignoriert", `Ohne Zuordnung (${n.ignoriert || 0})`], ["alle", "Alle"]]
+      ${[["offen", `Offen (${n.offen || 0})`], ["zugeordnet", `Zugeordnet (${n.zugeordnet || 0})`], ["ignoriert", `Auf Konto (${n.ignoriert || 0})`], ["alle", "Alle"]]
         .map(([k, t]) => `<button class="btn${BANK_FILTER.status === k ? " prim" : ""}" data-st="${k}">${t}</button>`).join("")}
       <input id="bkSuche" placeholder="Name, Verwendungszweck, Betrag …" value="${esc(BANK_FILTER.q)}" style="flex:1 1 200px;max-width:320px">
     </div>
@@ -39,8 +39,10 @@ async function ansichtBank() {
       : `<div class="leer">${BANK_FILTER.status === "offen" ? "Keine offenen Umsätze." : "Keine Umsätze."}</div>`}
     ${d.auszuege.length ? `<h3 style="margin-top:22px">Eingelesene Dateien</h3><table class="liste"><tr><th>eingelesen</th><th>Datei</th><th>Zeitraum</th><th class="r">neu</th><th class="r">schon vorhanden</th><th class="r">Kontostand</th></tr>
       ${d.auszuege.map(a => `<tr><td class="nw">${datum(a.importiert)} ${esc((a.importiert || "").slice(11, 16))}</td><td>${esc(a.datei)} <span class="hinweis">${esc(a.format)}</span></td><td class="nw">${datum(a.von)} – ${datum(a.bis)}</td>
-        <td class="r">${a.neu}</td><td class="r">${a.doppelt}</td><td class="r nw">${a.saldo_ende != null ? eur(a.saldo_ende) : ""}</td></tr>`).join("")}</table>` : ""}`;
+        <td class="r">${a.neu}</td><td class="r">${a.doppelt}</td><td class="r nw">${a.saldo_ende != null ? eur(a.saldo_ende) : ""}</td></tr>`).join("")}</table>` : ""}
+    <div id="bkRegeln"></div>`;
   const neu = () => ansichtBank();
+  if ($("#bkKp")) $("#bkKp").onclick = () => { try { sessionStorage.setItem("kpOffen", "1"); } catch (e) { /* egal */ } };
   $$("[data-st]", z).forEach(b => b.onclick = () => { BANK_FILTER.status = b.dataset.st; neu(); });
   const s = $("#bkSuche"); let t; s.oninput = () => { clearTimeout(t); t = setTimeout(() => { BANK_FILTER.q = s.value.trim(); neu().then(() => { const x = $("#bkSuche"); if (x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } }); }, 350); };
   if ($("#bkDatei")) $("#bkDatei").onchange = async e => {
@@ -62,12 +64,8 @@ async function ansichtBank() {
     try { await api(`bank/${u.id}/zuordnen`, {method: "POST", body: {ziele: u.vorschlag.ziele}}); toast("Zugeordnet"); neu(); } catch (x) { toast(x.message, true); }
   });
   $$("[data-zu]", z).forEach(b => b.onclick = () => bankZuordnen(d.umsaetze.find(x => x.id === +b.dataset.zu), neu));
-  $$("[data-ign]", z).forEach(b => b.onclick = async () => {
-    const r = await modal("Ohne Zuordnung", `<p class="hinweis">Für Umsätze ohne Rechnung oder Zahlungsauftrag, z. B. Kontoführungsgebühren, Privatentnahmen oder Umbuchungen.</p>
-      <div class="zeile"><label>Notiz</label><div><input name="notiz" placeholder="z. B. Kontoführung"></div></div>`, "Speichern");
-    if (!r) return;
-    await api(`bank/${b.dataset.ign}/ignorieren`, {method: "POST", body: {notiz: r.notiz}}); neu();
-  });
+  $$("[data-ign]", z).forEach(b => b.onclick = () => bankKonto(d.umsaetze.find(x => x.id === +b.dataset.ign), neu));
+  bankRegeln($("#bkRegeln"), kann);
   $$("[data-los]", z).forEach(b => b.onclick = async () => {
     const u = d.umsaetze.find(x => x.id === +b.dataset.los);
     if (u.status === "zugeordnet" && !await frage("Zuordnung lösen? Die daraus gebuchten Zahlungseingänge werden wieder entfernt (mit Protokolleintrag), ein dadurch als bezahlt markierter Zahlungsauftrag wird wieder offen.", {ok: "Lösen"})) return;
@@ -185,4 +183,62 @@ async function ansichtLiquiditaet() {
   $$("[data-weg]").forEach(b => b.onclick = () => speichern({regelmaessig: regel().filter((_, i) => i !== +b.dataset.weg)}));
   $("#lqNeu").onclick = () => speichern({regelmaessig: [...regel(), {text: "Neue Zahlung", betrag: -100, rhythmus: "monatlich", tag: 1, ab: heute().slice(0, 7), ust: 0}]});
   $$(".lq-w").forEach(tr => tr.onclick = () => { const d2 = $(`[data-d="${tr.dataset.w}"]`); d2.hidden = !d2.hidden; });
+}
+
+
+// ---------------------------------------------------------------- Umsatz ohne Rechnung einem Sachkonto zuordnen
+const benutzerIstInhaber = () => !!(typeof ICH !== "undefined" && ICH && ICH.rechte && ICH.rechte.inhaber);
+async function bankKonto(u, fertig) {
+  let kp = await api("sachkonten");
+  const inhaber = benutzerIstInhaber();
+  const vorschlagNr = (u.vorschlag && u.vorschlag.konto) || u.konto || "";
+  const opt = () => kp.konten.filter(k => u.betrag < 0 ? k.art !== "erloes" : true)
+    .map(k => `<option value="${k.nummer}" ${String(k.nummer) === String(vorschlagNr) ? "selected" : ""}>${String(k.nummer).padStart(4, "0")} · ${esc(k.bezeichnung)}${k.steuer ? " (" + esc(k.steuer_name) + ")" : ""}</option>`).join("");
+  const suchtext = (u.name || "").trim() || (u.zweck || "").split(/\s+/).slice(0, 3).join(" ");
+  let fenster = null;
+  const r = await modal(u.betrag < 0 ? "Ausgabe einem Konto zuordnen" : "Einnahme einem Konto zuordnen", `
+    <p><b>${esc(u.name || "")}</b> · ${datum(u.buchung)} · <b>${eur(u.betrag)}</b><br><span class="hinweis">${esc(u.zweck)}</span></p>
+    <div class="zeile"><label>Suche</label><div><input id="bkkSuche" placeholder="Nummer oder Bezeichnung, z. B. Miete, 4970"></div></div>
+    <div class="zeile"><label>Konto</label><div><select id="bkkKonto" size="8" style="width:100%"><option value="">– kein Konto (nur als erledigt markieren) –</option>${opt()}</select></div></div>
+    ${inhaber ? `<details id="bkkNeu"><summary class="hinweis" style="cursor:pointer">Konto fehlt? Neues Konto anlegen</summary>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0"><input id="bkkNr" placeholder="Nummer" inputmode="numeric" style="width:90px"><input id="bkkBez" placeholder="Bezeichnung" style="flex:1 1 180px">
+      <select id="bkkSt">${Object.entries(kp.steuer).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join("")}</select><button class="btn" type="button" id="bkkAnl" data-enter="bkkAnl">Anlegen</button></div></details>` : ""}
+    <div class="zeile"><label>Notiz</label><div><input id="bkkNotiz" value="${esc(u.notiz || (u.vorschlag && u.vorschlag.notiz) || "")}" placeholder="z. B. Miete Werkstatt November"></div></div>
+    <label style="display:block;margin-top:8px"><input type="checkbox" id="bkkRegel" ${u.vorschlag && u.vorschlag.konto ? "" : "checked"}> Künftig automatisch vorschlagen, wenn
+      <select id="bkkFeld"><option value="name">der Name</option><option value="zweck">der Verwendungszweck</option><option value="beide">Name oder Verwendungszweck</option></select>
+      <input id="bkkText" value="${esc(suchtext)}" style="width:180px"> enthält</label>`, "Zuordnen", hg => {
+    fenster = hg;
+    $(".modal", hg).style.width = "min(680px,96vw)";
+    const sel = $("#bkkKonto", hg);
+    $("#bkkSuche", hg).oninput = e => { const q = e.target.value.toLowerCase().trim(); [...sel.options].forEach(o => { o.hidden = !!o.value && !!q && !o.textContent.toLowerCase().includes(q); }); };
+    if ($("#bkkAnl", hg)) $("#bkkAnl", hg).onclick = async () => {
+      try {
+        const k = await api("sachkonten", {method: "POST", body: {nummer: $("#bkkNr", hg).value, bezeichnung: $("#bkkBez", hg).value, steuer: $("#bkkSt", hg).value, art: u.betrag < 0 ? "aufwand" : "erloes"}});
+        kp = await api("sachkonten");
+        sel.innerHTML = `<option value="">– kein Konto (nur als erledigt markieren) –</option>` + opt();
+        $("#bkkSuche", hg).value = ""; sel.value = String(k.nummer); $("#bkkNeu", hg).open = false; toast(`Konto ${k.nummer} angelegt`);
+      } catch (x) { toast(x.message, true); }
+    };
+  });
+  if (!r || !fenster) return;
+  const konto = $("#bkkKonto", fenster).value;
+  const regel = $("#bkkRegel", fenster).checked && konto && $("#bkkText", fenster).value.trim() ? {suchtext: $("#bkkText", fenster).value.trim(), feld: $("#bkkFeld", fenster).value} : null;
+  try {
+    if (u.status === "ignoriert") await api(`bank/${u.id}/loesen`, {method: "POST", body: {}});
+    await api(`bank/${u.id}/konto`, {method: "POST", body: {konto, notiz: $("#bkkNotiz", fenster).value, regel}});
+    toast(konto ? `Konto ${konto} zugeordnet${regel ? " · Regel gespeichert" : ""}` : "Als erledigt markiert"); fertig();
+  } catch (x) { toast(x.message, true); }
+}
+
+async function bankRegeln(box, kann) {
+  if (!box) return;
+  const rg = await api("bank/regeln").catch(() => []);
+  if (!rg.length) { box.innerHTML = ""; return; }
+  const feld = {name: "Name", zweck: "Verwendungszweck", beide: "Name oder Zweck"};
+  box.innerHTML = `<h3 style="margin-top:22px">Kontoregeln</h3>
+    <p class="hinweis" style="margin-top:-4px">Umsätze ohne Rechnung, die zu einer Regel passen, schlägt das Programm mit dem Konto vor. Neue Regeln entstehen beim Zuordnen eines Kontos.</p>
+    <table class="liste"><tr><th>wenn</th><th>enthält</th><th>Richtung</th><th>Konto</th><th>Notiz</th><th></th></tr>
+    ${rg.map(r => `<tr><td>${esc(feld[r.feld] || r.feld)}</td><td><b>${esc(r.suchtext)}</b></td><td>${r.richtung === "-" ? "Ausgabe" : r.richtung === "+" ? "Einnahme" : "beide"}</td>
+      <td>${esc(r.konto_text)}</td><td class="hinweis">${esc(r.notiz || "")}</td><td class="r">${kann ? `<button class="btn" data-rgweg="${r.id}">✕</button>` : ""}</td></tr>`).join("")}</table>`;
+  $$("[data-rgweg]", box).forEach(b => b.onclick = async () => { await api("bank/regeln/" + b.dataset.rgweg, {method: "DELETE"}); bankRegeln(box, kann); });
 }

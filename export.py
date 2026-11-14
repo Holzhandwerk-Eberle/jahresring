@@ -390,14 +390,14 @@ def liste():
 # ---------------------------------------------------------------- DATEV-Buchungsstapel (EXTF, Formatversion 13)
 DATEV_KONTEN = {
     "03": {"erloes_19": 8400, "erloes_7": 8300, "erloes_13b": 8337, "erloes_eu": 8336, "erloes_0": 8338,
-           "aufwand_19": 3400, "aufwand_7": 3300, "aufwand_0": 3200, "debitor": 10000, "kreditor": 70000},
+           "aufwand_19": 3400, "aufwand_7": 3300, "aufwand_0": 3200, "debitor": 10000, "kreditor": 70000, "bank": 1200},
     "04": {"erloes_19": 4400, "erloes_7": 4300, "erloes_13b": 4337, "erloes_eu": 4336, "erloes_0": 4338,
-           "aufwand_19": 5400, "aufwand_7": 5300, "aufwand_0": 5200, "debitor": 10000, "kreditor": 70000},
+           "aufwand_19": 5400, "aufwand_7": 5300, "aufwand_0": 5200, "debitor": 10000, "kreditor": 70000, "bank": 1800},
 }
 DATEV_KONTEN_TEXT = {"erloes_19": "Erlöse 19 % USt", "erloes_7": "Erlöse 7 % USt", "erloes_13b": "Erlöse § 13b UStG (Steuerschuld Leistungsempfänger)",
                      "erloes_eu": "Erlöse sonstige Leistungen EU (Reverse Charge)", "erloes_0": "Erlöse nicht steuerbar / steuerfrei",
                      "aufwand_19": "Wareneingang 19 % Vorsteuer", "aufwand_7": "Wareneingang 7 % Vorsteuer", "aufwand_0": "Wareneingang ohne Vorsteuer",
-                     "debitor": "Debitor (Sammelkonto Kunden)", "kreditor": "Kreditor (Sammelkonto Lieferanten)"}
+                     "debitor": "Debitor (Sammelkonto Kunden)", "kreditor": "Kreditor (Sammelkonto Lieferanten)", "bank": "Bankkonto (für Bankumsätze)"}
 DATEV_SPALTEN = (
     ["Umsatz (ohne Soll/Haben-Kz)", "Soll/Haben-Kennzeichen", "WKZ Umsatz", "Kurs", "Basis-Umsatz", "WKZ Basis-Umsatz", "Konto",
      "Gegenkonto (ohne BU-Schlüssel)", "BU-Schlüssel", "Belegdatum", "Belegfeld 1", "Belegfeld 2", "Skonto", "Buchungstext", "Postensperre",
@@ -426,7 +426,8 @@ def datev_cfg(e):
             konten[k] = int(v)
     return {"berater": str(d.get("berater") or "").strip(), "mandant": str(d.get("mandant") or "").strip(), "skr": skr,
             "wj_beginn": max(1, min(12, int(d.get("wj_beginn") or 1))), "sachkontenlaenge": max(4, min(8, int(d.get("sachkontenlaenge") or 4))),
-            "konten": konten, "ausgang": d.get("ausgang", True) is not False, "eingang": d.get("eingang", True) is not False}
+            "konten": konten, "ausgang": d.get("ausgang", True) is not False, "eingang": d.get("eingang", True) is not False,
+            "bankumsaetze": bool(d.get("bankumsaetze"))}
 
 
 def _dt_text(t, n):
@@ -491,16 +492,47 @@ def datev_buchungen(con, von, bis, cfg):
                 continue
             vst = float(z["vorsteuer"] or 0)
             eigen = str((gruppe["datev_konto"] if gruppe else "") or "").strip()
+            bu = ""
             if eigen.isdigit():
                 konto = int(eigen)
+                # kein Automatikkonto: Vorsteuer über den BU-Schlüssel nach dem Satz der Rechnung
+                if _konto_steuer(con, cfg, konto) != "auto":
+                    bu = "9" if vst >= 18.5 else "8" if vst >= 6.5 else ""
             else:
                 konto = k["aufwand_19"] if vst >= 18.5 else k["aufwand_7"] if vst >= 6.5 else k["aufwand_0"]
             datum = z.get("belegdatum") or (z.get("angelegt") or "")[:10]
-            aus.append({"betrag": betrag, "sh": "S" if betrag > 0 else "H", "konto": konto, "gegen": k["kreditor"], "datum": datum,
+            aus.append({"betrag": betrag, "sh": "S" if betrag > 0 else "H", "konto": konto, "gegen": k["kreditor"], "datum": datum, "bu": bu,
                         "beleg1": _dt_beleg(z.get("belegnr") or z["nummer"]), "beleg2": _dt_beleg(z["nummer"])[:12],
                         "text": f"{z.get('lieferant') or ''} {z.get('belegnr') or ''}".strip(), "leistung": "", "faellig": z.get("faellig") or "",
                         "euid": "", "auftrag": z.get("auftragsnr") or ""})
+    if cfg["bankumsaetze"]:
+        offen = con.execute("SELECT COUNT(*) FROM bank_umsaetze WHERE buchung BETWEEN ? AND ? AND (status='offen' OR (status='ignoriert' AND konto IS NULL))",
+                            (von, bis)).fetchone()[0]
+        if offen:
+            warnungen.append(f"{offen} Bankumsätze im Zeitraum ohne Zuordnung bzw. ohne Konto – nicht im Stapel")
+        for u in con.execute("SELECT * FROM bank_umsaetze WHERE buchung BETWEEN ? AND ? AND (status='zugeordnet' OR (status='ignoriert' AND konto IS NOT NULL)) "
+                             "ORDER BY buchung, id", (von, bis)):
+            ziele = _jl(u["ziel"], [])
+            bu, beleg = "", ""
+            if u["status"] == "ignoriert":
+                gegen = int(u["konto"])
+                bu = {"v19": "9", "v7": "8", "u19": "3", "u7": "2"}.get(_konto_steuer(con, cfg, gegen), "")
+            elif ziele and ziele[0].get("art") == "op":
+                gegen, beleg = k["debitor"], ziele[0].get("nummer") or ""
+            else:
+                gegen, beleg = k["kreditor"], (ziele[0].get("nummer") if ziele else "") or ""
+            aus.append({"betrag": abs(u["betrag"]), "sh": "S" if u["betrag"] > 0 else "H", "konto": k["bank"], "gegen": gegen, "datum": u["buchung"], "bu": bu,
+                        "beleg1": _dt_beleg(beleg), "beleg2": "", "text": (u["name"] or u["notiz"] or u["zweck"] or "")[:60], "leistung": "", "faellig": "",
+                        "euid": "", "auftrag": ""})
     return aus, warnungen
+
+
+def _konto_steuer(con, cfg, nummer):
+    try:
+        r = con.execute("SELECT steuer FROM konten WHERE skr=? AND nummer=?", (cfg["skr"], int(nummer))).fetchone()
+    except Exception:   # noqa: BLE001 – Kontenplan fehlt
+        return ""
+    return r["steuer"] if r else ""
 
 
 def datev_export(con, von, bis, wer=""):
@@ -527,6 +559,7 @@ def datev_export(con, von, bis, wer=""):
         f = [""] * 125
         f[0], f[1], f[2] = _dt_betrag(b["betrag"]), f'"{b["sh"]}"', '"EUR"'
         f[6], f[7] = str(b["konto"]), str(b["gegen"])
+        f[8] = f'"{b["bu"]}"' if b.get("bu") else ""
         f[9], f[10], f[11] = _ttmm(b["datum"]), _dt_text(b["beleg1"], 36), _dt_text(b["beleg2"], 12)
         f[13] = _dt_text(b["text"], 60)
         f[39] = _dt_text(b["euid"], 15) if b["euid"] else ""
@@ -543,16 +576,19 @@ def datev_export(con, von, bis, wer=""):
     csv_name = f"EXTF_Buchungsstapel_{von}_bis_{bis}.csv"
     ziel = os.path.join(ordner(), name)
     summe_aus = round(sum(b["betrag"] for b in buchungen if b["konto"] == cfg["konten"]["debitor"]), 2)
-    summe_ein = round(sum(b["betrag"] for b in buchungen if b["gegen"] == cfg["konten"]["kreditor"]), 2)
+    summe_ein = round(sum(b["betrag"] for b in buchungen if b["gegen"] == cfg["konten"]["kreditor"] and b["konto"] != cfg["konten"]["bank"]), 2)
+    n_bank = sum(1 for b in buchungen if b["konto"] == cfg["konten"]["bank"])
     info = [f"DATEV-Buchungsstapel {e.get('firma') or ''} – Zeitraum {_de(von)} bis {_de(bis)}",
             f"Erstellt am {jetzt_:%d.%m.%Y %H:%M} mit Jahresring {HILFE['version']} von {wer}", "",
             f"Datei: {csv_name} (DATEV-Format, Buchungsstapel Version 13, Zeichensatz Windows-1252)",
             f"Beraternummer {cfg['berater']}, Mandantennummer {cfg['mandant']}, SKR {cfg['skr']}, Wirtschaftsjahr ab {cfg['wj_beginn']:02d}/{wj_jahr}",
-            f"Buchungen: {len(buchungen)} (Ausgangsrechnungen brutto {_z(summe_aus)} EUR, Eingangsrechnungen brutto {_z(summe_ein)} EUR)", "",
+            f"Buchungen: {len(buchungen)} (Ausgangsrechnungen brutto {_z(summe_aus)} EUR, Eingangsrechnungen brutto {_z(summe_ein)} EUR"
+            + (f", {n_bank} Bankumsätze)" if n_bank else ")"), "",
             "Kontenzuordnung:"] + [f"  {DATEV_KONTEN_TEXT[k_]}: {v}" for k_, v in cfg["konten"].items()] + [
             "", "Ausgangsrechnungen: Debitor an Erlöskonto, Schlussrechnungen nur mit dem Rest nach Abzug der Abschlagsrechnungen.",
             "Eingangsrechnungen: Aufwandskonto (beim Lieferanten hinterlegt oder Wareneingang nach Vorsteuersatz) an Kreditor.",
-            "Löhne, Lohnsteuer und Sozialversicherung sind nicht enthalten. Zahlungen (Bank) bucht die Kanzlei aus den Kontoumsätzen.",
+            "Löhne, Lohnsteuer und Sozialversicherung sind nicht enthalten." + (" Bankumsätze: Bankkonto an Debitor/Kreditor bzw. an das zugeordnete Sachkonto."
+            if cfg["bankumsaetze"] else " Zahlungen (Bank) bucht die Kanzlei aus den Kontoumsätzen."),
             "Die Buchungen sind nicht festgeschrieben (Festschreibung 0)."] + (["", "Hinweise:"] + [f"  {w}" for w in warnungen] if warnungen else [])
     with zipfile.ZipFile(ziel + ".part", "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr(csv_name, inhalt)
@@ -565,5 +601,5 @@ def datev_export(con, von, bis, wer=""):
             if p:
                 z.write(p, "Belege/Eingangsrechnungen/" + os.path.basename(p))
     os.replace(ziel + ".part", ziel)
-    return {"datei": name, "groesse": os.path.getsize(ziel), "buchungen": len(buchungen), "ausgang": summe_aus, "eingang": summe_ein,
+    return {"datei": name, "groesse": os.path.getsize(ziel), "buchungen": len(buchungen), "ausgang": summe_aus, "eingang": summe_ein, "bank": n_bank,
             "warnungen": warnungen, "csv": csv_name}

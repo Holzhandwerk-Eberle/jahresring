@@ -33,11 +33,16 @@ CREATE TABLE IF NOT EXISTS bank_umsaetze (
     schluessel TEXT UNIQUE, status TEXT DEFAULT 'offen', ziel TEXT DEFAULT '[]', notiz TEXT DEFAULT '',
     zugeordnet TEXT DEFAULT '', von TEXT DEFAULT '', angelegt TEXT
 );
+CREATE TABLE IF NOT EXISTS bank_regeln (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    suchtext TEXT NOT NULL, feld TEXT DEFAULT 'beide', richtung TEXT DEFAULT '', konto INTEGER NOT NULL,
+    notiz TEXT DEFAULT '', angelegt TEXT, von TEXT DEFAULT ''
+);
 CREATE INDEX IF NOT EXISTS ix_bank_umsaetze_buchung ON bank_umsaetze(buchung);
 CREATE INDEX IF NOT EXISTS ix_bank_umsaetze_status ON bank_umsaetze(status);
 """
 
-# von app.py gesetzt: prot, op_zahlung_buchen, zahlungseingang_loeschen, ich_login, daten
+# von app.py gesetzt: prot, op_zahlung_buchen, zahlungseingang_loeschen, ich_login, daten, skr (fn con → "03"/"04")
 HILFE = {}
 MAX_DATEI = 50 * 1024 * 1024
 MAX_ENTPACKT = 200 * 1024 * 1024
@@ -51,6 +56,9 @@ class Fehler(Exception):
 
 def schema(con):
     con.executescript(SCHEMA)
+    spalten = {r[1] for r in con.execute("PRAGMA table_info(bank_umsaetze)")}
+    if "konto" not in spalten:
+        con.execute("ALTER TABLE bank_umsaetze ADD COLUMN konto INTEGER")
 
 
 def jetzt():
@@ -397,17 +405,53 @@ def liste(con, q):
     us = zeilen(con.execute(sql, par))
     ops, zas = offene_posten(con), zahlungsauftraege(con)
     alle_zas = None
+    regeln = regeln_liste(con)
+    namen = kontonamen(con)
     for u in us:
         u["ziel"] = json.loads(u["ziel"] or "[]")
+        if u["konto"]:
+            u["konto_text"] = f"{u['konto']} {namen.get(u['konto'], '')}".strip()
         if u["status"] == "offen":
             if alle_zas is None and any(x["betrag"] < 0 for x in us):
                 alle_zas = zahlungsauftraege(con, offen_nur=False)
             u["vorschlag"] = vorschlag(u, ops, zas, alle_zas)
+            if not u["vorschlag"]:
+                r = regel_fuer(u, regeln)
+                if r:
+                    u["vorschlag"] = {"sicher": True, "grund": f"Regel: „{r['suchtext']}“ → Konto", "ziele": [], "konto": r["konto"],
+                                      "konto_text": f"{r['konto']} {namen.get(r['konto'], '')}".strip(), "notiz": r["notiz"]}
     kontostand = kontostand_lesen(con)
     zaehler = {r["status"]: r["n"] for r in con.execute("SELECT status, COUNT(*) AS n FROM bank_umsaetze GROUP BY status")}
     return {"umsaetze": us, "kontostand": kontostand, "anzahl": zaehler,
             "auszuege": zeilen(con.execute("SELECT id, datei, format, iban, von, bis, saldo_ende, saldo_datum, neu, doppelt, importiert, benutzer "
                                            "FROM bank_auszuege ORDER BY id DESC LIMIT 30"))}
+
+
+def kontonamen(con):
+    skr = HILFE["skr"](con) if HILFE.get("skr") else "03"
+    try:
+        return {r["nummer"]: r["bezeichnung"] for r in con.execute("SELECT nummer, bezeichnung FROM konten WHERE skr=?", (skr,))}
+    except Exception:   # noqa: BLE001 – Kontenplan noch nicht angelegt
+        return {}
+
+
+def regeln_liste(con):
+    return zeilen(con.execute("SELECT * FROM bank_regeln ORDER BY suchtext COLLATE NOCASE"))
+
+
+def regel_fuer(u, regeln):
+    """Erste Regel, deren Suchtext im Namen bzw. Verwendungszweck vorkommt (Groß-/Kleinschreibung egal) und deren Richtung passt."""
+    name, zweck = _norm(u["name"]), _norm(u["zweck"])
+    for r in regeln:
+        t = _norm(r["suchtext"]).strip()
+        if not t:
+            continue
+        if r["richtung"] == "+" and u["betrag"] < 0 or r["richtung"] == "-" and u["betrag"] > 0:
+            continue
+        feld = r["feld"] or "beide"
+        if (feld in ("name", "beide") and t in name) or (feld in ("zweck", "beide") and t in zweck):
+            return r
+    return None
 
 
 def kontostand_lesen(con):
@@ -507,9 +551,39 @@ def loesen(con, uid):
                 con.execute("UPDATE zahlungen SET bezahlt='', geaendert=? WHERE id=?", (jetzt(), t["id"]))
                 HILFE["prot"](con, "zahlungsauftrag_geoeffnet", z["nummer"], f"„Bezahlt“ zurückgenommen (Zuordnung zum Kontoauszug gelöst): {z['nummer']}",
                      {"bezahlt_alt": z["bezahlt"], "betrag": z["betrag"], "bank_umsatz": uid})
-    con.execute("UPDATE bank_umsaetze SET status='offen', ziel='[]', notiz='', zugeordnet='', von='' WHERE id=?", (uid,))
+    con.execute("UPDATE bank_umsaetze SET status='offen', ziel='[]', konto=NULL, notiz='', zugeordnet='', von='' WHERE id=?", (uid,))
     if u["status"] == "zugeordnet":
         HILFE["prot"](con, "bank_loesung", str(uid), f"Zuordnung des Kontoumsatzes {de_datum(u['buchung'])} {de(u['betrag'])} € ({u['name']}) gelöst", {"umsatz": uid, "ziele": ziele})
+    return {"ok": True}
+
+
+def konto_setzen(con, uid, konto, notiz="", regel=None):
+    """Umsatz ohne Rechnung: Sachkonto aus dem Kontenplan (oder keins) und Notiz; auf Wunsch eine Regel für künftige Umsätze."""
+    u = con.execute("SELECT * FROM bank_umsaetze WHERE id=?", (uid,)).fetchone()
+    if not u:
+        raise ApiFehler("Umsatz nicht gefunden.", 404)
+    if u["status"] == "zugeordnet":
+        raise ApiFehler("Bitte zuerst die Zuordnung lösen.", 409)
+    nr = None
+    if str(konto or "").strip():
+        if not str(konto).strip().isdigit():
+            raise ApiFehler("Bitte ein Konto aus dem Kontenplan wählen.")
+        nr = int(str(konto).strip())
+        skr = HILFE["skr"](con) if HILFE.get("skr") else "03"
+        if not con.execute("SELECT 1 FROM konten WHERE skr=? AND nummer=? AND aktiv=1", (skr, nr)).fetchone():
+            raise ApiFehler(f"Das Konto {nr} steht nicht im Kontenplan – bitte zuerst anlegen.")
+    con.execute("UPDATE bank_umsaetze SET status='ignoriert', konto=?, notiz=?, zugeordnet=?, von=? WHERE id=?",
+                (nr, str(notiz or "")[:200], jetzt(), HILFE["ich_login"](), uid))
+    if regel and nr and str(regel.get("suchtext") or "").strip():
+        feld = regel.get("feld") if regel.get("feld") in ("name", "zweck", "beide") else "beide"
+        richtung = "+" if u["betrag"] > 0 else "-"
+        text = str(regel["suchtext"]).strip()[:80]
+        alt = con.execute("SELECT id FROM bank_regeln WHERE suchtext=? AND feld=? AND richtung=?", (text, feld, richtung)).fetchone()
+        if alt:
+            con.execute("UPDATE bank_regeln SET konto=?, notiz=? WHERE id=?", (nr, str(notiz or "")[:200], alt["id"]))
+        else:
+            con.execute("INSERT INTO bank_regeln (suchtext, feld, richtung, konto, notiz, angelegt, von) VALUES (?,?,?,?,?,?,?)",
+                        (text, feld, richtung, nr, str(notiz or "")[:200], jetzt(), HILFE["ich_login"]()))
     return {"ok": True}
 
 
@@ -537,7 +611,10 @@ def web_api(con, methode, teile, q, d):
             v = u.get("vorschlag")
             if v and v["sicher"]:
                 try:
-                    zuordnen(con, u["id"], v["ziele"])
+                    if v.get("konto"):
+                        konto_setzen(con, u["id"], v["konto"], v.get("notiz") or "")
+                    else:
+                        zuordnen(con, u["id"], v["ziele"])
                     n += 1
                 except ApiFehler as f:
                     fehler.append(f"{de_datum(u['buchung'])} {u['name']}: {f}")
@@ -546,13 +623,12 @@ def web_api(con, methode, teile, q, d):
         return {"ziele": zuordnen(con, uid, d.get("ziele"))}
     if methode == "POST" and uid and aktion == "loesen":
         return loesen(con, uid)
-    if methode == "POST" and uid and aktion == "ignorieren":
-        u = con.execute("SELECT status FROM bank_umsaetze WHERE id=?", (uid,)).fetchone()
-        if not u:
-            raise ApiFehler("Umsatz nicht gefunden.", 404)
-        if u["status"] == "zugeordnet":
-            raise ApiFehler("Bitte zuerst die Zuordnung lösen.", 409)
-        con.execute("UPDATE bank_umsaetze SET status='ignoriert', notiz=?, zugeordnet=?, von=? WHERE id=?",
-                    (str(d.get("notiz") or "")[:200], jetzt(), HILFE["ich_login"](), uid))
+    if methode == "POST" and uid and aktion in ("ignorieren", "konto"):
+        return konto_setzen(con, uid, d.get("konto"), d.get("notiz"), d.get("regel"))
+    if methode == "GET" and sub == "regeln":
+        namen = kontonamen(con)
+        return [dict(r, konto_text=f"{r['konto']} {namen.get(r['konto'], '')}".strip()) for r in regeln_liste(con)]
+    if methode == "DELETE" and sub == "regeln" and aktion and aktion.isdigit():
+        con.execute("DELETE FROM bank_regeln WHERE id=?", (int(aktion),))
         return {"ok": True}
     raise ApiFehler("Unbekannte Anfrage", 404)

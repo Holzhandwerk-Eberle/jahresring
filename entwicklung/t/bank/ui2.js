@@ -1,0 +1,17 @@
+const { chromium } = require('playwright'); const U='http://127.0.0.1:8799';
+(async () => { const b = await chromium.launch(); const c = await b.newContext({viewport:{width:1400,height:900}}); await c.request.post(U+'/api/anmeldung/anmelden', {data:{login:'jonas', passwort:'geheim123'}}); const p = await c.newPage(); const f = [];
+  p.on('pageerror', e => f.push(e.message)); p.on('console', m => { if (m.type()==='error') f.push(m.text()); });
+  await p.goto(U+'/#/op/bank'); await p.waitForTimeout(1200);
+  console.log('Menü:', (await p.innerText('#leiste')).replace(/\n+/g, ' | ').slice(0, 200));
+  await p.click('[data-st="alle"]'); await p.waitForTimeout(800);
+  const btn = await p.$('[data-ign]'); await btn.click(); await p.waitForTimeout(800);
+  await p.fill('#bkkSuche', 'miete'); await p.waitForTimeout(200);
+  await p.click('#bkkNeu summary'); await p.fill('#bkkNr', '4211'); await p.fill('#bkkBez', 'Miete Lager'); await p.click('#bkkAnl'); await p.waitForTimeout(800);
+  console.log('gewählt', await p.$eval('#bkkKonto', s => s.value));
+  await p.screenshot({path: '/tmp/claude-0/t/bank/konto_dlg.png'});
+  await p.click('.modal [data-x="1"]'); await p.waitForTimeout(1000);
+  await p.screenshot({path: '/tmp/claude-0/t/bank/bank2.png', fullPage: true});
+  await p.click('#bkKp'); await p.waitForTimeout(1500);
+  await p.screenshot({path: '/tmp/claude-0/t/bank/kp.png', fullPage: false});
+  console.log('kp zeilen', await p.$$eval('#kpInhalt tr', t => t.length));
+  console.log('fehler', f); await b.close(); })();

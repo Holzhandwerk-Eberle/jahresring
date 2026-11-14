@@ -56,6 +56,7 @@ from sepa import iban_normal, iban_ok, ibanFormat_py, sepa_xml
 import liquiditaet
 import preise
 import wiedervorlage
+import konten
 import kalkulation
 import benutzer
 import personal
@@ -86,7 +87,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-131"
+VERSION = "2026.11.01-132"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -598,6 +599,7 @@ def init_db():
         arbeitsschutz.schema(con)
         bank.schema(con)
         wiedervorlage.schema(con)
+        konten.schema(con)
         alt_v = con.execute("SELECT wert FROM einstellungen WHERE schluessel='programm_version'").fetchone()
         alt_v = json.loads(alt_v[0]) if alt_v else ""
         protokoll.einrichten(con, DATEN, VERSION)
@@ -7953,6 +7955,9 @@ def api(methode, teile, q, daten):
             return bank.web_api(con, methode, teile, q, daten or {})
         if res == "liquiditaet":
             return liquiditaet.web_api(con, methode, teile, q, daten or {})
+        if res == "sachkonten":
+            c = export.datev_cfg(einstellungen(con))
+            return konten.api(con, methode, teile, q, daten or {}, c["skr"], c["sachkontenlaenge"], benutzer.ist_inhaber())
         if res == "wiedervorlagen":
             return wiedervorlage.api(con, methode, teile, q, daten or {}, ich_login())
         if res == "preisimport" and methode == "POST" and teile[1:] in (["lesen"], ["uebernehmen"]):
@@ -9817,6 +9822,7 @@ projekte.HILFE.update({"soll_ist": lambda con, aid: soll_ist(con, aid), "beleg_u
 export.HILFE.update({"daten": DATEN, "basis": BASIS, "version": VERSION, "einstellungen": lambda con: einstellungen(con),
                      "archiv_pdf": lambda con, bid: beleg_pdf(con, bid), "klartext": lambda t: montage.klartext(t, 1000)})
 bank.HILFE.update({"daten": DATEN, "prot": lambda *a, **k: prot(*a, **k), "ich_login": lambda: ich_login(),
+                   "skr": lambda con: export.datev_cfg(einstellungen(con))["skr"],
                    "op_zahlung_buchen": lambda *a, **k: op_zahlung_buchen(*a, **k), "zahlungseingang_loeschen": lambda *a, **k: zahlungseingang_loeschen(*a, **k)})
 liquiditaet.HILFE.update({"einstellungen": lambda con: einstellungen(con), "auftrag_rechnen": lambda con, aid: auftrag_rechnen(con, aid),
                           "beleg_umsatz": lambda b: beleg_umsatz(b)})

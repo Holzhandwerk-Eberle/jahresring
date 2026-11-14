@@ -200,3 +200,17 @@ Beschläge ändert sich nichts. Handbuch und technische Dokumentation sind angep
   alle im Auftrag unter den Bemerkungen.
   Innen: Programmteile in eigene Dateien aufgeteilt (Grundfunktionen, SEPA, Kontoauszüge, Testdaten,
   Monatsbeleg, Arbeitsschutz). Installationsanleitung mit Funktionsprobe auf dem Büro-PC.
+
+2026.11.01-132
+  Hauptmenü: „Offene Posten“ heißt jetzt „Buchhaltung“ (darunter Offene Posten, Mahnwesen, Kontoauszüge,
+  Liquidität).
+  Kontenplan: Unter Einstellungen › Service › Export › Kontenplan stehen die Sachkonten nach SKR 03 (bzw. SKR 04),
+  vorbelegt mit den üblichen Konten eines Handwerksbetriebs. Weitere Konten lassen sich anlegen, ändern und
+  ausblenden; zu jedem Konto gehört die Steuer (Vorsteuer, Umsatzsteuer, Automatikkonto) für den DATEV-Export.
+  Kontoauszüge: Umsätze ohne Rechnung (Miete, Versicherung, Kontoführung, Privatentnahme …) werden mit „Konto …“
+  einem Sachkonto zugeordnet; ein fehlendes Konto lässt sich direkt im Dialog anlegen. Auf Wunsch merkt sich das
+  Programm eine Kontoregel (z. B. Name enthält „Allianz“ → 4360 Versicherungen) und schlägt das Konto beim nächsten
+  Auszug selbst vor.
+  DATEV: Auf Wunsch enthält der Buchungsstapel die zugeordneten Bankumsätze (Bank an Debitor, Kreditor oder
+  Sachkonto). Das Aufwandskonto beim Lieferanten wird aus dem Kontenplan gewählt; ist es kein Automatikkonto, wird
+  die Vorsteuer über den BU-Schlüssel gebucht.

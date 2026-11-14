@@ -31,6 +31,7 @@ Jahresring/               (Programmordner)
 ├── sepa.py                SEPA-Überweisungsdatei (pain.001.001.09), IBAN-Prüfung, SEPA-Zeichensatz
 ├── bank.py                Kontoauszüge (CAMT.053/052) lesen, Umsätze, Zuordnungsvorschläge, Zuordnen/Lösen, Schnittstelle /api/bank
 ├── liquiditaet.py         Liquiditätsvorschau je Woche, Einstellungen, Schnittstelle /api/liquiditaet
+├── konten.py              Kontenplan (Sachkonten SKR 03/04, vorbelegt, eigene Konten), Schnittstelle /api/sachkonten
 ├── preise.py              Einkaufspreise aus Datanorm 4/5, CSV, Excel einlesen und mit dem Materialstamm abgleichen
 ├── wiedervorlage.py       Wiedervorlagen nach Abschluss (Nachfrage, Pflege, Gewährleistung), Schnittstelle /api/wiedervorlagen
 ├── testdaten.py           Testdaten löschen (Gruppen, Dateien, Zuordnungen)
@@ -557,6 +558,14 @@ Werkstatt: `werkstatt.as_links_html()` (Materialsummen je `matnr` über `arbeits
 **Preisimport (`preise.py`).** Datanorm: A-Satz `A;N;Nr;Textkz;Kurztext1;Kurztext2;Preiskz(1 brutto/2 netto);PE;ME;Preis;Rabattgruppe;…`, Version 4: Preis in Cent ohne Komma, PE-Code 0/1/2/3 → 1/10/100/1000; Version 5 (`V;05…`): PE als Menge, Preis mit Komma; B-Satz: erste 8- oder 12–14-stellige Zahl = EAN; P-Sätze werden gezählt, nicht ausgewertet. Tabellen über `kundenimport.tabelle_lesen` mit Spaltenerkennung `SPALTEN` oder übergebener Zuordnung. Abgleich über normalisierte Bestellnummer (ohne Leerzeichen, Punkte, Bindestriche, führende Nullen) oder EAN; `vorschlag` nur bei ≤ 30 % Änderung und passender Einheit (`EINHEITEN`-Abbildung). Übernahme über `material.aendern` (VK nachgeführt), Protokollart `preisimport`. Endpunkte `POST preisimport/lesen|uebernehmen`, Recht material 2.
 
 **Wiedervorlagen (`wiedervorlage.py`).** Tabelle `wiedervorlagen` (auftrag_id, kunde_id, beleg_id, art, datum, text, erledigt, notiz). `nach_rechnung` beim Festschreiben einer Rechnung (art rechnung, nicht Berichtigung) je aktiver Regel aus `wiedervorlage_regeln` (Vorgabe `REGELN`), Datum = Leistungsdatum + Tage, je Auftrag und Art nur einmal offen; `nach_storno` entfernt offene. Startseite `start_daten().wiedervorlagen` (fällig bis heute + 7). Löschen mit Auftrag, Kunde, Anonymisierung und Testdaten (Gruppe Aufträge).
+
+### Kontenplan und Kontoregeln (2026.11.01-132)
+
+`konten.py`: Tabelle `konten` (skr, nummer, bezeichnung, art erloes|aufwand|bank|privat|steuer|lohn|anlage|sonstig, steuer ''|auto|v19|v7|u19|u7, aktiv, eigen; UNIQUE(skr, nummer)). `vorbelegen` legt beim ersten Abruf je Kontenrahmen die Liste `STANDARD` (SKR03/SKR04-Paare) an, ohne eigene Änderungen zu überschreiben. Endpunkt `/api/sachkonten` (nicht `konten`, das sind die Stundenkonten der Mitarbeiter): GET für op/lieferanten/einstellungen, POST/PUT/DELETE nur Inhaber; DELETE entfernt nur eigene, unbenutzte Konten, sonst `aktiv=0`. Sachkontenlänge aus den DATEV-Einstellungen begrenzt die Stellen.
+
+`bank.py`: Spalte `bank_umsaetze.konto` (per ALTER TABLE nachgerüstet), Tabelle `bank_regeln` (suchtext, feld name|zweck|beide, richtung +|-, konto, notiz). `konto_setzen` (Endpunkt `POST bank/<id>/konto`, alter Name `ignorieren` bleibt) prüft das Konto gegen den aktiven Kontenplan, setzt `status='ignoriert'` mit Konto und legt auf Wunsch eine Regel an (gleiche Regel wird aktualisiert). `regel_fuer` liefert für Umsätze ohne Rechnungs-/Zahlungsvorschlag die erste passende Regel (Teilstring ohne Groß-/Kleinschreibung, Richtung nach Vorzeichen) als sicheren Vorschlag `{konto, konto_text}`; `POST bank/sichere` setzt auch diese. `GET bank/regeln`, `DELETE bank/regeln/<id>`. `loesen` setzt das Konto zurück.
+
+DATEV: `DATEV_KONTEN[…]["bank"]` (1200/1800), Einstellung `bankumsaetze`. Bankumsätze im Zeitraum mit `status='zugeordnet'` (Gegenkonto Debitor bzw. Kreditor, Belegfeld = Rechnungs- bzw. Zahlungsnummer) oder mit Konto (Gegenkonto = Konto, BU aus `konten.steuer`): Konto = Bankkonto, Eingang S, Ausgang H. Lieferantenkonto ohne Automatik (`_konto_steuer != 'auto'`) bekommt BU 9/8 nach Vorsteuersatz. Hauptmenü „Offene Posten“ heißt jetzt „Buchhaltung“ (Route `#/op` unverändert), Rechte-Bereich `op` „Buchhaltung (Offene Posten, Mahnwesen, Kontoauszüge)“.
 
 ### Gesamtprüfung 2026.11.01-130
 
