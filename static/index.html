@@ -1783,6 +1783,7 @@ function lieferantKonditionen(l) {
       ${zeile("Unsere Kd.-Nr.", inp(l, "unsere_kundennr", 'placeholder="unsere Kundennummer beim Lieferanten"'))}
       <div class="sektion">Zahlungsverkehr</div>
       ${zeile("Zahlkonto", sel(l, "zahlkonto", ["", ...(E.zahlungskonten || [])]))}
+      ${zeile("DATEV-Aufwandskonto", inp(l, "datev_konto") + `<span class="hinweis" style="padding-top:6px">leer = Wareneingang nach Vorsteuersatz</span>`)}
       ${zeile("Info Zahlung", inp(l, "info_zahlung", 'placeholder="z. B. zahlt per Lastschrift"'))}
       ${zeile("Empfänger", inp(l, "empfaenger", 'placeholder="Kontoinhaber laut Rechnung"'), true)}
       ${zeile("IBAN", `<input data-f="iban" value="${esc(ibanFormat(l.iban))}" style="font-family:monospace"><span id="ibanOk" style="padding-top:5px;flex:0 0 auto">${ibanAnz(l.iban)}</span>`)}

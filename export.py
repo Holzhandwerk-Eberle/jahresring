@@ -385,3 +385,185 @@ def liste():
     return [{"datei": f, "groesse": os.path.getsize(os.path.join(p, f)),
              "zeit": datetime.fromtimestamp(os.path.getmtime(os.path.join(p, f))).isoformat(timespec="minutes")}
             for f in sorted(os.listdir(p), key=lambda f: os.path.getmtime(os.path.join(p, f)), reverse=True) if f.endswith(".zip")]
+
+
+# ---------------------------------------------------------------- DATEV-Buchungsstapel (EXTF, Formatversion 13)
+DATEV_KONTEN = {
+    "03": {"erloes_19": 8400, "erloes_7": 8300, "erloes_13b": 8337, "erloes_eu": 8336, "erloes_0": 8338,
+           "aufwand_19": 3400, "aufwand_7": 3300, "aufwand_0": 3200, "debitor": 10000, "kreditor": 70000},
+    "04": {"erloes_19": 4400, "erloes_7": 4300, "erloes_13b": 4337, "erloes_eu": 4336, "erloes_0": 4338,
+           "aufwand_19": 5400, "aufwand_7": 5300, "aufwand_0": 5200, "debitor": 10000, "kreditor": 70000},
+}
+DATEV_KONTEN_TEXT = {"erloes_19": "Erlöse 19 % USt", "erloes_7": "Erlöse 7 % USt", "erloes_13b": "Erlöse § 13b UStG (Steuerschuld Leistungsempfänger)",
+                     "erloes_eu": "Erlöse sonstige Leistungen EU (Reverse Charge)", "erloes_0": "Erlöse nicht steuerbar / steuerfrei",
+                     "aufwand_19": "Wareneingang 19 % Vorsteuer", "aufwand_7": "Wareneingang 7 % Vorsteuer", "aufwand_0": "Wareneingang ohne Vorsteuer",
+                     "debitor": "Debitor (Sammelkonto Kunden)", "kreditor": "Kreditor (Sammelkonto Lieferanten)"}
+DATEV_SPALTEN = (
+    ["Umsatz (ohne Soll/Haben-Kz)", "Soll/Haben-Kennzeichen", "WKZ Umsatz", "Kurs", "Basis-Umsatz", "WKZ Basis-Umsatz", "Konto",
+     "Gegenkonto (ohne BU-Schlüssel)", "BU-Schlüssel", "Belegdatum", "Belegfeld 1", "Belegfeld 2", "Skonto", "Buchungstext", "Postensperre",
+     "Diverse Adressnummer", "Geschäftspartnerbank", "Sachverhalt", "Zinssperre", "Beleglink"]
+    + [x for i in range(1, 9) for x in (f"Beleginfo - Art {i}", f"Beleginfo - Inhalt {i}")]
+    + ["KOST1 - Kostenstelle", "KOST2 - Kostenstelle", "Kost-Menge", "EU-Land u. UStID", "EU-Steuersatz", "Abw. Versteuerungsart",
+       "Sachverhalt L+L", "Funktionsergänzung L+L", "BU 49 Hauptfunktionstyp", "BU 49 Hauptfunktionsnummer", "BU 49 Funktionsergänzung"]
+    + [x for i in range(1, 21) for x in (f"Zusatzinformation - Art {i}", f"Zusatzinformation- Inhalt {i}")]
+    + ["Stück", "Gewicht", "Zahlweise", "Forderungsart", "Veranlagungsjahr", "Zugeordnete Fälligkeit", "Skontotyp", "Auftragsnummer",
+       "Buchungstyp", "USt-Schlüssel (Anzahlungen)", "EU-Land (Anzahlungen)", "Sachverhalt L+L (Anzahlungen)", "EU-Steuersatz (Anzahlungen)",
+       "Erlöskonto (Anzahlungen)", "Herkunft-Kz", "Buchungs GUID", "KOST-Datum", "SEPA-Mandatsreferenz", "Skontosperre", "Gesellschaftername",
+       "Beteiligtennummer", "Identifikationsnummer", "Zeichnernummer", "Postensperre bis", "Bezeichnung SoBil-Sachverhalt",
+       "Kennzeichen SoBil-Buchung", "Festschreibung", "Leistungsdatum", "Datum Zuord. Steuerperiode", "Fälligkeit", "Generalumkehr (GU)",
+       "Steuersatz", "Land", "Abrechnungsreferenz", "BVV-Position", "EU-Mitgliedstaat u. UStID (Ursprung)", "EU-Steuersatz (Ursprung)",
+       "Abw. Skontokonto"])
+assert len(DATEV_SPALTEN) == 125
+LOHN_GRUPPEN = ("Mitarbeiter", "Finanzamt", "Krankenkasse")
+
+
+def datev_cfg(e):
+    d = dict(e.get("datev") or {})
+    skr = d.get("skr") if d.get("skr") in DATEV_KONTEN else "03"
+    konten = dict(DATEV_KONTEN[skr])
+    for k, v in (d.get("konten") or {}).items():
+        if k in konten and str(v).strip().isdigit():
+            konten[k] = int(v)
+    return {"berater": str(d.get("berater") or "").strip(), "mandant": str(d.get("mandant") or "").strip(), "skr": skr,
+            "wj_beginn": max(1, min(12, int(d.get("wj_beginn") or 1))), "sachkontenlaenge": max(4, min(8, int(d.get("sachkontenlaenge") or 4))),
+            "konten": konten, "ausgang": d.get("ausgang", True) is not False, "eingang": d.get("eingang", True) is not False}
+
+
+def _dt_text(t, n):
+    t = str(t or "").replace("€", "EUR").replace('"', "'").replace("\r", " ").replace("\n", " ").strip()[:n]
+    return '"' + t + '"'
+
+
+def _dt_betrag(x):
+    return f"{abs(float(x)):.2f}".replace(".", ",")
+
+
+def _dt_beleg(t):
+    return re.sub(r"[^A-Za-z0-9$&%*+\-/]", "", str(t or ""))[:36]
+
+
+def _ttmm(iso):
+    return f"{iso[8:10]}{iso[5:7]}" if iso and len(iso) >= 10 else ""
+
+
+def _ttmmjjjj(iso):
+    return f"{iso[8:10]}{iso[5:7]}{iso[:4]}" if iso and len(iso) >= 10 else ""
+
+
+def datev_buchungen(con, von, bis, cfg):
+    """Buchungen für den Zeitraum: Ausgangsrechnungen (Debitor an Erlöse) und Eingangsrechnungen (Aufwand an Kreditor), brutto,
+    Automatikkonten ohne BU-Schlüssel. Schlussrechnungen nur mit dem Rest nach Abzug der schon gebuchten Abschläge."""
+    k = cfg["konten"]
+    aus, warnungen = [], []
+    if cfg["ausgang"]:
+        for b in rechnungen(con, von, bis):
+            d = b["daten"]
+            s = d.get("summen") or {}
+            brutto = round(float(b["brutto"] or 0) - float(s.get("abzug_brutto") or 0), 2)
+            if abs(brutto) < 0.005:
+                continue
+            kunde = d.get("kunde") or {}
+            satz = float(b["ust_satz"] or 0)
+            ustid = re.sub(r"\s", "", str(kunde.get("ustid") or "")).upper()
+            if satz >= 18.5:
+                gegen = k["erloes_19"]
+            elif satz >= 6.5:
+                gegen = k["erloes_7"]
+            elif d.get("steuer") == "13b":
+                gegen = k["erloes_13b"]
+            elif ustid and not ustid.startswith("DE"):
+                gegen = k["erloes_eu"]
+            else:
+                gegen = k["erloes_0"]
+            if 0 < satz < 6.5 or 7.5 < satz < 18.5:
+                warnungen.append(f"{b['nummer']}: ungewöhnlicher Steuersatz {satz:g} % – Konto bitte prüfen")
+            aus.append({"betrag": brutto, "sh": "S" if brutto > 0 else "H", "konto": k["debitor"], "gegen": gegen, "datum": b["datum"],
+                        "beleg1": _dt_beleg(b["nummer"]), "beleg2": "", "text": f"{ARTNAME.get(b['art'], b['art'])} {kunde.get('kurzname') or ''}",
+                        "leistung": b.get("leistungsdatum") or "", "faellig": b.get("faellig") or "",
+                        "euid": ustid if ustid and not ustid.startswith("DE") else "", "auftrag": b.get("auftragsnr") or ""})
+    if cfg["eingang"]:
+        for z in zahlungsauftraege(con, von, bis):
+            gruppe = con.execute("SELECT gruppe, datev_konto FROM lieferanten WHERE id=?", (z["lieferant_id"],)).fetchone()
+            if gruppe and (gruppe["gruppe"] or "") in LOHN_GRUPPEN:
+                continue   # Löhne, Lohnsteuer, Sozialversicherung bucht das Lohnbüro
+            betrag = round(float(z["betrag"] or 0), 2)
+            if abs(betrag) < 0.005:
+                continue
+            vst = float(z["vorsteuer"] or 0)
+            eigen = str((gruppe["datev_konto"] if gruppe else "") or "").strip()
+            if eigen.isdigit():
+                konto = int(eigen)
+            else:
+                konto = k["aufwand_19"] if vst >= 18.5 else k["aufwand_7"] if vst >= 6.5 else k["aufwand_0"]
+            datum = z.get("belegdatum") or (z.get("angelegt") or "")[:10]
+            aus.append({"betrag": betrag, "sh": "S" if betrag > 0 else "H", "konto": konto, "gegen": k["kreditor"], "datum": datum,
+                        "beleg1": _dt_beleg(z.get("belegnr") or z["nummer"]), "beleg2": _dt_beleg(z["nummer"])[:12],
+                        "text": f"{z.get('lieferant') or ''} {z.get('belegnr') or ''}".strip(), "leistung": "", "faellig": z.get("faellig") or "",
+                        "euid": "", "auftrag": z.get("auftragsnr") or ""})
+    return aus, warnungen
+
+
+def datev_export(con, von, bis, wer=""):
+    zeitraum_pruefen(von, bis)
+    e = HILFE["einstellungen"](con)
+    cfg = datev_cfg(e)
+    if not (cfg["berater"].isdigit() and 1001 <= int(cfg["berater"]) <= 9999999) or not (cfg["mandant"].isdigit() and 1 <= int(cfg["mandant"]) <= 99999):
+        raise Fehler("Für den DATEV-Export fehlen Berater- und Mandantennummer (vom Steuerberater) – bitte unten im DATEV-Bereich eintragen.")
+    # ein Stapel darf nur ein Wirtschaftsjahr umfassen
+    def wj(iso):
+        j, m = int(iso[:4]), int(iso[5:7])
+        return j if m >= cfg["wj_beginn"] else j - 1
+    if wj(von) != wj(bis):
+        raise Fehler("Ein DATEV-Stapel darf nur ein Wirtschaftsjahr umfassen – bitte den Zeitraum teilen.")
+    wj_jahr = wj(von)
+    buchungen, warnungen = datev_buchungen(con, von, bis, cfg)
+    jetzt_ = datetime.now()
+    bez = f"Jahresring {_de(von)[:5]}-{_de(bis)}"[:30]
+    kopf = ['"EXTF"', "700", "21", '"Buchungsstapel"', "13", jetzt_.strftime("%Y%m%d%H%M%S") + f"{jetzt_.microsecond // 1000:03d}", "", '"RE"',
+            _dt_text(wer or "Jahresring", 25), '""', cfg["berater"], cfg["mandant"], f"{wj_jahr}{cfg['wj_beginn']:02d}01", str(cfg["sachkontenlaenge"]),
+            von.replace("-", ""), bis.replace("-", ""), _dt_text(bez, 30), '""', "1", "0", "0", '"EUR"', "", '""', "", "", f'"{cfg["skr"]}"', "", "", '""', '""']
+    zeilen = [";".join(kopf), ";".join(f'"{s}"' for s in DATEV_SPALTEN)]
+    for b in buchungen:
+        f = [""] * 125
+        f[0], f[1], f[2] = _dt_betrag(b["betrag"]), f'"{b["sh"]}"', '"EUR"'
+        f[6], f[7] = str(b["konto"]), str(b["gegen"])
+        f[9], f[10], f[11] = _ttmm(b["datum"]), _dt_text(b["beleg1"], 36), _dt_text(b["beleg2"], 12)
+        f[13] = _dt_text(b["text"], 60)
+        f[39] = _dt_text(b["euid"], 15) if b["euid"] else ""
+        f[94] = _dt_text(b["auftrag"], 30) if b["auftrag"] else ""
+        f[113] = "0"
+        f[114] = _ttmmjjjj(b["leistung"])
+        f[116] = _ttmmjjjj(b["faellig"])
+        for i in (3, 4, 5, 8, 11, 12, 14, 15, 16, 17, 18, 19):
+            if f[i] == "":
+                f[i] = '""' if i in (5, 8, 11, 15, 19) else ""
+        zeilen.append(";".join(f))
+    inhalt = ("\r\n".join(zeilen) + "\r\n").encode("cp1252", errors="replace")
+    name = f"DATEV_{_sauber(e.get('firma') or 'Jahresring')}_{von}_bis_{bis}.zip".replace(" ", "_")
+    csv_name = f"EXTF_Buchungsstapel_{von}_bis_{bis}.csv"
+    ziel = os.path.join(ordner(), name)
+    summe_aus = round(sum(b["betrag"] for b in buchungen if b["konto"] == cfg["konten"]["debitor"]), 2)
+    summe_ein = round(sum(b["betrag"] for b in buchungen if b["gegen"] == cfg["konten"]["kreditor"]), 2)
+    info = [f"DATEV-Buchungsstapel {e.get('firma') or ''} – Zeitraum {_de(von)} bis {_de(bis)}",
+            f"Erstellt am {jetzt_:%d.%m.%Y %H:%M} mit Jahresring {HILFE['version']} von {wer}", "",
+            f"Datei: {csv_name} (DATEV-Format, Buchungsstapel Version 13, Zeichensatz Windows-1252)",
+            f"Beraternummer {cfg['berater']}, Mandantennummer {cfg['mandant']}, SKR {cfg['skr']}, Wirtschaftsjahr ab {cfg['wj_beginn']:02d}/{wj_jahr}",
+            f"Buchungen: {len(buchungen)} (Ausgangsrechnungen brutto {_z(summe_aus)} EUR, Eingangsrechnungen brutto {_z(summe_ein)} EUR)", "",
+            "Kontenzuordnung:"] + [f"  {DATEV_KONTEN_TEXT[k_]}: {v}" for k_, v in cfg["konten"].items()] + [
+            "", "Ausgangsrechnungen: Debitor an Erlöskonto, Schlussrechnungen nur mit dem Rest nach Abzug der Abschlagsrechnungen.",
+            "Eingangsrechnungen: Aufwandskonto (beim Lieferanten hinterlegt oder Wareneingang nach Vorsteuersatz) an Kreditor.",
+            "Löhne, Lohnsteuer und Sozialversicherung sind nicht enthalten. Zahlungen (Bank) bucht die Kanzlei aus den Kontoumsätzen.",
+            "Die Buchungen sind nicht festgeschrieben (Festschreibung 0)."] + (["", "Hinweise:"] + [f"  {w}" for w in warnungen] if warnungen else [])
+    with zipfile.ZipFile(ziel + ".part", "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(csv_name, inhalt)
+        z.writestr("LIESMICH.txt", "\r\n".join(info).encode("utf-8"))
+        for b in rechnungen(con, von, bis) if cfg["ausgang"] else []:
+            for fpfad in belegdateien(b):
+                z.write(fpfad, "Belege/Ausgangsrechnungen/" + os.path.basename(fpfad))
+        for r in zahlungsauftraege(con, von, bis) if cfg["eingang"] else []:
+            p = eingangsdatei(r)
+            if p:
+                z.write(p, "Belege/Eingangsrechnungen/" + os.path.basename(p))
+    os.replace(ziel + ".part", ziel)
+    return {"datei": name, "groesse": os.path.getsize(ziel), "buchungen": len(buchungen), "ausgang": summe_aus, "eingang": summe_ein,
+            "warnungen": warnungen, "csv": csv_name}

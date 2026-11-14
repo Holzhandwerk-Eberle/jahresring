@@ -318,6 +318,7 @@ NACHRUESTEN = [
     ("offene_posten", "beleg_id", "INTEGER"),
     ("auftraege", "plan_von", "TEXT DEFAULT ''"),
     ("auftraege", "plan_bis", "TEXT DEFAULT ''"),
+    ("lieferanten", "datev_konto", "TEXT DEFAULT ''"),
     ("stunden", "termin_id", "INTEGER"),
     ("auftraege", "nachgefasst", "TEXT DEFAULT ''"),
     ("offene_posten", "mahnkosten", "REAL DEFAULT 0"),
@@ -481,6 +482,7 @@ STANDARD_EINSTELLUNGEN = {
     "frei_wahl": {},           # arbeitsfreie, nicht bezahlte Tage
     "tage_eigene": [],         # [{name, datum "TT.MM", art: feiertag|frei}]
     "sollplaene": [],          # Sollstundenpläne mit Zuschlägen (personal.zuschlaege)
+    "datev": {},               # DATEV-Export: berater, mandant, skr ("03"/"04"), wj_beginn, sachkontenlaenge, konten {…}, ausgang, eingang
     "rohertrag_ohne_gruppen": ["Mitarbeiter", "Finanzamt", "Krankenkasse", "Krankenkassen", "Versicherungen", "Werkzeug & Maschinen"],
     "ist_kategorien": {"Plattenwerkstoffe": "werkstoffe", "Massivholz": "werkstoffe", "Beschläge": "beschlaege",
                        "Oberfläche": "oberflaeche", "Dienstleister": "fremdleistungen"},
@@ -490,7 +492,7 @@ LIEFERANT_FELDER = [
     "nummer", "kurzname", "gruppe", "aktiv", "anschrift", "plz", "ort", "land", "anrede",
     "telefon", "email1", "email2", "email3", "email4", "telefax", "website", "bemerkungen", "merkmale",
     "vorsteuer", "zahlungsziel", "skontotage", "skonto", "zahlkonto", "unsere_kundennr", "empfaenger",
-    "info_zahlung", "iban", "bic", "bestell_kopf", "bestell_zeile", "ustid",
+    "info_zahlung", "iban", "bic", "bestell_kopf", "bestell_zeile", "ustid", "datev_konto",
 ] + adressen.FELDER
 ZAHLUNG_FELDER = ["lieferant_id", "auftrag_id", "belegnr", "belegdatum", "bemerkung", "empfaenger", "iban", "bic",
                   "betrag", "vorsteuer", "skonto", "skonto_bis", "faellig", "bezahlt", "bezahlung"]
@@ -3759,7 +3761,7 @@ KUNDE_OHNE_KUNDENRECHT = ("id", "nummer", "kurzname", "gruppe", "aktiv", "anschr
                           "lieferanschrift", "lieferort", "lieferland", "anredeform", "titel", "vorname", "nachname", "firma", "zusatz",
                           "strasse", "ansprechpartner", "mobil")
 LIEFERANT_OHNE_RECHT = ("iban", "bic", "zahlkonto", "unsere_kundennr", "info_zahlung", "empfaenger", "vorsteuer", "zahlungsziel", "skonto",
-                        "skontotage", "bemerkungen", "glaeubiger_id", "mandat", "steuernummer", "ustid")
+                        "skontotage", "bemerkungen", "glaeubiger_id", "mandat", "steuernummer", "ustid", "datev_konto")
 
 
 def sicht_einschraenken(teile, methode, erg, rechte):
@@ -7957,6 +7959,16 @@ def api(methode, teile, q, daten):
                     return erg
                 if methode == "GET" and teile[1:] == ["exporte"]:
                     return {"liste": export.liste(), "luecken": export.nummern_luecken(con, f"{date.today().year}-01-01", date.today().isoformat())}
+                if methode == "POST" and teile[1:] == ["datev"]:
+                    d = daten or {}
+                    con.commit()
+                    erg = export.datev_export(con, d.get("von"), d.get("bis"), ich_login())
+                    prot(con, "export", erg["datei"], f"DATEV-Buchungsstapel {de_datum(d.get('von'))} bis {de_datum(d.get('bis'))} erstellt: {erg['datei']} "
+                         f"({erg['buchungen']} Buchungen)", {k: v for k, v in erg.items() if k != "groesse"})
+                    return erg
+                if methode == "GET" and teile[1:] == ["datev"]:
+                    c = export.datev_cfg(einstellungen(con))
+                    return {**c, "texte": export.DATEV_KONTEN_TEXT, "standard": export.DATEV_KONTEN[c["skr"]]}
                 if methode == "POST" and teile[1:] in (["belegpaket"], ["pruefer"]):
                     d = daten or {}
                     wer = dict(benutzer.aktuell() or {}).get("login") or ""

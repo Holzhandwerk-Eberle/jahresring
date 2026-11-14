@@ -136,6 +136,7 @@ async function serviceSeite(z, sub) {
   }
   if (sub === "export") {
     const d = await api("service/exporte");
+    const dv = await api("service/datev");
     const h = new Date(), j = h.getFullYear(), m = h.getMonth();
     const iso = x => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
     const vormonat = [iso(new Date(j, m - 1, 1)), iso(new Date(j, m, 0))];
@@ -158,7 +159,24 @@ async function serviceSeite(z, sub) {
           Ausgangsrechnungen mit Positionen, Abschlagsverrechnung, offene Posten, Zahlungseingänge, Mahnungen, Eingangsrechnungen, Kunden, Lieferanten und das Protokoll – dazu alle Belegdateien.</p>
           <p class="hinweis">Nur auf Anforderung des Prüfers erstellen und nur den angeforderten Zeitraum übergeben.</p>
           <button class="btn prim" id="exPr">Datenträger erstellen</button></div>
+        <div class="kachel"><h3 style="margin-top:0">DATEV-Buchungsstapel für die Steuerberatung</h3>
+          <p>Ausgangs- und Eingangsrechnungen des Zeitraums als Buchungsstapel im DATEV-Format (zum Einlesen in DATEV Rechnungswesen), dazu die Belegdateien.
+          Löhne und Bankumsätze sind nicht enthalten.</p>
+          <p class="hinweis">${dv.berater && dv.mandant ? `Berater ${esc(dv.berater)} · Mandant ${esc(dv.mandant)} · SKR ${esc(dv.skr)}` : "Zuerst unten Berater- und Mandantennummer eintragen."}</p>
+          <button class="btn prim" id="exDv">DATEV-Stapel erstellen</button></div>
       </div>
+      <details class="kachel" style="margin-top:12px" ${dv.berater && dv.mandant ? "" : "open"}><summary><b>DATEV-Einstellungen</b> <span class="hinweis">– mit der Steuerberatung abstimmen</span></summary>
+        <div class="form" style="grid-template-columns:1fr;margin-top:8px">
+          ${zeile("Beraternummer", `<input id="dvB" value="${esc(dv.berater)}" inputmode="numeric" style="max-width:140px"> Mandantennummer <input id="dvM" value="${esc(dv.mandant)}" inputmode="numeric" style="max-width:120px">`)}
+          ${zeile("Kontenrahmen", `<select id="dvS"><option value="03" ${dv.skr === "03" ? "selected" : ""}>SKR 03</option><option value="04" ${dv.skr === "04" ? "selected" : ""}>SKR 04</option></select>
+            Wirtschaftsjahr beginnt im Monat <input id="dvW" type="number" min="1" max="12" value="${dv.wj_beginn}" style="width:60px"> Sachkontenlänge <input id="dvL" type="number" min="4" max="8" value="${dv.sachkontenlaenge}" style="width:60px">`)}
+          ${zeile("Enthalten", `<label><input type="checkbox" id="dvA" ${dv.ausgang ? "checked" : ""}> Ausgangsrechnungen</label> <label><input type="checkbox" id="dvE" ${dv.eingang ? "checked" : ""}> Eingangsrechnungen</label>`)}
+        </div>
+        <table class="liste" style="margin-top:8px"><tr><th>Konto für</th><th>Kontonummer</th><th class="hinweis">Vorgabe SKR ${esc(dv.skr)}</th></tr>
+          ${Object.keys(dv.texte).map(k => `<tr><td>${esc(dv.texte[k])}</td><td><input data-dvk="${k}" value="${dv.konten[k]}" inputmode="numeric" style="width:110px"></td><td class="hinweis">${dv.standard[k]}</td></tr>`).join("")}</table>
+        <p class="hinweis">Abweichende Aufwandskonten für einzelne Lieferanten (z. B. Fremdleistungen, Werkzeuge, Bürobedarf) beim Lieferanten unter „DATEV-Aufwandskonto“ eintragen.
+          Die Vorgaben sind übliche Automatikkonten; maßgeblich ist der Kontenplan der Kanzlei.</p>
+        <button class="btn" id="dvSp">DATEV-Einstellungen speichern</button></details>
       <div id="exErg" style="margin-top:12px"></div>
       <div class="sektion" style="margin-top:16px">Erstellte Exporte</div>
       ${d.liste.length ? `<table class="liste"><tr><th>Datei</th><th>erstellt</th><th class="r">Größe</th></tr>
@@ -187,6 +205,25 @@ async function serviceSeite(z, sub) {
     };
     $("#exBp").onclick = e => los("belegpaket", e.target);
     $("#exPr").onclick = e => los("pruefer", e.target);
+    $("#exDv").onclick = async e => {
+      const btn = e.target, alt = btn.textContent; btn.disabled = true; btn.textContent = "wird erstellt …";
+      try {
+        const r = await api("service/datev", {method: "POST", body: {von: $("#exVon").value, bis: $("#exBis").value}});
+        await serviceSeite(z, sub);
+        $("#exErg").innerHTML = `<div class="kachel" style="border-left:4px solid var(--gruen)"><b>Erstellt:</b> <a href="/api/service/export/${encodeURIComponent(r.datei)}">⬇ ${esc(r.datei)}</a> (${kb(r.groesse)})<br>
+          ${r.buchungen} Buchungen · Ausgangsrechnungen ${eur(r.ausgang)} · Eingangsrechnungen ${eur(r.eingang)}${r.warnungen.map(w => `<div style="color:var(--rot)">${esc(w)}</div>`).join("")}</div>`;
+      } catch (x) { toast(x.message, true); btn.disabled = false; btn.textContent = alt; }
+    };
+    $("#dvS").onchange = () => $$("[data-dvk]").forEach(i => { i.dataset.geaendert = ""; });
+    $("#dvSp").onclick = async () => {
+      const konten = {};
+      $$("[data-dvk]").forEach(i => { konten[i.dataset.dvk] = i.value.trim(); });
+      const skrNeu = $("#dvS").value !== dv.skr;
+      await api("einstellungen", {method: "PUT", body: {datev: {berater: $("#dvB").value.trim(), mandant: $("#dvM").value.trim(), skr: $("#dvS").value,
+        wj_beginn: +$("#dvW").value || 1, sachkontenlaenge: +$("#dvL").value || 4, ausgang: $("#dvA").checked, eingang: $("#dvE").checked,
+        konten: skrNeu ? {} : Object.fromEntries(Object.entries(konten).filter(([k, v]) => String(v) !== String(dv.standard[k])))}}});
+      toast(skrNeu ? "Gespeichert – Konten auf die Vorgaben des neuen Kontenrahmens gesetzt" : "DATEV-Einstellungen gespeichert"); serviceSeite(z, sub);
+    };
     return;
   }
   if (sub === "protokoll") {
