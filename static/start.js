@@ -133,6 +133,11 @@ async function ansichtStart(wieder) {
           : `<div class="hinweis">Keine offenen Anfragen.</div>`}
         <button class="btn" id="stNeuAnfrage" style="margin-top:8px">+ Neue Anfrage</button></section>
 
+      ${(d.wiedervorlagen || []).length ? `<section class="st-box"><h3>Wiedervorlagen <span class="st-anz">${d.wiedervorlagen.length}</span></h3>
+        <div class="st-liste">${d.wiedervorlagen.map(w => `<div class="st-z${w.datum <= d.heute ? " faellig" : ""}"><div class="st-h"><a href="#/auftrag/${w.auftrag_id || ""}">${esc(w.art_name)} · <b>${esc(w.kunde || "")}</b>${w.auftrag ? " · " + esc(kurz(w.auftrag, 30)) : ""}</a>
+          <span class="hinweis">${w.datum <= d.heute ? "<b>fällig</b>" : datum(w.datum).slice(0, 6)}</span></div>
+          <div class="st-u">${esc(w.text)}${w.telefon ? ` · ${esc(w.telefon)}` : ""}
+            <span class="st-akt"><button class="btn" data-wverl="${w.id}">erledigt</button><button class="btn" data-wvsp="${w.id}" title="Um einen Monat verschieben">+1 Monat</button></span></div></div>`).join("")}</div></section>` : ""}
       ${(d.geburtstage || []).length ? `<section class="st-box"><h3>Geburtstage <span class="st-anz">${d.geburtstage.length}</span></h3>
         <div class="st-liste">${d.geburtstage.map(g => `<div class="st-z${g.in_tagen === 0 ? " faellig" : ""}"><div class="st-h"><a href="#/kunde/${g.id}">🎂 ${esc(g.kurzname)}</a>
           <span class="hinweis">${g.in_tagen === 0 ? "<b>heute</b>" : g.in_tagen === 1 ? "morgen" : datum(g.datum).slice(0, 6)}${g.alter ? ` · wird ${g.alter}` : ""}</span></div>
@@ -161,6 +166,9 @@ async function ansichtStart(wieder) {
   $$("[data-alle]", z).forEach(a => a.onclick = ev => { ev.preventDefault(); const y = scrollY; ALLE[a.dataset.alle] = !ALLE[a.dataset.alle]; ansichtStart(true).then(() => scrollTo(0, y)); });
   $$("tr[data-link]", z).forEach(tr => tr.onclick = ev => { if (!ev.target.closest("a")) location.hash = tr.dataset.link; });
   $$("[data-gb]", z).forEach(x => x.onclick = ev => { ev.preventDefault(); mailDialog("kunden/" + x.dataset.gb, "Glückwunsch zum Geburtstag", ok => ok && ansichtStart(), "?vorlage=geburtstag"); });
+  $$("[data-wverl]", z).forEach(b => b.onclick = async () => { await api("wiedervorlagen/" + b.dataset.wverl, {method: "PUT", body: {erledigt: true}}); toast("Erledigt"); ansichtStart(); });
+  $$("[data-wvsp]", z).forEach(b => b.onclick = async () => { const w = d.wiedervorlagen.find(x => x.id === +b.dataset.wvsp); const t = new Date(Math.max(new Date(w.datum + "T12:00"), new Date())); t.setMonth(t.getMonth() + 1);
+    await api("wiedervorlagen/" + w.id, {method: "PUT", body: {datum: `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`}}); toast("Verschoben"); ansichtStart(); });
   $$("[data-nf]", z).forEach(b => b.onclick = async () => { await api("auftraege/" + b.dataset.nf, {method: "PUT", body: {nachgefasst: heute()}}); toast("Als nachgefasst vermerkt"); ansichtStart(); });
   $$("[data-st]", z).forEach(b => b.onclick = async () => {
     if (b.dataset.wert === "Abgesagt" && !await frage("Angebot als abgesagt markieren?")) return;

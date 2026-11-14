@@ -109,7 +109,9 @@ async function auftragStamm(z, a) {
       <div class="zeile voll"><label><a href="#/auftrag/${a.id}/belege">▸ Kundenbelege</a></label><div style="display:block;padding:7px 10px">${belege.map(b => `<div><a href="#/beleg/${b.id}">${esc(belegName(b))}</a> vom ${datum(b.datum)} über ${eur(b.brutto)}${b.status === "storniert" ? " <span class='hinweis'>(storniert)</span>" : ""}</div>`).join("") || `<span class="hinweis">Noch keine. <a href="#/auftrag/${a.id}/belege">Angebot oder Rechnung erstellen</a></span>`}</div></div>
       <div class="sektion">Bemerkungen</div>
       ${zeile("Bemerkungen", ta(a, "bemerkungen", 6), true)}
+      <div id="wvBox"></div>
     </div>`;
+  auftragWiedervorlagen($("#wvBox"), a);
   auftragPlanung($("#planung"), a);
   const kopfNeu = r => { Object.assign(a, r); auftragKopf(a, ""); };
   projektFeld(a, kopfNeu);
@@ -2540,4 +2542,27 @@ async function historieSeite(z, a) {
 function wochentagDatum(iso) {
   const d = new Date(iso + "T12:00:00");
   return isNaN(d) ? iso : d.toLocaleDateString("de-DE", {weekday: "long", day: "2-digit", month: "2-digit", year: "numeric"});
+}
+
+
+// Wiedervorlagen eines Auftrags (Nachfrage, Pflege, Gewährleistung, eigene)
+async function auftragWiedervorlagen(box, a) {
+  if (!box || !darf("auftraege", 1)) return;
+  const liste = await api("wiedervorlagen?" + new URLSearchParams({auftrag_id: a.id, status: "alle"})).catch(() => []);
+  const kann = darf("auftraege", 2);
+  box.innerHTML = `<div class="sektion">Wiedervorlagen</div>
+    <div class="zeile voll"><div style="display:block;padding:7px 10px;width:100%">
+      ${liste.length ? liste.map(w => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:3px 0;${w.erledigt ? "opacity:.55" : ""}">
+        <span class="nw" style="min-width:86px">${datum(w.datum)}</span><span class="tag">${esc(w.art_name)}</span><span style="flex:1 1 240px">${esc(w.text)}</span>
+        ${w.erledigt ? `<span class="hinweis">erledigt ${datum(w.erledigt)}</span>` : kann ? `<button class="btn" data-wve="${w.id}">erledigt</button>` : ""}
+        ${kann ? `<button class="btn" data-wvd="${w.id}" title="Löschen">✕</button>` : ""}</div>`).join("") : `<span class="hinweis">Keine. Sie entstehen beim Festschreiben der Rechnung (Einstellungen › Aufträge).</span>`}
+      ${kann ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap"><input type="date" id="wvD" style="max-width:160px"><input id="wvT" placeholder="Neue Wiedervorlage, z. B. Nachfrage Fronten" style="flex:1 1 240px"><button class="btn" id="wvN">＋</button></div>` : ""}
+    </div></div>`;
+  const neu = () => auftragWiedervorlagen(box, a);
+  $$("[data-wve]", box).forEach(b => b.onclick = async () => { await api("wiedervorlagen/" + b.dataset.wve, {method: "PUT", body: {erledigt: true}}); neu(); });
+  $$("[data-wvd]", box).forEach(b => b.onclick = async () => { await api("wiedervorlagen/" + b.dataset.wvd, {method: "DELETE"}); neu(); });
+  if ($("#wvN", box)) $("#wvN", box).onclick = async () => {
+    if (!$("#wvD", box).value || !$("#wvT", box).value.trim()) return toast("Bitte Datum und Text eingeben.", true);
+    try { await api("wiedervorlagen", {method: "POST", body: {auftrag_id: a.id, kunde_id: a.kunde_id, datum: $("#wvD", box).value, text: $("#wvT", box).value}}); neu(); } catch (x) { toast(x.message, true); }
+  };
 }

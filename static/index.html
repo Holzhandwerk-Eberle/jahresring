@@ -2139,6 +2139,10 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
       ${zeile("Umsatz zählt", `<select name="umsatz_basis" style="flex:0 0 auto">${[["zahlung", "mit dem Zahlungseingang (bezahlt)"], ["rechnung", "mit dem Rechnungsdatum (festgeschrieben)"]].map(([v, l]) => `<option value="${v}" ${(E.umsatz_basis || "zahlung") === v ? "selected" : ""}>${l}</option>`).join("")}</select>`, true)}
       ${zeile("Nachfassen nach", `<input name="nachfass_tage" type="number" value="${E.nachfass_tage ?? 10}" class="klein"> Tagen ohne Rückmeldung auf ein Angebot`, true)}
       ${zeile("Anfragen", `<input name="anfrage_tage" type="number" value="${E.anfrage_tage ?? 7}" class="klein"> Tage, bis eine Anfrage ohne Angebot markiert wird`, true)}
+      <div class="sektion">Wiedervorlagen nach Abschluss <span class="hinweis" style="font-weight:400">· beim Festschreiben einer Rechnung, gerechnet ab Leistungsdatum; fällige stehen auf der Startseite</span></div>
+      ${(E.wiedervorlage_regeln || []).map((r, i) => zeile(esc({nachfrage: "Nachfrage", pflege: "Pflege", gewaehrleistung: "Gewährleistung"}[r.art] || "Wiedervorlage"),
+        `<label style="flex:0 0 auto"><input type="checkbox" data-wv="${i}" data-wk="aktiv" ${r.aktiv ? "checked" : ""}> nach</label><input type="number" data-wv="${i}" data-wk="tage" value="${r.tage}" class="klein" min="1" max="3650"> Tagen:
+         <input data-wv="${i}" data-wk="text" value="${esc(r.text)}" style="flex:1 1 260px">`, true)).join("")}
       ${zeile("Nicht im Rohertrag", `<textarea name="rohertrag_ohne_gruppen" rows="4">${esc((E.rohertrag_ohne_gruppen || []).join("\n"))}</textarea><span class="hinweis" style="padding-top:5px">Lieferantengruppen, deren Rechnungen nicht als Material/Einkauf vom Umsatz abgezogen werden (eine je Zeile). Alle anderen bezahlten Zahlungsaufträge zählen, ebenso jede Zahlung mit Auftrag. Lohnzahlungen zählen nie.</span>`, true)}
       ${zeile("Ziel-Ertrag je Stunde", `<input name="ziel_stundensatz" type="number" value="${E.ziel_stundensatz || ""}" class="klein" placeholder="z. B. 65"> € Rohertrag je gebuchter Stunde`, true)}
     </div>
@@ -2222,6 +2226,7 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
     if ($$("[data-po]").length) { d.pdf_ordner = {...(E.pdf_ordner || {})}; $$("[data-po]").forEach(x => { d.pdf_ordner[x.dataset.po] = x.value.trim(); }); }
     if ($$("[data-lsmap]").length) { d.leitstand_status_map = {...(E.leitstand_status_map || {})}; $$("[data-lsmap]").forEach(x => { d.leitstand_status_map[x.dataset.lsmap] = x.value; }); }
     d.agb_verbraucher_gruppen = $("#agbGruppen").value.split(",").map(x => x.trim()).filter(Boolean);
+    if ($$("[data-wv]").length) { d.wiedervorlage_regeln = (E.wiedervorlage_regeln || []).map((r, i) => { const x = {...r}; $$(`[data-wv="${i}"]`).forEach(el => { x[el.dataset.wk] = el.type === "checkbox" ? el.checked : el.type === "number" ? Math.max(1, +el.value || 1) : el.value.trim(); }); return x; }); }
     d.status_automatik = {auftrag: {}, position: {}}; $$("[data-sa]").forEach(x => { d.status_automatik[x.dataset.sa][x.dataset.art] = x.value; });
     if ($$("[data-zs]").length) { d.zuschnitt_zugabe = {}; $$("[data-zs]").forEach(x => { d.zuschnitt_zugabe[x.dataset.zs] = x.type === "checkbox" ? x.checked : +x.value || 0; }); }
     d.brief_layout = {...(E.brief_layout || {})}; $$("[data-layout]").forEach(x => { if (x.value !== "") d.brief_layout[x.dataset.layout] = +x.value; });

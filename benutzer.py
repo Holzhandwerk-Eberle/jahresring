@@ -474,7 +474,7 @@ RESSOURCEN = {
     "auftraege": (["auftraege"], 1, 2), "positionen": (["auftraege"], 1, 2), "belege": (["auftraege"], 1, 2),
     "zuschnitt": (["auftraege"], 1, 2), "stunden": (["auftraege"], 1, 2), "naechste": (["auftraege", "kunden"], 1, 2),
     "kalkvorgaben": (["auftraege", "einstellungen"], 1, 2), "positionsvorlagen": (["auftraege", "einstellungen"], 1, 2), "cad": (["auftraege"], 1, 2), "mail": (["auftraege", "op", "kunden", "lieferanten"], 2, 2),
-    "termine": (["kalender", "auftraege"], 1, 2), "kalender": (["kalender"], 1, 2), "kalendertest": (["einstellungen"], 2, 2),
+    "termine": (["kalender", "auftraege"], 1, 2), "wiedervorlagen": (["auftraege", "kunden"], 1, 2), "kalender": (["kalender"], 1, 2), "kalendertest": (["einstellungen"], 2, 2),
     "offeneposten": (["op", "auftraege"], 1, 2), "mahnwesen": (["op"], 1, 2), "mahnungen": (["op"], 1, 2),
     "zahlungseingaenge": (["op"], 1, 2), "bank": (["op"], 1, 2), "liquiditaet": (["op"], 2, 2),
     "lieferanten": (["lieferanten", "material"], 1, 2), "zahlungen": (["lieferanten"], 1, 2), "naechste_zahlung": (["lieferanten"], 1, 2),

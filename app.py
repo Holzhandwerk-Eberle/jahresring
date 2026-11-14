@@ -48,6 +48,7 @@ import projektsicherung
 import bank
 import liquiditaet
 import preise
+import wiedervorlage
 import kalkulation
 import benutzer
 import personal
@@ -483,6 +484,7 @@ STANDARD_EINSTELLUNGEN = {
     "frei_wahl": {},           # arbeitsfreie, nicht bezahlte Tage
     "tage_eigene": [],         # [{name, datum "TT.MM", art: feiertag|frei}]
     "sollplaene": [],          # Sollstundenpläne mit Zuschlägen (personal.zuschlaege)
+    "wiedervorlage_regeln": wiedervorlage.REGELN,   # Wiedervorlagen nach dem Festschreiben einer Rechnung
     "datev": {},               # DATEV-Export: berater, mandant, skr ("03"/"04"), wj_beginn, sachkontenlaenge, konten {…}, ausgang, eingang
     "rohertrag_ohne_gruppen": ["Mitarbeiter", "Finanzamt", "Krankenkasse", "Krankenkassen", "Versicherungen", "Werkzeug & Maschinen"],
     "ist_kategorien": {"Plattenwerkstoffe": "werkstoffe", "Massivholz": "werkstoffe", "Beschläge": "beschlaege",
@@ -598,6 +600,7 @@ def init_db():
         unterschrift.schema(con)
         arbeitsschutz.schema(con)
         bank.schema(con)
+        wiedervorlage.schema(con)
         alt_v = con.execute("SELECT wert FROM einstellungen WHERE schluessel='programm_version'").fetchone()
         alt_v = json.loads(alt_v[0]) if alt_v else ""
         protokoll.einrichten(con, DATEN, VERSION)
@@ -1642,6 +1645,7 @@ def kunde_anonymisieren(con, kid, ausfuehren=False):
         if a["pfad"] and os.path.isfile(a["pfad"]) and os.path.commonpath([os.path.abspath(a["pfad"]), os.path.abspath(DATEN)]) == os.path.abspath(DATEN):
             os.remove(a["pfad"])
     con.execute(f"DELETE FROM anhaenge WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids))
+    con.execute(f"DELETE FROM wiedervorlagen WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids))
     protokoll.eintragen(con, "kunde_anonymisiert", str(kid), f"Kunde {k['nummer']} nach Ablauf der Aufbewahrungsfrist anonymisiert", {"korrespondenz": n_k},
                         benutzer=dict(benutzer.aktuell() or {}).get("login", ""), version=VERSION)
     return {**info, "erledigt": True, "korrespondenz": n_k}
@@ -4330,6 +4334,10 @@ def beleg_festschreiben(con, bid):
     fb = beleg_laden(con, bid)
     prot(con, "festschreiben", fb["nummer"], f"{fb['artname']} {fb['nummer']} vom {de_datum(fb['datum'])} · {fb['daten'].get('kunde', {}).get('kurzname', '')} · brutto {de(fb['brutto'])} €",
          {**beleg_kurz(fb), "inhalt": beleg_fingerabdruck(fb)})
+    try:
+        wiedervorlage.nach_rechnung(con, fb, einstellungen(con), ich_login())
+    except (sqlite3.Error, ValueError):
+        traceback.print_exc()   # eine Wiedervorlage darf das Festschreiben nie verhindern
     return fb
 
 
@@ -4371,6 +4379,7 @@ def beleg_stornieren(con, bid):
     sid = cur.lastrowid
     st = beleg_festschreiben(con, sid)
     con.execute("UPDATE belege SET status='storniert', geaendert=? WHERE id=?", (jetzt(), bid))
+    wiedervorlage.nach_storno(con, bid)
     # Offenen Posten der Originalrechnung ausbuchen; bereits Gezahltes wird als Guthaben offen geführt
     op = con.execute("SELECT * FROM offene_posten WHERE beleg_id=?", (bid,)).fetchone()
     gezahlt = (op["betrag"] - op["offen"]) if op else 0
@@ -4564,6 +4573,7 @@ TESTDATEN_GRUPPEN = {
     "termine": ("Kalendertermine ohne Auftrag", False),
     "arbeitsschutz": ("Unterweisungen samt Unterschriften und Einträge im Verbandbuch aus der Testphase (Gefährdungsbeurteilungen, "
                       "Betriebsanweisungen, Unterweisungsthemen und Datenblätter bleiben)", False),
+    "bank": ("Eingelesene Kontoauszüge mit ihren Umsätzen und Zuordnungen", True),
 }
 
 
@@ -4587,6 +4597,7 @@ def testdaten_vorschau(con):
         "lieferanten": f"{_anzahl(con, 'SELECT COUNT(*) FROM lieferanten')} Lieferanten",
         "termine": f"{_anzahl(con, 'SELECT COUNT(*) FROM termine WHERE auftrag_id IS NULL')} Termine",
         "arbeitsschutz": f"{_anzahl(con, 'SELECT COUNT(*) FROM as_unterweisungen')} Unterweisungen, {_anzahl(con, 'SELECT COUNT(*) FROM as_verbandbuch')} Verbandbuch-Einträge",
+        "bank": f"{_anzahl(con, 'SELECT COUNT(*) FROM bank_auszuege')} Kontoauszüge mit {_anzahl(con, 'SELECT COUNT(*) FROM bank_umsaetze')} Umsätzen",
     }
     auftraege = zeilen(con.execute(
         "SELECT a.id, a.nummer, a.bezeichnung, a.status, k.kurzname AS kunde, (SELECT COUNT(*) FROM belege b WHERE b.auftrag_id=a.id) AS belege, "
@@ -4637,7 +4648,7 @@ def auftrag_loeschen(con, aid):
                         "Statt zu löschen den Status auf „Abgesagt“ setzen.")
     for r in con.execute("SELECT id FROM auftragskosten WHERE auftrag_id=?", (aid,)).fetchall():
         material.ak_loeschen(con, r["id"])   # bucht Lagerabgänge zurück
-    for tab in ("belege", "positionen", "stunden", "termine", "cad_importe", "bautagebuch"):   # belege: nur noch Entwürfe
+    for tab in ("belege", "positionen", "stunden", "termine", "cad_importe", "bautagebuch", "wiedervorlagen"):   # belege: nur noch Entwürfe
         try:
             con.execute(f"DELETE FROM {tab} WHERE auftrag_id=?", (aid,))
         except sqlite3.OperationalError:
@@ -4716,7 +4727,7 @@ def testdaten_loeschen(con, gruppen, zaehler_zuruecksetzen=False, behalten=()):
             weg(t, nicht_k) if keep else weg(t)
         dateien_weg("korrespondenz", "datei", "auftrag_id IS NOT NULL" + und_nicht_k)
         dateien_weg("briefe", "pdf", "auftrag_id IS NOT NULL" + und_nicht_k)
-        for t in ("termine", "briefe", "notizen", "lagerbewegungen", "korrespondenz"):
+        for t in ("termine", "briefe", "notizen", "lagerbewegungen", "korrespondenz", "wiedervorlagen"):
             weg(t, "auftrag_id IS NOT NULL" + und_nicht_k)
         for r in con.execute("SELECT pfad FROM anhaenge WHERE auftrag_id IS NOT NULL" + und_nicht_k):
             _datei_weg(r["pfad"])
@@ -4771,6 +4782,13 @@ def testdaten_loeschen(con, gruppen, zaehler_zuruecksetzen=False, behalten=()):
         for t in ("zeiten", "stempel_ereignisse", "abwesenheiten", "kontobuchungen", "lohn"):
             weg(t)
         signaturen_weg("art='monatsbeleg'")
+    if "bank" in g:
+        weg("bank_umsaetze")
+        weg("bank_auszuege")
+        shutil.rmtree(os.path.join(DATEN, "bank"), ignore_errors=True)
+    elif "auftraege" in g or "zahlungen" in g:
+        # Zuordnungen zu gelöschten Rechnungen bzw. Zahlungsaufträgen lösen; die Umsätze werden wieder zur Zuordnung angeboten
+        con.execute("UPDATE bank_umsaetze SET status='offen', ziel='[]', zugeordnet='', von='' WHERE status='zugeordnet'")
     if "arbeitsschutz" in g:
         # Nachweise aus der Testphase; Gefährdungsbeurteilungen, Betriebsanweisungen, Themen und Datenblätter bleiben
         signaturen_weg("art='unterweisung'")
@@ -7234,6 +7252,7 @@ def start_daten(con, jahr):
         "ueberfaellig": ueberfaellig, "zahlungen_faellig": zahlungen_faellig, "termine": termine,
         "beschaffung": [x for x in reste.beschaffung(reste.laden(con)[0]) if x["zu_bestellen"] > 0],
         "geburtstage": geburtstage(con, int(e.get("geburtstag_tage") or 14)),
+        "wiedervorlagen": wiedervorlage.liste(con, {"status": "offen", "bis": (heute_d + timedelta(7)).isoformat()}) if benutzer.darf("auftraege", 1) else [],
     }
 
 
@@ -8760,6 +8779,8 @@ def api(methode, teile, q, daten):
             return bank_api(con, methode, teile, q, daten or {})
         if res == "liquiditaet":
             return liquiditaet_api(con, methode, teile, q, daten or {})
+        if res == "wiedervorlagen":
+            return wiedervorlage.api(con, methode, teile, q, daten or {}, ich_login())
         if res == "preisimport" and methode == "POST" and teile[1:] in (["lesen"], ["uebernehmen"]):
             d = daten or {}
             lid = int(d["lieferant_id"]) if str(d.get("lieferant_id") or "").isdigit() else None
@@ -8912,6 +8933,7 @@ def api(methode, teile, q, daten):
                         os.remove(a["pfad"])
                 con.execute("DELETE FROM anhaenge WHERE kunde_id=?", (rid,))
                 con.execute("DELETE FROM notizen WHERE kunde_id=?", (rid,))
+                con.execute("DELETE FROM wiedervorlagen WHERE kunde_id=?", (rid,))
                 _korrespondenz_loeschen(con, rid)
                 con.execute("DELETE FROM kunden WHERE id=?", (rid,))
                 protokoll.eintragen(con, "kunde_geloescht", str(rid), f"Kunde {rid} gelöscht (ohne Aufträge, mit Korrespondenz und Notizen)", {},
