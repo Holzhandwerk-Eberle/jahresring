@@ -40,6 +40,7 @@ const pruefe = () => {
   const ids = async (pfad) => { const j = await api(pfad); const l = Array.isArray(j) ? j : (j && (j.liste || j.eintraege || j.zeilen)) || []; return l.map(x => x.id).filter(Boolean); };
   const routen = ['#/start', '#/statistik', '#/kunden', '#/auftraege', '#/leitstand', '#/op', '#/op/mahnwesen', '#/belege', '#/lieferanten', '#/zahlungen', '#/kalender', '#/kalender/planung', '#/personal', '#/personal/zeiten', '#/personal/abwesenheit', '#/personal/beleg', '#/personal/lohn', '#/projekte', '#/briefe', '#/meine'];
   for (const r of ['', '/gb', '/gb/1', '/gb/2', '/ba', '/ba/1', '/ba/2', '/unterweisungen', '/unterweisungen/liste', '/unterweisungen/themen', '/unterweisung/1', '/thema/1', '/gefahrstoffe', '/notfall', '/nachweise']) routen.push('#/arbeitsschutz' + r);
+  routen.push('#/op/bank', '#/op/liquiditaet', '#/material/preise');
   routen.push('#/mat/1/sicherheit');
   for (const m of ['holzwerkstoffe','massivholz','beschichtung','chemie','beschlaege','sets','artikel','reste','werkzeuge','auftrag','lager','statistik']) routen.push('#/material/' + m);
   const einst = await p.evaluate(() => ({tabs: (typeof EINST_TABS !== 'undefined' ? EINST_TABS : []).map(t => t[0]), unter: typeof EINST_UNTER !== 'undefined' ? EINST_UNTER : {}}));

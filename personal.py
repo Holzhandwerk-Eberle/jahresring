@@ -2,6 +2,7 @@
 import calendar
 import html
 import json
+import re
 from datetime import date, datetime, timedelta
 
 import benutzer
@@ -1472,10 +1473,14 @@ def api(con, methode, teile, q, daten):
 
     if res == "lohn":
         monat = q.get("monat") or (teile[2] if len(teile) > 2 else "") or date.today().isoformat()[:7]
+        if methode == "POST" and teile[1:] == ["zahlungen"]:
+            monat = d.get("monat") or monat
+        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", str(monat)):
+            raise Fehler("Bitte einen gültigen Monat angeben (JJJJ-MM).")
         if methode == "GET":
             return lohn_liste(con, monat)
         if methode == "PUT" and rid:
             return dict(lohn_speichern(con, rid, monat, d))
         if methode == "POST" and teile[1:] == ["zahlungen"]:
-            return lohn_zahlungen(con, d.get("monat") or monat, d)
+            return lohn_zahlungen(con, monat, d)
     raise Fehler("Unbekannte Anfrage", 404)

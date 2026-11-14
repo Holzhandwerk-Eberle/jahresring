@@ -182,3 +182,21 @@ Beschläge ändert sich nichts. Handbuch und technische Dokumentation sind angep
   Monatsbelegen werden mit den Arbeitszeiten gelöscht.
   Fehlermeldungen: Fehlt eine Berechtigung oder ein Datensatz, steht nur noch diese Meldung da und nicht mehr der
   Hinweis, das Programm neu zu starten.
+
+2026.11.01-131
+  Kontoauszüge: Unter Offene Posten › Kontoauszüge wird der Kontoauszug als CAMT-Datei (camt.053/052, auch ZIP)
+  aus dem Onlinebanking eingelesen. Das Programm schlägt für jede Gutschrift die passende Rechnung und für jede
+  Abbuchung den Zahlungsauftrag vor (Rechnungsnummer, SEPA-Referenz, Betrag, Name, IBAN); sichere Vorschläge lassen
+  sich auf einmal übernehmen. Doppelt eingelesene Umsätze werden erkannt, die Originaldatei wird aufbewahrt.
+  Liquidität: Neuer Reiter Offene Posten › Liquidität mit dem erwarteten Kontostand Woche für Woche aus offenen
+  Rechnungen, Zahlungsaufträgen, Löhnen, Umsatzsteuer, laufenden Aufträgen und eigenen regelmäßigen Zahlungen.
+  DATEV: Unter Einstellungen › Service › Export entsteht ein DATEV-Buchungsstapel der Ausgangs- und
+  Eingangsrechnungen mit Belegen für die Steuerberatung (Berater-/Mandantennummer, SKR 03/04, Konten einstellbar;
+  beim Lieferanten ein eigenes Aufwandskonto).
+  Lager: Neuer Reiter „Preise einlesen“ für Datanorm- und CSV/Excel-Preislisten der Lieferanten mit Vorschau;
+  übernommen werden nur angehakte Preise.
+  Wiedervorlagen: Nach dem Festschreiben einer Rechnung legt das Programm Nachfrage, Pflegeangebot und Ende der
+  Gewährleistung als Wiedervorlage an (Einstellungen › Kunden & Aufträge); fällige stehen auf der Startseite,
+  alle im Auftrag unter den Bemerkungen.
+  Innen: Programmteile in eigene Dateien aufgeteilt (Grundfunktionen, SEPA, Kontoauszüge, Testdaten,
+  Monatsbeleg, Arbeitsschutz). Installationsanleitung mit Funktionsprobe auf dem Büro-PC.

@@ -1,0 +1,37 @@
+import json
+exec(open("/tmp/claude-0/t/sec/sec.py").read().split("inh = cl()")[0])
+J = lambda t: json.loads(t) if t and t[:1] in "[{" else {}
+inh = cl()
+rq(inh, "POST", "/api/anmeldung/einrichten", {"name": "Jonas", "login": "jonas", "passwort": "geheim123", "passwort2": "geheim123", "firma": "Testbetrieb"})
+rq(inh, "POST", "/api/anmeldung/anmelden", {"login": "jonas", "passwort": "geheim123"})
+F = []
+def P(pfad, d=None, m="POST", erwartet=200):
+    s, b, _ = rq(inh, m, "/api/" + pfad, d)
+    if s != erwartet: F.append((m, pfad, s, b[:200])); print("  !!", m, pfad, s, b[:200])
+    return J(b)
+def ok(n, b):
+    print(("ok   " if b else "FEHL ") + n); b or F.append(n)
+k = P("kunden", {"kurzname": "Huber", "telefon": "07542 123", "strasse": "Weg 1", "plz": "88069", "ort": "Tettnang"})
+a = P("auftraege", {"kunde_id": k["id"], "bezeichnung": "Küche"})
+P(f"auftraege/{a['id']}/positionen", {"text": "Küche", "menge": 1, "einheit": "Stk.", "einzelpreis": 1000, "preis_manuell": 1})
+ab = P(f"auftraege/{a['id']}/belege", {"art": "abschlag", "prozent": 30}); P(f"belege/{ab['id']}/festschreiben", {})
+ok("Abschlag: keine Wiedervorlage", len(P(f"wiedervorlagen?auftrag_id={a['id']}", m="GET")) == 0)
+b = P(f"auftraege/{a['id']}/belege", {"art": "rechnung"})
+P(f"belege/{b['id']}", {"leistungsdatum": "2026-10-10"}, "PUT")
+r = P(f"belege/{b['id']}/festschreiben", {})["beleg"]
+w = P(f"wiedervorlagen?auftrag_id={a['id']}", m="GET")
+print("  ", [(x["art"], x["datum"]) for x in w])
+ok("3 Wiedervorlagen ab Leistungsdatum", len(w) == 3 and w[0]["datum"] == "2026-11-09")
+s = P("start", m="GET")
+ok("Startseite zeigt fällige", any(x["auftrag_id"] == a["id"] for x in s.get("wiedervorlagen", [])))
+P(f"wiedervorlagen/{w[0]['id']}", {"erledigt": True}, "PUT")
+s = P("start", m="GET")
+ok("erledigt weg", not s.get("wiedervorlagen"))
+st = P(f"belege/{r['id']}/storno", {})
+w = P(f"wiedervorlagen?auftrag_id={a['id']}&status=alle", m="GET")
+ok("Storno entfernt offene, erledigte bleibt", len(w) == 1 and w[0]["erledigt"])
+P("wiedervorlagen", {"auftrag_id": a["id"], "datum": "2026-12-01", "text": "Fronten nachstellen"})
+P("wiedervorlagen", {"datum": "2026-12-01", "text": "x"}, erwartet=400)
+P("wiedervorlagen", {"auftrag_id": a["id"], "datum": "2026-13-01", "text": "x"}, erwartet=400)
+ok("eigene angelegt", len(P(f"wiedervorlagen?auftrag_id={a['id']}", m="GET")) == 1)
+print("FEHLER:", F)
