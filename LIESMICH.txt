@@ -1,0 +1,184 @@
+Jahresring – Büroprogramm für Handwerksbetriebe
+================================================
+
+Kunden, Aufträge, Kalkulation, Angebote bis Rechnungen (auch als E-Rechnung), offene Posten und
+Mahnwesen, Lieferanten und Zahlungen, Material und Lager, Werkstattpapiere und Zuschnitt, Kalender,
+Zeiterfassung und Stempeluhr. Das Programm läuft auf einem Windows-PC im Betrieb; die Daten bleiben dort.
+
+Installation
+------------
+Jahresring-Setup.exe doppelklicken. Zeigt Windows "Der Computer wurde durch Windows geschützt":
+"Weitere Informationen" und "Trotzdem ausführen" wählen. Das Setup installiert nach C:\Jahresring,
+legt die Verknüpfungen an, gibt auf Wunsch die Firewall für Tablets und Handys frei, übernimmt auf
+Wunsch den Ordner "daten" von einem anderen PC und startet das Programm.
+Ohne Setup: Jahresring.zip nach C:\ entpacken, einrichten.bat doppelklicken, über die Verknüpfung starten.
+
+Start und Ende
+--------------
+Start über "Jahresring" auf dem Desktop. Das Programm läuft im Hintergrund (Symbol unten rechts neben
+der Uhr). Beenden: Rechtsklick auf das Symbol > Beenden, oder der Ein/Aus-Knopf oben rechts im Programm.
+
+Update
+------
+Die neue Jahresring-Setup.exe doppelklicken. Der Ordner "daten" wird nie verändert.
+
+Daten und Sicherung
+-------------------
+Alle Daten liegen im Unterordner "daten". Diesen Ordner nicht in einen Ordner legen, den ein
+Cloud-Dienst laufend synchronisiert. Unter Einstellungen > Service > Datensicherung ein Sicherungsziel
+außerhalb des PCs eintragen und ein Sicherungskennwort setzen. Das Kennwort aufschreiben und getrennt
+aufbewahren: ohne Kennwort ist eine verschlüsselte Sicherung nicht wiederherstellbar.
+
+Tablets, Handys, weitere PCs
+----------------------------
+Einstellungen > Benutzer & Netzwerk: "Im Netzwerk" und "Verschlüsselung (https)" einschalten, Programm
+neu starten. Am Gerät http://PC-Adresse:8765/zertifikat öffnen und der Anleitung folgen.
+
+Dateien im Programmordner
+-------------------------
+start.bat              startet das Programm (richtet Python ein, falls es fehlt)
+einrichten.bat         legt die Verknüpfungen neu an (z. B. nach dem Verschieben des Ordners)
+Handy-Freigabe.bat     richtet die Windows-Firewall ein und zeigt Netzwerkprofil und Adressen
+daten\                 Datenbank, Belege, Anhänge, Sicherungen, Protokoll (nicht im Paket enthalten)
+docs\                  technische Dokumentation und Quelltext des Setups
+
+Hilfe
+-----
+Im Programm das Fragezeichen oben rechts oder F1: Handbuch, Installations- und Betriebsanleitung,
+Kalkulationsdokumentation, Vorlagen für Verfahrens- und Datenschutzdokumentation.
+Die installierte Version steht unter Einstellungen > Service > Infos.
+
+
+Änderungen
+==========
+
+Version 2026.11.01-120
+----------------------
+Dokumentation überarbeitet: diese Datei, Handbuch, Installations- und Betriebsanleitung, Vorlagen für
+Verfahrens- und Datenschutzdokumentation und technische Dokumentation beschreiben den aktuellen Stand
+(Setup, https, Sicherungskennwort, Belegprüfung). Hinweise auf einzelne Cloud-Anbieter und überholte
+Tipps sind entfernt, auch der Tipp unter der Stempeluhr. Neu unter Einstellungen > Kunden & Aufträge:
+"Datenauskunft" mit den Angaben zu Speicherorten und Empfängern für den Auskunftsbrief; betriebseigene
+Systeme (z. B. Dokumentenarchiv, Cloud-Speicher, Buchhaltung) dort eintragen.
+
+Version 2026.11.01-121
+----------------------
+Einstellungen > Kalkulation: Die Reiter "Werkstoffe" und "Beschläge" sind entfernt. Werkstoffe und
+Beschläge stehen im Materialstamm und kommen von dort (oder aus dem Stücklistenimport) in den Auftrag;
+eine Vorgabe in den Einstellungen gab es praktisch nicht. Im Auftrag unter Werte > Werkstoffe und
+Beschläge ändert sich nichts. Handbuch und technische Dokumentation sind angepasst.
+
+2026.11.01-122
+  Neu: Projektordner sichern (Einstellungen › Service). Sichert den Projektordner auf das externe Sicherungsziel
+  (Unterordner Jahresring-Projekte) und überträgt nur Neues und Geändertes. Geänderte und gelöschte Dateien werden
+  nicht überschrieben, sondern bleiben als frühere Fassung erhalten (Vorgabe 90 Tage) und lassen sich je Ordner oder
+  Datei zurückholen (in den Unterordner _Wiederhergestellt, nichts wird überschrieben). Auf Wunsch täglich automatisch.
+  Mit Sicherungskennwort wird jede Datei verschlüsselt. Bei auffällig vielen geänderten Dateien wird gewarnt und
+  nichts entfernt.
+  https: Am Büro-PC trägt das Programm das Zertifikat selbst in Windows ein (Windows fragt einmal nach, mit Ja
+  bestätigen, Browser neu öffnen). Die Einstellungen zeigen, für welche Namen und Adressen das Zertifikat gilt.
+  PC-Namen mit Unterstrich werden unterstützt; "Zertifikat neu ausstellen" nimmt den heutigen PC-Namen auf (danach
+  auf den Geräten einmal neu einrichten). Ein eigenes Zertifikat kann als daten\zertifikat\eigen.pem und eigen.key
+  hinterlegt werden.
+  Benutzer: Die eigene Inhaber-Rolle lässt sich nicht mehr selbst abgeben oder sperren.
+  Auftrag: Wird "Fertigung begonnen" oder "Geliefert am" eingetragen, wechselt der Status von selbst auf "Fertigung" bzw.
+  "Geliefert" (einstellbar unter Einstellungen > Kunden & Aufträge > Status automatisch setzen; nur vorwärts).
+  Einstellungen > Belege & Briefbogen: Die Felder der Ablageordner überlappten bei schmalem Fenster. Behoben; Felder
+  können grundsätzlich nicht mehr über ihren Platz hinauswachsen.
+  Texte: Wo bisher ein bestimmtes CAD-Programm genannt war, steht jetzt allgemein "CAD".
+
+2026.11.01-123
+  Benutzer: Kalender-Sicht je Benutzer einstellbar (Terminarten, nur eigene Termine, externer Kalender, Abwesenheiten
+  der Kollegen). Werkstatt und Mitarbeiter sehen in der Vorgabe keine Einträge des externen Kalenders mehr; Beträge im
+  Kalender nur mit Preisrecht. "bearbeiten" in der Benutzerliste öffnete den Dialog doppelt; behoben.
+  Sicherungsziel, das nur zeitweise angeschlossen ist (z. B. USB-Platte einmal in der Woche): Nach dem Anstecken wird
+  von selbst gesichert; die Warnfrist ist einstellbar (Projektordner sichern > Warnen nach).
+
+2026.11.01-124
+  Prüfung des gesamten Programms. Behoben:
+  Rechte: Benutzer ohne Preisrecht (Werkstatt) bekamen im Hintergrund noch Beträge übertragen (Summen je Titel und
+  Position, Löhne und Stundensätze der Auftragskalkulation). Die Werkstatt konnte einzelne Kunden vollständig und
+  Lohn-Empfänger samt IBAN abrufen. Jetzt: Kunde nur mit Name, Anschrift, Erreichbarkeit; Lieferanten ohne Bankdaten;
+  Lohn-Empfänger nur mit Personalrecht.
+  Kalender: Hinweis, wenn ein zugeteilter Mitarbeiter abwesend ist oder schon einen anderen Termin hat. Vertauschter
+  Planungszeitraum wird gedreht. Falsches Datum gibt eine verständliche Meldung statt "Interner Fehler".
+  Lager: Inventur mit Bestand 0 war nicht möglich. Negative Bestände minderten den Lagerwert. Rückgabe ans Lager über
+  eine negative Auftragsbuchung wurde als Abgang gebucht.
+  Zahlungen: Hinweis bei doppelter Rechnungsnummer desselben Lieferanten auch beim Anlegen von Hand.
+  Geschwindigkeit: Die Auftragsliste überträgt nur noch ein Viertel der Daten.
+
+2026.11.01-125
+  Zahlungsaufträge: Mit "bezahlt" gesperrt (Betrag, Rechnungsdaten, Bankverbindung, Zahldatum; kein Löschen).
+  Änderbar bleiben Bemerkung, Auftrag und Zahlart. "Bezahlt" zurücknehmen kann nur der Inhaber; beides steht im Protokoll.
+  Lager: Inventurbuchungen und gelöschte Auftragsbuchungen mit Lagerabgang stehen im Protokoll.
+  Einstellungen, Service und Briefbogen-Vorlagen nur noch für den Inhaber (auch nicht über "Eigene Rechte" vergebbar).
+  Werkstatt und Mitarbeiter erhalten aus den Einstellungen nur noch Auswahllisten. Behoben: Briefbogen-Vorlagen konnte
+  bisher jeder angemeldete Benutzer hochladen oder entfernen.
+  Ohne Preisrecht steht statt "0,00 €" ein Strich.
+  Geschwindigkeit: Seiten und Listen werden an Tablets, Handys und weitere PCs gepackt übertragen (etwa ein Zehntel
+  der Datenmenge).
+
+2026.11.01-126
+  Zuschnittprogramm: Die Etikettengröße lässt sich jetzt auch im Lager bei den Restplatten einstellen (bisher nur in der
+  Übersicht eines geöffneten Projekts unter Etikettendruck).
+
+2026.11.01-127
+  Etikettengröße: jetzt einmal unter Einstellungen > Werkstatt & Material (Breite × Höhe in mm). Gilt auf allen Geräten
+  für die Teile- und Restetiketten des Zuschnittprogramms und für die QR-Etiketten von Material und Resten. Die Einstellung
+  im Zuschnittprogramm ist entfallen.
+  Zweite Prüfung des gesamten Programms. Behoben: Der Verlauf eines Auftrags nannte Benutzern ohne Preisrecht noch
+  Beträge im Text. Unsinnige Eingaben (falscher Feldinhalt) führten an vielen Stellen zu "Interner Fehler"; sie werden
+  jetzt als Eingabefehler gemeldet.
+
+2026.11.01-128
+  Neu: Bereich Arbeitsschutz im Hauptmenü (eigenes Recht "Arbeitsschutz"; Vorgabe Büro bearbeiten, Werkstatt ansehen).
+  - Übersicht mit fälligen Punkten und Grundpflichten; Hinweis auf der Startseite, wenn etwas ansteht.
+  - Gefährdungsbeurteilungen je Arbeitsbereich, Maschine (verknüpft mit den Werkzeugen) oder Tätigkeit aus den Vorlagen
+    der Berufsgenossenschaft (274 Vorlagen, die für Schreinereien vorne); Maßnahmen prüfen (vorhanden / umsetzen mit
+    wer und bis wann / entfällt), Wirksamkeit, Freigabe mit Unterschrift, unveränderliche Fassungen, Prüftermine.
+  - Psychische Belastung nach der Checkliste der Berufsgenossenschaft mit Maßnahmenbeispielen.
+  - Betriebsanweisungen für Maschinen (aus den Unterweisungshilfen) und Gefahrstoffe (Aufbau nach TRGS 555), mit
+    Gebots-, Warn-, Verbots- und Rettungszeichen sowie GHS-Piktogrammen; Freigabe mit Unterschrift.
+  - Unterweisungen: Themen aus den Vorlagen, Fälligkeiten je Mitarbeiter (jährlich, Jugendliche halbjährlich),
+    Durchführung am Tablet, Unterschrift jedes Teilnehmers, Nachweis als PDF.
+  - Gefahrstoffe: beim Material neuer Reiter "Datenblätter & Sicherheit" für Sicherheitsdatenblatt und technisches
+    Merkblatt, Gefahrstoffangaben, Gefahrstoffverzeichnis als PDF.
+  - Werkstatt: Gefahrstoffe und Datenblätter des Auftrags im Reiter Werkstatt, anklickbar auch auf Materialsummen und
+    Werkstattauftrag.
+  - Erste Hilfe: Notfall-Aushang, Verbandbuch (nur für den Inhaber lesbar, Aufbewahrung fünf Jahre).
+  - Beauftragte und Nachweise: Betreuung, Ersthelfer, Brandschutzhelfer usw. mit Gültigkeit und Bescheinigung.
+  Unterschriften am Tablet: Monatsbeleg (Mitarbeiter und Arbeitgeber), Unterweisungen und Freigaben; jede Unterschrift
+  mit Prüfsumme des Inhalts, Hinweis bei späteren Änderungen. Stempeluhr: "Offene Unterschriften" und "Sicherheit &
+  Erste Hilfe" (Betriebsanweisungen, Sicherheitsdatenblätter, Notfall-Aushang, Verbandbuch).
+  Mitarbeiter: neues Feld Geburtsdatum (nur für den Jugendarbeitsschutz).
+  Lieferschein: Die Linie zum Unterschreiben von Hand entfällt, wenn digital unterschrieben wurde.
+  Hauptmenü: passt sich bei schmalerem Fenster an, damit alle Einträge sichtbar bleiben.
+
+2026.11.01-129
+  Schmale Fenster am PC: Passen nicht alle Einträge der Menüleiste hinein, erscheinen Pfeile und eine Bildlaufleiste,
+  das Mausrad blättert das Menü waagrecht, der geöffnete Bereich wird sichtbar gehalten.
+  Breite Tabellen haben zusätzlich eine Bildlaufleiste oben an der Tabelle (auch in Dialogen), damit sie sich bei langen
+  Listen seitlich verschieben lassen, ohne erst ans Tabellenende zu scrollen. Am Tablet wie bisher mit dem Finger.
+
+2026.11.01-130
+  Arbeitsschutz: Die Bildtafeln der Berufsgenossenschaft öffnen sich jetzt im Programm in einem großen Fenster
+  (mit „In eigenem Fenster“ und „Herunterladen“); in der Stempeluhr klappen sie unter dem Link auf. Bisher ging je
+  nach Windows-Einstellung nur kurz ein Fenster auf und wieder zu. PDF-Dateien werden unabhängig von den
+  Dateitypen in Windows immer als PDF ausgeliefert.
+  Dialoge liegen über der Menüleiste und werden nicht mehr teilweise von ihr verdeckt.
+  Lager: Wird eine Auftragsbuchung mit Lagerabgang gelöscht, bleibt die Entnahme in der Bewegungsliste stehen und
+  eine Rückbuchung gleicht sie aus. Bestand und Lagerwert zu früheren Stichtagen ändern sich dadurch nicht mehr
+  nachträglich. Wurde das Material danach schon inventiert, bleibt der gezählte Bestand stehen (mit Hinweis).
+  Datum „heute“ in der Oberfläche: zwischen Mitternacht und 1 bzw. 2 Uhr nachts wurde bisher der Vortag
+  vorgeschlagen (z. B. als Buchungsdatum im Lager). Jetzt gilt immer das Datum des PCs.
+  Monatsbeleg: Die Prüfung, ob sich Zeiten nach der Unterschrift geändert haben, erfasst jetzt jede einzelne
+  Buchung (Beginn, Ende, Auftrag, Tätigkeit) und Abwesenheiten. Bereits geleistete Unterschriften bleiben gültig.
+  Arbeitsschutz: Gefahrstoffverzeichnis nur mit aktiven Materialien; Material mit Datenblättern, Betriebsanweisung
+  oder Gefahrstoffangaben wird beim Löschen inaktiv gesetzt; Mitarbeiter mit unterschriebener Unterweisung lassen
+  sich nicht löschen (Nachweise bleiben erhalten); nach der Unterschrift des Unterweisenden lässt sich dieser nicht
+  mehr ändern; Dateien bis 60 MB; Änderungen im Editor der Gefährdungsbeurteilung gehen beim schnellen Weiterklicken
+  nicht mehr verloren.
+  Testdaten löschen: neue Gruppe Arbeitsschutz (Unterweisungen, Verbandbuch, Unterschriften); Unterschriften unter
+  Monatsbelegen werden mit den Arbeitszeiten gelöscht.
+  Fehlermeldungen: Fehlt eine Berechtigung oder ein Datensatz, steht nur noch diese Meldung da und nicht mehr der
+  Hinweis, das Programm neu zu starten.

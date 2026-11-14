@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3b3530">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="stempel.webmanifest">
+<link rel="icon" href="jahresring-192.png">
+<link rel="apple-touch-icon" href="jahresring-192.png">
+<title>Stempeluhr</title>
+<style>
+:root{--bg:#efebe5;--karte:#fff;--text:#2a2622;--leise:#7a7168;--linie:#ddd6cc;--dunkel:#3b3530;--akzent:#9a6a3a;--rot:#b04236;--gruen:#4d7a45;--gelb:#c99a2e}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+header{background:var(--dunkel);color:#eee3d6;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+header b{font-size:17px}header .uhr{margin-left:auto;font-variant-numeric:tabular-nums;font-size:17px}
+main{padding:14px 14px calc(30px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto}
+.karte{background:var(--karte);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.status{text-align:center;padding:22px 16px}
+.status .zustand{font-size:15px;color:var(--leise);text-transform:uppercase;letter-spacing:.06em}
+.status .dauer{font-size:46px;font-weight:600;font-variant-numeric:tabular-nums;margin:4px 0}
+.status .was{font-size:17px}.status .was small{display:block;color:var(--leise);font-size:14px}
+.punkt{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.knoepfe{display:grid;gap:10px}.knoepfe.zwei{grid-template-columns:1fr 1fr}
+button{font:inherit;border:0;border-radius:12px;padding:16px;font-size:18px;font-weight:600;cursor:pointer;color:#fff;background:var(--akzent)}
+button:active{transform:scale(.98)}
+button.gruen{background:var(--gruen)}button.rot{background:var(--rot)}button.gelb{background:var(--gelb)}button.grau{background:#d9d2c8;color:var(--text)}
+button.leise{background:none;color:var(--akzent);padding:10px;font-size:16px;font-weight:500}
+button.gross{padding:26px;font-size:22px}
+.zahlen{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.zahlen div{background:var(--bg);border-radius:10px;padding:10px 12px}.zahlen span{display:block;font-size:13px;color:var(--leise)}.zahlen b{font-size:19px}
+h3{margin:4px 0 10px;font-size:16px}
+.liste{list-style:none;margin:0;padding:0}.liste li{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--linie)}
+.liste li:last-child{border:0}.liste .zeit{font-variant-numeric:tabular-nums;white-space:nowrap;min-width:96px}.liste .std{margin-left:auto;white-space:nowrap;color:var(--leise)}
+.banner{border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:15px}
+.banner.offline{background:#fff1d6;border:1px solid #e8cf96}.banner.fehler{background:#fbe4e1;border:1px solid #e9b6ae}
+.ueber{position:fixed;inset:0;background:var(--bg);z-index:20;overflow:auto;padding:calc(12px + env(safe-area-inset-top)) 14px 30px;display:none}
+.ueber.offen{display:block}.ueber .kopf{display:flex;align-items:center;gap:8px;margin-bottom:10px;max-width:560px;margin-left:auto;margin-right:auto}
+.ueber .kopf h2{margin:0;font-size:20px;flex:1}.ueber .inhalt{max-width:560px;margin:0 auto}
+input,select,textarea{font:inherit;font-size:17px;width:100%;padding:12px;border:1px solid var(--linie);border-radius:10px;background:#fff;color:var(--text)}
+label{display:block;margin:10px 0 4px;color:var(--leise);font-size:14px}
+.auftr{display:block;width:100%;text-align:left;background:#fff;color:var(--text);font-weight:400;font-size:16px;padding:13px 14px;margin-bottom:8px;border:1px solid var(--linie)}
+.auftr b{display:block;font-size:16px}.auftr small{color:var(--leise)}.auftr.gewaehlt{border:2px solid var(--akzent);background:#fbf5ee}
+.chips{display:flex;flex-wrap:wrap;gap:8px}.chips button{background:#fff;color:var(--text);border:1px solid var(--linie);font-weight:500;font-size:16px;padding:12px 14px}
+.chips button.gewaehlt{background:var(--akzent);color:#fff;border-color:var(--akzent)}
+.reiter{display:flex;gap:6px;margin-bottom:10px}.reiter button{flex:1;background:#fff;color:var(--text);border:1px solid var(--linie);font-size:15px;padding:10px}
+.reiter button.an{background:var(--dunkel);color:#fff}
+.hinweis{color:var(--leise);font-size:14px}.klein{font-size:13px}
+.menue{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 10px;margin-top:6px}
+.anm{max-width:380px;margin:12vh auto 0}.anm h2{margin:0 0 4px}
+.toast{pointer-events:none;position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--dunkel);color:#fff;padding:10px 16px;border-radius:10px;font-size:15px;opacity:0;transition:opacity .2s;z-index:50;max-width:90vw}
+.toast.zeigen{opacity:1}.toast.fehler{background:var(--rot)}
+.frage-hg{position:fixed;inset:0;background:rgba(40,34,28,.45);z-index:60;display:flex;align-items:flex-end;justify-content:center;padding:16px 14px calc(16px + env(safe-area-inset-bottom))}
+.frage-box{background:#fff;border-radius:16px;padding:18px;width:100%;max-width:520px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.frage-box p{font-size:18px;margin:4px 2px 16px;font-weight:600}
+.monat li{font-size:14px}.monat .we{color:var(--leise)}
+.pad{display:block;width:100%;height:190px;border:2px dashed #b9ad9d;border-radius:10px;background:#fff;touch-action:none;margin:6px 0}
+.uw h4{margin:12px 0 4px;font-size:14px;color:var(--leise)}.uw ul{margin:0;padding-left:20px}.uw li{margin:4px 0}
+.offen-sig{border:2px solid var(--akzent)}.ghs{height:30px;width:30px;vertical-align:middle;margin-right:2px}
+.link{display:block;background:#fff;border:1px solid var(--linie);border-radius:10px;padding:12px 14px;margin-bottom:8px;color:var(--text);text-decoration:none}
+</style>
+</head>
+<body>
+<header><b id="kopfName">Stempeluhr</b><span class="uhr" id="uhr"></span></header>
+<main id="app"><div class="hinweis" style="text-align:center;margin-top:30vh">lädt …</div></main>
+<div class="ueber" id="ueber"><div class="kopf"><h2 id="ueTitel"></h2><button class="leise" id="ueZu">Schließen</button></div><div class="inhalt" id="ueInhalt"></div></div>
+<div class="toast" id="toast"></div>
+<script>
+"use strict";
+if ("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("/sw.js", {scope: "/"}).catch(() => {});
+const BASIS = "";   // die Stempeluhr läuft direkt unter http://<PC-Adresse>:8765/stempel
+const $ = (s, w = document) => w.querySelector(s), $$ = (s, w = document) => [...w.querySelectorAll(s)];
+// Bildtafeln (PDF) direkt in der Seite zeigen: Handy-Browser laden PDFs sonst nur herunter
+document.addEventListener("click", async e => {
+  const a = e.target.closest && e.target.closest("a[data-tafel]");
+  if (!a) return;
+  e.preventDefault();
+  const box = a.nextElementSibling;
+  if (box.childElementCount) { box.replaceChildren(); return; }
+  box.textContent = "Bildtafel wird geladen …";
+  try {
+    const r = await fetch(a.getAttribute("href"));
+    if (!r.ok) throw new Error("nicht gefunden");
+    const daten = new Uint8Array(await r.arrayBuffer());
+    if (!window.pdfjsLib) {
+      await new Promise((ok, fehl) => { const sk = document.createElement("script"); sk.src = "/pdfjs/pdf.min.js"; sk.onload = ok; sk.onerror = fehl; document.head.appendChild(sk); });
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.js";
+    }
+    const doc = await window.pdfjsLib.getDocument({data: daten}).promise, breite = Math.max(260, box.clientWidth || 320), dpr = window.devicePixelRatio || 1;
+    const neu = [];
+    for (let n = 1; n <= doc.numPages; n++) {
+      const seite = await doc.getPage(n), v0 = seite.getViewport({scale: 1}), sk = breite / v0.width, vp = seite.getViewport({scale: sk * dpr});
+      const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
+      c.style.cssText = `display:block;width:${breite}px;height:${v0.height * sk}px;margin:8px 0;background:#fff;border-radius:6px`;
+      await seite.render({canvasContext: c.getContext("2d"), viewport: vp}).promise;
+      neu.push(c);
+    }
+    box.replaceChildren(...neu);
+  } catch (err) {
+    box.innerHTML = `Die Bildtafel konnte hier nicht angezeigt werden. <a class="link" href="${esc(a.getAttribute("href"))}" download>Herunterladen</a>`;
+  }
+});
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const zahl = (z, n = 2) => Number(z || 0).toLocaleString("de-DE", {minimumFractionDigits: n, maximumFractionDigits: n});
+const pad = n => String(n).padStart(2, "0");
+const lokalIso = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const heute = () => lokalIso().slice(0, 10);
+const datumDE = iso => iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : "";
+const hm = std => { const m = Math.round(std * 60); return `${Math.floor(m / 60)}:${pad(m % 60)}`; };
+const min = s => { const [h, m] = s.split(":").map(Number); return h * 60 + m; };
+const speicher = {
+  lesen(k, std) { try { const v = localStorage.getItem("eb_" + k); return v ? JSON.parse(v) : std; } catch (e) { return std; } },
+  schreiben(k, v) { try { localStorage.setItem("eb_" + k, JSON.stringify(v)); } catch (e) {} },
+};
+// eigener Bestätigungsdialog statt Browser-Fenster
+function frage(text, ok = "OK", farbe = "") {
+  return new Promise(res => {
+    const hg = document.createElement("div");
+    hg.className = "frage-hg";
+    hg.innerHTML = `<div class="frage-box"><p>${esc(text)}</p><div class="knoepfe zwei"><button class="grau" data-f="0">Abbrechen</button><button class="${farbe}" data-f="1">${esc(ok)}</button></div></div>`;
+    document.body.appendChild(hg);
+    const zu = w => { hg.remove(); res(w); };
+    hg.onclick = e => { if (e.target === hg) zu(false); };
+    hg.querySelectorAll("[data-f]").forEach(b => b.onclick = () => zu(b.dataset.f === "1"));
+  });
+}
+let toastT;
+function toast(t, fehler) { const x = $("#toast"); x.textContent = t; x.className = "toast zeigen" + (fehler ? " fehler" : ""); clearTimeout(toastT); toastT = setTimeout(() => x.className = "toast", fehler ? 5000 : 2500); }
+
+let ICH = null, ST = speicher.lesen("status", null), LISTEN = speicher.lesen("listen", null), AS = null;
+let online = true, letzterFehler = "";
+let queue = speicher.lesen("queue", []);
+let lokal = speicher.lesen("lokal", {});   // {pause: "YYYY-MM-DD", laeuft: {...} (optimistisch)}
+
+async function holen(pfad, opt = {}) {
+  const r = await fetch(BASIS + "/api/" + pfad, {method: opt.method || "GET", headers: {"Content-Type": "application/json"}, body: opt.body ? JSON.stringify(opt.body) : undefined,
+    credentials: "same-origin", cache: "no-store"});
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { const e = new Error(j.fehler || "Bitte anmelden"); e.anmelden = true; throw e; }
+  if (!r.ok) { const e = new Error(j.fehler || r.statusText); e.server = true; throw e; }
+  return j;
+}
+
+// ---------------- Anmeldung ----------------
+function anmeldung(fehler = "") {
+  $("#kopfName").textContent = "Stempeluhr";
+  $("#app").innerHTML = `<div class="anm karte"><h2>Anmelden</h2><p class="hinweis">Mit dem eigenen Benutzer für die Stempeluhr. Die Anmeldung bleibt auf diesem Handy erhalten.</p>
+    <form id="anmF"><label>Benutzername</label><input name="login" autocomplete="username" autocapitalize="none" value="${esc(speicher.lesen("login", ""))}">
+    <label>PIN / Passwort</label><input name="passwort" type="password" autocomplete="current-password" inputmode="text">
+    <button style="width:100%;margin-top:16px" type="submit">Anmelden</button><div class="hinweis" id="anmFe" style="color:var(--rot);margin-top:10px">${esc(fehler)}</div></form>
+    <p style="text-align:center;margin-top:14px"><a href="#" id="anmVg">PIN / Passwort vergessen?</a></p></div>`;
+  const f = $("#anmF");
+  $("#anmVg").onclick = e => { e.preventDefault(); vergessen(f.login.value.trim()); };
+  (f.login.value ? f.passwort : f.login).focus();
+  f.onsubmit = async e => {
+    e.preventDefault();
+    try {
+      const r = await fetch(BASIS + "/api/anmeldung/anmelden", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({login: f.login.value, passwort: f.passwort.value})});
+      const j = await r.json(); if (!r.ok) throw new Error(j.fehler);
+      speicher.schreiben("login", f.login.value);
+      start();
+    } catch (x) { $("#anmFe").textContent = x.message || "Keine Verbindung zum Büro-PC."; }
+  };
+}
+
+// PIN / Passwort vergessen: Code per E-Mail, dann neu setzen
+function vergessen(login, hinweis = "", schritt = 1) {
+  const post = async (pfad, body) => {
+    const r = await fetch(BASIS + "/api/anmeldung/" + pfad, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.fehler || "Keine Verbindung zum Büro-PC."); return j;
+  };
+  $("#app").innerHTML = schritt === 1 ? `<div class="anm karte"><h2>PIN vergessen</h2>
+      <p class="hinweis">Jahresring schickt einen Code an die hinterlegte E-Mail-Adresse. Ist keine hinterlegt, setzt das Büro die PIN neu.</p>
+      <form id="vgF"><label>Benutzername</label><input name="login" value="${esc(login)}" autocapitalize="none">
+      <button style="width:100%;margin-top:16px" type="submit">Code senden</button><div class="hinweis" id="vgFe" style="color:var(--rot);margin-top:10px"></div></form>
+      <p style="text-align:center;margin-top:14px"><a href="#" id="vgHabe">Ich habe schon einen Code</a> · <a href="#" id="vgZu">Zurück</a></p></div>`
+    : `<div class="anm karte"><h2>Neue PIN setzen</h2>${hinweis ? `<p class="hinweis">${esc(hinweis)}</p>` : ""}
+      <form id="vgF" autocomplete="off"><label>Benutzername</label><input name="login" value="${esc(login)}" autocapitalize="none">
+      <label>Code aus der E-Mail</label><input name="code" inputmode="numeric" autocomplete="one-time-code">
+      <label>Neue PIN / neues Passwort</label><input name="neu" type="password" autocomplete="new-password">
+      <button style="width:100%;margin-top:16px" type="submit">Speichern und anmelden</button><div class="hinweis" id="vgFe" style="color:var(--rot);margin-top:10px"></div></form>
+      <p style="text-align:center;margin-top:14px"><a href="#" id="vgZu">Zurück</a></p></div>`;
+  const f = $("#vgF");
+  f.onsubmit = async e => {
+    e.preventDefault();
+    try {
+      if (schritt === 1) { const j = await post("vergessen", {login: f.login.value.trim()}); return vergessen(f.login.value.trim(), j.hinweis, 2); }
+      await post("zuruecksetzen", {login: f.login.value.trim(), code: f.code.value.trim(), neu: f.neu.value});
+      speicher.schreiben("login", f.login.value.trim()); start();
+    } catch (x) { $("#vgFe").textContent = x.message; }
+  };
+  if ($("#vgHabe")) $("#vgHabe").onclick = e => { e.preventDefault(); vergessen(f.login.value.trim(), "", 2); };
+  $("#vgZu").onclick = e => { e.preventDefault(); anmeldung(); };
+}
+
+// ---------------- Zustand ----------------
+function zustand() {
+  if (!ST) return "aus";
+  const l = lokal.laeuft !== undefined ? lokal.laeuft : ST.laeuft;
+  if (l && l.datum === heute()) return "arbeit";
+  if (lokal.pause === heute()) return "pause";
+  return (ST.heute || []).length || lokal.feierabend === heute() ? "feierabend" : "aus";
+}
+function laufend() { return lokal.laeuft !== undefined ? lokal.laeuft : ST && ST.laeuft; }
+function auftragName(id) { const a = LISTEN && LISTEN.auftraege.find(x => x.id === +id); return a ? `${a.nummer} ${a.bezeichnung}` : ""; }
+function taetName(kst, taet) { const p = LISTEN && LISTEN.taetigkeiten.produktiv.find(x => x.kst === kst); return p ? p.name : taet || kst || ""; }
+
+// ---------------- Stempeln (mit Puffer) ----------------
+function ereignis(aktion, extra = {}) {
+  const ev = {client_id: Math.random().toString(36).slice(2) + Date.now().toString(36), aktion, zeit: lokalIso(), mid: ICH && ICH.mitarbeiter_id, ...extra};
+  queue.push(ev); speicher.schreiben("queue", queue);
+  // sofort im Bildschirm zeigen
+  if (aktion === "start") {
+    lokal.laeuft = {datum: heute(), beginn: ev.zeit.slice(11), auftrag_id: extra.auftrag_id || null, kst: extra.kst || "", taetigkeit: extra.taetigkeit || "", titel: extra.titel || 0,
+      auftragsnr: "", auftrag: auftragName(extra.auftrag_id)};
+    delete lokal.pause; delete lokal.feierabend;
+    const letzte = speicher.lesen("zuletzt", []);
+    if (extra.auftrag_id) speicher.schreiben("zuletzt", [extra.auftrag_id, ...letzte.filter(x => x !== extra.auftrag_id)].slice(0, 5));
+  } else {
+    lokal.laeuft = null;
+    if (aktion === "pause") lokal.pause = heute(); else { delete lokal.pause; lokal.feierabend = heute(); }
+  }
+  speicher.schreiben("lokal", lokal);
+  zeichnen();
+  senden();
+}
+let sendetGerade = false;
+async function senden() {
+  if (sendetGerade || !queue.length) return;
+  sendetGerade = true;
+  const meine = queue.filter(e => !e.mid || !ICH || e.mid === ICH.mitarbeiter_id);
+  try {
+    const r = await holen("stempel", {method: "POST", body: {ereignisse: meine}});
+    const gesendet = new Set(meine.map(e => e.client_id));
+    queue = queue.filter(e => !gesendet.has(e.client_id)); speicher.schreiben("queue", queue);
+    const hinweise = r.ergebnisse.flatMap(x => x.hinweise || []);
+    if (hinweise.length) toast(hinweise.join(" "), true);
+    ST = r.status; speicher.schreiben("status", ST);
+    if (!queue.length) { delete lokal.laeuft; speicher.schreiben("lokal", lokal); }
+    online = true; letzterFehler = "";
+  } catch (e) {
+    if (e.anmelden) { sendetGerade = false; return anmeldung("Bitte erneut anmelden – die Buchungen bleiben gespeichert."); }
+    if (e.server) { letzterFehler = e.message; queue = queue.filter(x => !meine.includes(x)); speicher.schreiben("queue", queue); delete lokal.laeuft; speicher.schreiben("lokal", lokal); toast(e.message, true); }
+    else online = false;
+  }
+  sendetGerade = false;
+  zeichnen();
+}
+async function aktualisieren(mitListen = false) {
+  try {
+    const st = await holen("stempel" + (mitListen || !LISTEN ? "?mit=listen" : ""));
+    if (st.auftraege) { LISTEN = {auftraege: st.auftraege, taetigkeiten: st.taetigkeiten}; speicher.schreiben("listen", LISTEN); delete st.auftraege; delete st.taetigkeiten; }
+    ST = st; speicher.schreiben("status", ST);
+    if (!queue.length) { delete lokal.laeuft; speicher.schreiben("lokal", lokal); }
+    online = true;
+    try { AS = await holen("stempel/unterschriften"); } catch (e) { AS = null; }
+  } catch (e) {
+    if (e.anmelden) return anmeldung();
+    if (e.server) { $("#app").innerHTML = `<div class="karte">${esc(e.message)}</div><button class="leise" onclick="abmelden()">Abmelden</button>`; return; }
+    online = false;
+  }
+  zeichnen();
+  if (online && ST && ST.vergessen && !queue.length) vergessenFragen();
+}
+
+// ---------------- Anzeige ----------------
+function zeichnen() {
+  if (!ST) { $("#app").innerHTML = `<div class="karte">Keine Verbindung zum Büro-PC. Bitte ins Werkstatt-WLAN gehen und neu laden.</div>`; return; }
+  $("#kopfName").textContent = ST.mitarbeiter.name;
+  const z = zustand(), l = laufend();
+  let dauer = "", was = "";
+  if (z === "arbeit" && l) {
+    const d = new Date(), seit = min(l.beginn), jetzt = d.getHours() * 60 + d.getMinutes();
+    dauer = hm(Math.max(0, jetzt - seit) / 60);
+    const aName = l.auftragsnr ? `${l.auftragsnr} ${l.auftrag || ""}` : (l.auftrag || auftragName(l.auftrag_id));
+    was = `${esc(aName || "Ohne Auftrag")}<small>${esc(taetName(l.kst, l.taetigkeit))} · seit ${esc(l.beginn)}</small>`;
+  }
+  const farbe = {arbeit: "var(--gruen)", pause: "var(--gelb)", feierabend: "#999", aus: "#999"}[z];
+  const titel = {arbeit: "Arbeit läuft", pause: "Pause", feierabend: "Feierabend", aus: "Nicht eingestempelt"}[z];
+  const heuteStd = ST.heute_std != null ? ST.heute_std : (ST.heute || []).reduce((s, x) => s + (x.stunden || 0), 0);
+  $("#app").innerHTML = `
+    ${!online ? `<div class="banner offline"><b>Offline</b> – kein Kontakt zum Büro-PC.${queue.length ? ` ${queue.length} Buchung${queue.length > 1 ? "en werden" : " wird"} gespeichert und übertragen, sobald das Handy wieder im WLAN ist.` : ""} <b>Diese Seite bitte offen lassen.</b></div>`
+      : queue.length ? `<div class="banner offline">${queue.length} Buchung(en) werden übertragen …</div>` : ""}
+    ${letzterFehler ? `<div class="banner fehler">${esc(letzterFehler)}</div>` : ""}
+    <div class="karte status">
+      <div class="zustand"><span class="punkt" style="background:${farbe}"></span>${titel}</div>
+      ${z === "arbeit" ? `<div class="dauer">${dauer}</div><div class="was">${was}</div>`
+        : `<div class="dauer" style="font-size:34px">${hm(heuteStd)}</div><div class="was"><small>heute gearbeitet${ST.heute_pause ? ` · Pause ${hm(ST.heute_pause)}` : ""}</small></div>`}
+    </div>
+    <div class="knoepfe ${z === "arbeit" ? "" : ""}">
+      ${z === "arbeit" ? `<button class="gross" id="bWechsel">Auftrag / Tätigkeit wechseln</button>
+          <div class="knoepfe zwei"><button class="gelb" id="bPause">Pause</button><button class="rot" id="bEnde">Feierabend</button></div>`
+        : z === "pause" ? `<button class="gruen gross" id="bWeiter">Weiter${ST.letzte ? `<div style="font-size:14px;font-weight:400;margin-top:4px">${esc(auftragName(ST.letzte.auftrag_id) || "Ohne Auftrag")} · ${esc(taetName(ST.letzte.kst, ST.letzte.taetigkeit))}</div>` : ""}</button>
+          <div class="knoepfe zwei"><button class="grau" id="bWechsel">Anderes</button><button class="rot" id="bEnde">Feierabend</button></div>`
+        : `<button class="gruen gross" id="bStart">${z === "feierabend" ? "Wieder beginnen" : "Arbeit beginnen"}</button>`}
+    </div>
+    ${planHtml()}
+    <div class="karte" style="margin-top:12px">
+      <div class="zahlen">
+        <div><span>Woche</span><b>${zahl(ST.woche_std)} h</b>${ST.inhaber ? "" : `<span>Soll bis heute ${zahl(ST.woche_soll)} h</span>`}</div>
+        ${ST.inhaber ? `<div><span>Pause heute</span><b>${hm(ST.heute_pause || 0)}</b></div>`
+          : `<div><span>Überstunden</span><b style="color:${ST.ueberstunden < 0 ? "var(--rot)" : "inherit"}">${ST.ueberstunden > 0 ? "+" : ""}${zahl(ST.ueberstunden)} h</b></div>`}
+        <div><span>Resturlaub</span><b>${zahl(ST.urlaub_rest, 1)} Tage</b>${ST.urlaub_geplant ? `<span>davon ${zahl(ST.urlaub_geplant, 1)} eingetragen</span>` : ""}</div>
+        <div><span>Heute</span><b>${zahl(heuteStd)} h</b></div>
+      </div>
+    </div>
+    <div class="karte"><h3>Heute</h3>
+      <ul class="liste">${(ST.heute || []).map(x => `<li><span class="zeit">${x.beginn}–${x.ende || "…"}</span><span>${esc(x.auftragsnr ? x.auftragsnr + " " + (x.auftrag || "") : x.taetigkeit || "Ohne Auftrag")}<br><span class="hinweis">${esc(taetName(x.kst, x.taetigkeit))}${x.quelle === "nachtrag" ? " · nachgetragen" : ""}</span></span><span class="std">${x.ende ? hm(x.stunden) : ""}</span></li>`).join("")
+        || `<li class="hinweis">noch nichts gestempelt</li>`}</ul></div>
+    ${AS && (AS.unterweisungen.length || AS.monatsbelege.length) ? `<div class="karte offen-sig"><h3>Offene Unterschriften</h3>
+      <p class="hinweis" style="margin:0 0 10px">${AS.unterweisungen.length ? `${AS.unterweisungen.length} Unterweisung(en)` : ""}${AS.unterweisungen.length && AS.monatsbelege.length ? " · " : ""}${AS.monatsbelege.length ? `${AS.monatsbelege.length} Monatsbeleg(e)` : ""}</p>
+      <button style="width:100%" id="mSig">✍ Jetzt ansehen und unterschreiben</button></div>` : ""}
+    <div class="menue">
+      <button class="leise" id="mNach">Zeit nachtragen</button><button class="leise" id="mUrlaub">Urlaub beantragen</button>
+      <button class="leise" id="mMonat">Mein Monat</button><button class="leise" id="mSicher">Sicherheit &amp; Erste Hilfe</button><button class="leise" id="mAb">Abmelden</button></div>`;
+  const b = id => $("#" + id);
+  if (b("bStart")) b("bStart").onclick = () => waehlen("Arbeit beginnen");
+  if (b("bWechsel")) b("bWechsel").onclick = () => waehlen("Wechseln");
+  if (b("bPause")) b("bPause").onclick = () => ereignis("pause");
+  if (b("bEnde")) b("bEnde").onclick = async () => { if (await frage("Feierabend stempeln?", "Feierabend", "rot")) ereignis("ende"); };
+  if (b("bWeiter")) b("bWeiter").onclick = () => { const x = ST.letzte || {}; ereignis("start", {auftrag_id: x.auftrag_id, kst: x.kst, taetigkeit: x.taetigkeit, titel: x.titel || 0}); };
+  $$("[data-plan]").forEach(x => x.onclick = () => waehlen(z === "arbeit" ? "Wechseln" : "Arbeit beginnen", +x.dataset.plan));
+  b("mNach").onclick = nachtragen; b("mUrlaub").onclick = urlaub; b("mMonat").onclick = monat; b("mAb").onclick = abmelden;
+  b("mSicher").onclick = sicherheit; if (b("mSig")) b("mSig").onclick = unterschriften;
+}
+
+// ---------------- Mein Plan (Termine, denen ich im Kalender zugeordnet bin) ----------------
+function planDatum(t) {
+  const f = s => new Date(s + "T12:00:00").toLocaleDateString("de-DE", {weekday: "short", day: "numeric", month: "numeric"});
+  return t.von === t.bis ? f(t.von) : `${f(t.von)} – ${f(t.bis)}`;
+}
+function planHtml() {
+  const p = ST.plan || [];
+  if (!p.length) return "";
+  const heute = p.filter(t => t.heute), spaeter = p.filter(t => !t.heute);
+  const eintrag = t => `<li><span style="flex:1"><b>${esc(t.auftragsnr ? t.auftragsnr + " " + (t.bezeichnung || "") : t.titel || t.typ)}</b><br>
+      <span class="hinweis">${esc(t.typ)}${t.titel && t.auftragsnr ? " · " + esc(t.titel) : ""}${t.kunde ? " · " + esc(t.kunde) : ""}${t.zeit_von ? " · " + esc(t.zeit_von) + (t.zeit_bis ? "–" + esc(t.zeit_bis) : "") : ""}${t.heute ? "" : " · " + planDatum(t)}</span>
+      ${t.notiz ? `<br><span class="hinweis">${esc(t.notiz)}</span>` : ""}</span>
+      ${t.heute && t.auftrag_id ? `<button class="leise" data-plan="${t.auftrag_id}" style="flex:0 0 auto;padding:8px 10px">Stempeln</button>` : ""}</li>`;
+  return `<div class="karte" style="margin-top:12px"><h3>Mein Plan</h3>
+    ${heute.length ? `<ul class="liste">${heute.map(eintrag).join("")}</ul>` : `<p class="hinweis">Für heute ist kein Termin eingeplant.</p>`}
+    ${spaeter.length ? `<h3 style="margin-top:10px">Nächste Tage</h3><ul class="liste">${spaeter.map(eintrag).join("")}</ul>` : ""}</div>`;
+}
+
+// ---------------- Auswahl Auftrag + Tätigkeit ----------------
+function ueber(titel, html) { $("#ueTitel").textContent = titel; $("#ueInhalt").innerHTML = html; $("#ueber").classList.add("offen"); $("#ueber").scrollTop = 0; }
+function zu() { $("#ueber").classList.remove("offen"); }
+$("#ueZu").onclick = zu;
+function waehlen(titel, vorAuftrag = null) {
+  if (!LISTEN) return toast("Auftragsliste noch nicht geladen – bitte kurz ins WLAN.", true);
+  let modus = "auftrag", auftrag = vorAuftrag ? LISTEN.auftraege.find(a => a.id === vorAuftrag) || null : null, suche = "", titelNr = 0;
+  const l = laufend() || ST.letzte || {};
+  const zuletzt = speicher.lesen("zuletzt", []);
+  const geplant = (ST.plan || []).filter(t => t.heute && t.auftrag_id).map(t => t.auftrag_id);
+  const male = () => {
+    const alle = LISTEN.auftraege;
+    const s = suche.toLowerCase();
+    const treffer = s ? alle.filter(a => `${a.nummer} ${a.bezeichnung} ${a.kunde}`.toLowerCase().includes(s))
+      : [...new Set([...geplant.map(id => alle.find(a => a.id === id)), ...zuletzt.map(id => alle.find(a => a.id === id)), ...alle].filter(Boolean))];
+    ueber(titel, `
+      <div class="reiter"><button data-m="auftrag" class="${modus === "auftrag" ? "an" : ""}">Auf Auftrag</button><button data-m="ohne" class="${modus === "ohne" ? "an" : ""}">Ohne Auftrag</button></div>
+      ${modus === "auftrag" ? `
+        ${auftrag ? `<button class="auftr gewaehlt" id="aWeg"><b>${esc(auftrag.nummer)} ${esc(auftrag.bezeichnung)}</b><small>${esc(auftrag.kunde)} · antippen zum Ändern</small></button>
+          ${(auftrag.titel || []).length ? `<h3>Titel</h3><div class="chips"><button data-ti="0" class="${titelNr ? "" : "gewaehlt"}">ohne Titel</button>${auftrag.titel.map(t => `<button data-ti="${t.nr}" class="${titelNr === t.nr ? "gewaehlt" : ""}">T${String(t.nr).padStart(2, "0")} ${esc(t.name)}</button>`).join("")}</div>` : ""}
+          <h3>Tätigkeit</h3><div class="chips">${LISTEN.taetigkeiten.produktiv.map(t => `<button data-k="${esc(t.kst)}" class="${l.kst === t.kst && l.auftrag_id === auftrag.id ? "gewaehlt" : ""}">${esc(t.name)}</button>`).join("")}</div>`
+        : `<input id="aSuche" placeholder="Auftrag suchen (Nummer, Name, Kunde)" value="${esc(suche)}" autocomplete="off">
+          <div style="margin-top:10px">${treffer.slice(0, 40).map(a => `<button class="auftr" data-a="${a.id}"><b>${esc(a.nummer)} ${esc(a.bezeichnung)}</b><small>${esc(a.kunde)}${a.status ? " · " + esc(a.status) : ""}${geplant.includes(a.id) && !s ? " · heute geplant" : zuletzt.includes(a.id) && !s ? " · zuletzt" : ""}</small></button>`).join("") || `<p class="hinweis">Kein Auftrag gefunden.</p>`}</div>`}`
+      : `<h3>Tätigkeit</h3><div class="chips">${LISTEN.taetigkeiten.gemein.map(t => `<button data-t="${esc(t)}">${esc(t)}</button>`).join("")}</div>`}`);
+    $$("[data-m]").forEach(x => x.onclick = () => { modus = x.dataset.m; male(); });
+    $$("[data-a]").forEach(x => x.onclick = () => { auftrag = alle.find(a => a.id === +x.dataset.a); titelNr = l.auftrag_id === auftrag.id ? (l.titel || 0) : 0; male(); });
+    $$("[data-ti]").forEach(x => x.onclick = () => { titelNr = +x.dataset.ti; male(); });
+    if ($("#aWeg")) $("#aWeg").onclick = () => { auftrag = null; male(); };
+    if ($("#aSuche")) { const i = $("#aSuche"); i.oninput = () => { suche = i.value; const pos = i.selectionStart; male(); const n = $("#aSuche"); n.focus(); n.setSelectionRange(pos, pos); }; }
+    $$("[data-k]").forEach(x => x.onclick = () => { zu(); ereignis("start", {auftrag_id: auftrag.id, kst: x.dataset.k, taetigkeit: "", titel: titelNr}); });
+    $$("[data-t]").forEach(x => x.onclick = () => { zu(); ereignis("start", {auftrag_id: null, kst: "", taetigkeit: x.dataset.t}); });
+  };
+  male();
+}
+
+// ---------------- vergessener Feierabend ----------------
+function vergessenFragen() {
+  const v = ST.vergessen;
+  ueber("Feierabend vergessen?", `<div class="karte"><p>Am <b>${datumDE(v.datum)}</b> wurde ab <b>${v.beginn}</b> gestempelt, aber kein Feierabend.</p>
+    <label>Wann war Feierabend?</label><input id="vgEnde" type="time" value="">
+    <button style="width:100%;margin-top:14px" id="vgOk">Speichern</button>
+    <p class="hinweis">Ist die Zeit nicht mehr bekannt, bitte im Büro Bescheid geben – dort kann sie korrigiert werden.</p></div>`);
+  $("#vgOk").onclick = async () => {
+    try { ST = await holen("stempel/vergessen", {method: "POST", body: {id: v.id, ende: $("#vgEnde").value}}); speicher.schreiben("status", ST); zu(); zeichnen(); toast("Gespeichert"); }
+    catch (e) { toast(e.message, true); }
+  };
+}
+
+// ---------------- Nachtragen, Urlaub, Monat ----------------
+function nachtragen() {
+  if (!online) return toast("Nachtragen geht nur im WLAN.", true);
+  ueber("Zeit nachtragen", `<div class="karte">
+    <label>Datum</label><input type="date" id="nDat" value="${heute()}" max="${heute()}">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><label>Von</label><input type="time" id="nVon"></div><div><label>Bis</label><input type="time" id="nBis"></div></div>
+    <label>Auftrag</label><select id="nAuf"><option value="">Ohne Auftrag</option>${LISTEN.auftraege.map(a => `<option value="${a.id}">${esc(a.nummer)} ${esc(a.bezeichnung)}</option>`).join("")}</select>
+    <label>Tätigkeit</label><select id="nTae"></select>
+    <label>Notiz</label><input id="nNot" placeholder="optional">
+    <button style="width:100%;margin-top:14px" id="nOk">Nachtragen</button>
+    <p class="hinweis">Für die letzten 14 Tage. Nachträge sind im Büro als solche markiert.</p></div>`);
+  const tae = () => { const a = $("#nAuf").value; $("#nTae").innerHTML = a ? LISTEN.taetigkeiten.produktiv.map(t => `<option value="k:${esc(t.kst)}">${esc(t.name)}</option>`).join("") : LISTEN.taetigkeiten.gemein.map(t => `<option value="t:${esc(t)}">${esc(t)}</option>`).join(""); };
+  $("#nAuf").onchange = tae; tae();
+  $("#nOk").onclick = async () => {
+    const t = $("#nTae").value;
+    try {
+      await holen("stempel/nachtrag", {method: "POST", body: {datum: $("#nDat").value, beginn: $("#nVon").value, ende: $("#nBis").value, auftrag_id: $("#nAuf").value ? +$("#nAuf").value : null,
+        kst: t.startsWith("k:") ? t.slice(2) : "", taetigkeit: t.startsWith("t:") ? t.slice(2) : "", notiz: $("#nNot").value}});
+      zu(); toast("Nachgetragen"); aktualisieren();
+    } catch (e) { toast(e.message, true); }
+  };
+}
+async function urlaub() {
+  if (!online) return toast("Geht nur im WLAN.", true);
+  let liste = [];
+  try { liste = await holen("stempel/abwesenheiten"); } catch (e) {}
+  ueber("Urlaub", `<div class="karte"><h3>Urlaub beantragen</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><label>Von</label><input type="date" id="uVon"></div><div><label>Bis</label><input type="date" id="uBis"></div></div>
+    <label><input type="checkbox" id="uHalb" style="width:auto"> nur halbe Tage</label>
+    <label>Notiz</label><input id="uNot" placeholder="optional">
+    <button style="width:100%;margin-top:14px" id="uOk">Beantragen</button></div>
+    <div class="karte"><h3>Meine Einträge</h3><ul class="liste">${liste.map(a => `<li><span>${esc(a.art_name)}<br><span class="hinweis">${datumDE(a.von)}${a.bis !== a.von ? " – " + datumDE(a.bis) : ""}${a.halbtag ? " (½)" : ""}</span></span><span class="std">${a.status === "genehmigt" ? "✓ genehmigt" : esc(a.status)}</span></li>`).join("") || `<li class="hinweis">keine</li>`}</ul></div>`);
+  $("#uVon").onchange = () => { if (!$("#uBis").value || $("#uBis").value < $("#uVon").value) $("#uBis").value = $("#uVon").value; };
+  $("#uOk").onclick = async () => {
+    try { await holen("stempel/urlaub", {method: "POST", body: {von: $("#uVon").value, bis: $("#uBis").value, halbtag: $("#uHalb").checked, notiz: $("#uNot").value}}); toast("Beantragt – das Büro bestätigt"); urlaub(); }
+    catch (e) { toast(e.message, true); }
+  };
+}
+async function monat(m) {
+  if (!online) return toast("Geht nur im WLAN.", true);
+  m = typeof m === "string" ? m : heute().slice(0, 7);
+  let d;
+  try { d = await holen("stempel/monat?monat=" + m); } catch (e) { return toast(e.message, true); }
+  const vor = (n) => { const x = new Date(+m.slice(0, 4), +m.slice(5, 7) - 1 + n, 1); return `${x.getFullYear()}-${pad(x.getMonth() + 1)}`; };
+  const MON = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+  ueber(`${MON[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}`, `
+    <div class="knoepfe zwei" style="margin-bottom:10px"><button class="grau" id="moZ">‹ Vormonat</button><button class="grau" id="moV">Folgemonat ›</button></div>
+    <div class="karte"><div class="zahlen"><div><span>Soll</span><b>${zahl(d.summe.soll)} h</b></div><div><span>Ist</span><b>${zahl(d.summe.ist)} h</b></div>
+      <div><span>Saldo Monat</span><b>${zahl(d.summe.saldo)} h</b></div><div><span>Überstunden</span><b>${zahl(d.konten.ueberstunden)} h</b></div></div></div>
+    <div class="karte"><ul class="liste monat">${d.tage.filter(t => t.soll || t.ist || t.feiertag || t.abw).map(t => `<li class="${t.wt === "Sa" || t.wt === "So" ? "we" : ""}"><span class="zeit">${t.wt} ${t.datum.slice(8)}.${t.datum.slice(5, 7)}.</span>
+      <span>${esc(t.feiertag || (t.abw ? d.abw_namen[t.abw] : ""))}${t.beginn ? `${t.beginn}–${t.ende || "…"}` : ""}</span><span class="std">${t.ist ? zahl(t.ist) + " h" : ""}</span></li>`).join("") || `<li class="hinweis">keine Einträge</li>`}</ul></div>`);
+  $("#moZ").onclick = () => monat(vor(-1)); $("#moV").onclick = () => monat(vor(1));
+  if (m < heute().slice(0, 7)) {
+    let sg = {};
+    try { sg = (await holen("stempel/monatsbeleg?monat=" + m)).signaturen || {}; } catch (e) {}
+    const x = sg.mitarbeiter;
+    $("#ueInhalt").insertAdjacentHTML("beforeend", `<div class="karte"><h3>Monat bestätigen</h3>${x && !x.geaendert ? `<p style="color:var(--gruen)">✓ Von dir unterschrieben am ${datumDE(x.zeit)} um ${x.zeit.slice(11, 16)} Uhr.</p>`
+      : `${x ? `<p style="color:var(--rot)">Die Zeiten wurden nach deiner Unterschrift geändert – bitte noch einmal bestätigen.</p>` : ""}<p class="hinweis">Mit der Unterschrift bestätigst du deine Arbeitszeiten, Abwesenheiten und Konten in diesem Monat.</p><button style="width:100%" id="moSig">✍ Monat unterschreiben</button>`}
+      <p class="hinweis" style="margin-bottom:0"><a href="/druck/monatsbeleg/${ST.mitarbeiter.id}/${m}" target="_blank">Monatsbeleg ansehen</a></p></div>`);
+    if ($("#moSig")) $("#moSig").onclick = async () => {
+      const s = await unterschreiben("Monat bestätigen", `<p>Ich bestätige meine Arbeitszeiten, Abwesenheiten und Konten für ${MON[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}.</p>`);
+      if (!s) return;
+      try { await holen("stempel/monatsbeleg", {method: "POST", body: {...s, monat: m}}); toast("Unterschrieben"); AS = await holen("stempel/unterschriften").catch(() => AS); monat(m); }
+      catch (e) { toast(e.message, true); }
+    };
+  }
+}
+
+// ---------------- Unterschreiben (Finger oder Stift) ----------------
+function sigPad(cv) {
+  const g = cv.getContext("2d"); let malt = false, leer = true, last = null;
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1; cv.width = r.width * dpr; cv.height = r.height * dpr; g.scale(dpr, dpr);
+  g.lineWidth = 2.4; g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = "#111";
+  const pt = e => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  cv.onpointerdown = e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); malt = true; last = pt(e); g.beginPath(); g.arc(last[0], last[1], 1, 0, 7); g.fill(); leer = false; };
+  cv.onpointermove = e => { if (!malt) return; e.preventDefault(); const p = pt(e); g.beginPath(); g.moveTo(last[0], last[1]); g.lineTo(p[0], p[1]); g.stroke(); last = p; };
+  cv.onpointerup = cv.onpointercancel = () => { malt = false; };
+  return {leer: () => leer, png: () => { const c = document.createElement("canvas"); c.width = cv.width; c.height = cv.height; const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(cv, 0, 0); return c.toDataURL("image/png"); }};
+}
+function unterschreiben(titel, text) {
+  return new Promise(res => {
+    const hg = document.createElement("div");
+    hg.className = "frage-hg";
+    hg.innerHTML = `<div class="frage-box">${text}<span class="hinweis">Hier unterschreiben:</span><canvas class="pad"></canvas>
+      <div class="knoepfe zwei"><button class="grau" data-f="0">Abbrechen</button><button class="gruen" data-f="1">✍ ${esc(titel.startsWith("Monat") ? "Unterschreiben" : "Bestätigen")}</button></div></div>`;
+    document.body.appendChild(hg);
+    const p = sigPad($(".pad", hg));
+    hg.querySelectorAll("[data-f]").forEach(b => b.onclick = () => {
+      if (b.dataset.f === "1" && p.leer()) return toast("Bitte im Feld unterschreiben.", true);
+      hg.remove(); res(b.dataset.f === "1" ? {png: p.png(), geraet: navigator.userAgent.slice(0, 180)} : null);
+    });
+  });
+}
+async function unterschriften() {
+  if (!online) return toast("Geht nur im WLAN.", true);
+  try { AS = await holen("stempel/unterschriften"); } catch (e) { return toast(e.message, true); }
+  const MON = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+  ueber("Offene Unterschriften", `
+    ${AS.unterweisungen.map(u => `<button class="auftr" data-uw="${u.id}"><b>Unterweisung: ${esc(u.titel)}</b><small>vom ${datumDE(u.datum)} · antippen zum Lesen und Bestätigen</small></button>`).join("")}
+    ${AS.monatsbelege.map(m => `<button class="auftr" data-mo="${m.monat}"><b>Monatsbeleg ${MON[+m.monat.slice(5, 7) - 1]} ${m.monat.slice(0, 4)}</b><small>${m.erneut ? "nach Änderung erneut bestätigen" : "Arbeitszeiten bestätigen"}</small></button>`).join("")}
+    ${!AS.unterweisungen.length && !AS.monatsbelege.length ? `<div class="karte">Alles unterschrieben. 👍</div>` : ""}`);
+  $$("[data-uw]").forEach(b => b.onclick = () => unterweisungZeigen(+b.dataset.uw));
+  $$("[data-mo]").forEach(b => b.onclick = () => monat(b.dataset.mo));
+}
+async function unterweisungZeigen(id) {
+  let u;
+  try { u = await holen("stempel/unterweisung/" + id); } catch (e) { return toast(e.message, true); }
+  ueber("Unterweisung", `<div class="karte uw"><h3>${esc(u.titel)}</h3><p class="hinweis">${datumDE(u.datum)} · ${esc(u.anlass)} · unterwiesen von ${esc(u.unterweiser)}</p>
+    ${u.inhalt.map(t => `<h3 style="margin-top:14px">${esc(t.titel)}</h3>${t.uwh ? `<a class="link" href="/arbeitsschutz/uwh/${esc(t.uwh)}.pdf" target="_blank" data-tafel>🖼 Bildtafel ansehen</a><div class="tafel"></div>` : ""}
+      ${(t.abschnitte || []).map(a => `${a.titel ? `<h4>${esc(a.titel)}</h4>` : ""}<ul>${(a.punkte || []).map(p => `<li>${esc(p)}</li>`).join("")}</ul>`).join("")}
+      ${(t.ba || []).map(b => `<a class="link" href="/druck/arbeitsschutz/ba/${b.id}" target="_blank">📄 Betriebsanweisung ${esc(b.titel)}</a>`).join("")}`).join("")}
+    ${u.ergaenzung ? `<h4>Ergänzungen</h4><p>${esc(u.ergaenzung)}</p>` : ""}</div>
+    ${u.unterschrieben ? `<div class="karte" style="color:var(--gruen)">✓ Von dir bestätigt am ${datumDE(u.unterschrieben)}.</div>` : `<button style="width:100%" id="uwOk">✍ Teilgenommen und verstanden</button>`}`);
+  if ($("#uwOk")) $("#uwOk").onclick = async () => {
+    const s = await unterschreiben("Unterweisung", `<p>Mit meiner Unterschrift bestätige ich, dass ich an der Unterweisung „${esc(u.titel)}“ vom ${datumDE(u.datum)} teilgenommen und den Inhalt verstanden habe.</p>`);
+    if (!s) return;
+    try { await holen("stempel/unterweisung/" + id, {method: "POST", body: s}); toast("Bestätigt – danke!"); unterschriften(); zeichnen(); }
+    catch (e) { toast(e.message, true); }
+  };
+}
+async function sicherheit() {
+  if (!online) return toast("Geht nur im WLAN.", true);
+  try { AS = await holen("stempel/unterschriften"); } catch (e) { return toast(e.message, true); }
+  ueber("Sicherheit & Erste Hilfe", `
+    <button style="width:100%;margin-bottom:12px" class="rot" id="vbNeu">✚ Erste-Hilfe-Leistung eintragen (Verbandbuch)</button>
+    <a class="link" href="/druck/arbeitsschutz/notfall" target="_blank">☎ Notfall-Rufnummern</a>
+    <div class="karte"><h3>Betriebsanweisungen</h3>${AS.betriebsanweisungen.map(b => `<a class="link" href="/druck/arbeitsschutz/ba/${b.id}" target="_blank"><b>${esc(b.titel)}</b><br><span class="hinweis">${esc(b.art_name)}</span></a>`).join("") || `<p class="hinweis">noch keine</p>`}</div>
+    <div class="karte"><h3>Gefahrstoffe</h3>${AS.gefahrstoffe.map(g => `<div style="padding:8px 0;border-bottom:1px solid var(--linie)"><b>${esc(g.name)}</b> ${g.ghs.map(c => `<img class="ghs" src="/arbeitsschutz/zeichen/${esc(c)}.png" alt="${esc(c)}">`).join("")}<br>
+      ${g.sdb ? `<a href="/api/arbeitsschutz/datei/${g.sdb}" target="_blank">Sicherheitsdatenblatt</a>` : ""}${g.tdb ? ` · <a href="/api/arbeitsschutz/datei/${g.tdb}" target="_blank">Merkblatt</a>` : ""}${g.ba ? ` · <a href="/druck/arbeitsschutz/ba/${g.ba}" target="_blank">Betriebsanweisung</a>` : ""}</div>`).join("") || `<p class="hinweis">keine erfasst</p>`}</div>`);
+  $("#vbNeu").onclick = verbandbuch;
+}
+function verbandbuch() {
+  const jetzt = lokalIso();
+  ueber("Erste Hilfe eintragen", `<div class="karte"><p class="hinweis">Jede Verletzung, auch eine kleine, wird eingetragen. Die Einträge sind vertraulich und nur für den Inhaber sichtbar.</p>
+    <label>Wann</label><input type="datetime-local" id="vbZeit" value="${jetzt}">
+    <label>Wer wurde verletzt?</label><input id="vbName" value="${esc(ST.mitarbeiter.name)}">
+    <label>Wo?</label><input id="vbOrt" placeholder="z. B. Bankraum, Baustelle">
+    <label>Was ist passiert?</label><textarea id="vbHerg" rows="2"></textarea>
+    <label>Art der Verletzung</label><input id="vbVerl" placeholder="z. B. Schnitt am Daumen">
+    <label>Zeugen</label><input id="vbZeug">
+    <label>Was wurde gemacht?</label><input id="vbMass" placeholder="z. B. Pflaster, gekühlt">
+    <label>Wer hat geholfen?</label><input id="vbHelf">
+    <button style="width:100%;margin-top:14px" id="vbOk">Eintragen</button></div>`);
+  $("#vbOk").onclick = async () => {
+    try {
+      await holen("stempel/verbandbuch", {method: "POST", body: {zeit: $("#vbZeit").value, name: $("#vbName").value, ort: $("#vbOrt").value, hergang: $("#vbHerg").value,
+        verletzung: $("#vbVerl").value, zeugen: $("#vbZeug").value, massnahmen: $("#vbMass").value, helfer: $("#vbHelf").value, hilfe_zeit: $("#vbZeit").value}});
+      zu(); toast("Eingetragen – gute Besserung!");
+    } catch (e) { toast(e.message, true); }
+  };
+}
+async function abmelden() {
+  if (queue.length && !await frage(`Es sind noch ${queue.length} Buchungen nicht übertragen. Trotzdem abmelden? Sie werden beim nächsten Anmelden desselben Mitarbeiters übertragen.`, "Abmelden", "rot")) return;
+  try { await fetch(BASIS + "/api/anmeldung/abmelden", {method: "POST"}); } catch (e) {}
+  ST = null; speicher.schreiben("status", null); anmeldung();
+}
+
+// ---------------- Start ----------------
+function uhr() { const d = new Date(); $("#uhr").textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+async function start() {
+  try {
+    const r = await fetch(BASIS + "/api/anmeldung", {cache: "no-store"}); const j = await r.json();
+    if (!j.benutzer) return anmeldung();
+    ICH = j.benutzer;
+    if (!ICH.mitarbeiter_id) { $("#app").innerHTML = `<div class="karte">Der Benutzer <b>${esc(ICH.login)}</b> ist keinem Mitarbeiter zugeordnet. Bitte im Büro unter Einstellungen › Benutzer verknüpfen lassen.</div><button class="leise" onclick="abmelden()">Abmelden</button>`; return; }
+    if (ST && ST.mitarbeiter && ST.mitarbeiter.id !== ICH.mitarbeiter_id) { ST = null; LISTEN = null; lokal = {}; speicher.schreiben("lokal", lokal); }
+    online = true;
+  } catch (e) {
+    online = false;   // offline gestartet: mit gespeichertem Stand weiter
+    if (!ST) { $("#app").innerHTML = `<div class="karte">Keine Verbindung zum Büro-PC. Ist das Handy im Werkstatt-WLAN?</div>`; return; }
+    zeichnen(); return;
+  }
+  await senden();
+  await aktualisieren(true);
+  // vom QR-Scan: /stempel?auftrag=ID öffnet gleich die Auswahl mit diesem Auftrag
+  const vor = +(new URLSearchParams(location.search).get("auftrag") || 0);
+  if (vor && LISTEN) { history.replaceState(null, "", location.pathname); waehlen(zustand() === "arbeit" ? "Wechseln" : "Arbeit beginnen", vor); }
+}
+uhr();
+setInterval(() => { uhr(); if (zustand() === "arbeit" && !$("#ueber").classList.contains("offen")) zeichnen(); }, 30000);
+setInterval(() => { if (queue.length) senden(); else if (!online) aktualisieren(); }, 20000);
+addEventListener("online", () => { senden(); aktualisieren(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && ICH) { senden().then(() => aktualisieren()); } });
+start();
+</script>
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Datenschutz-Dokumentation</title>
+<style>
+@page{size:A4;margin:20mm 18mm 18mm 22mm}
+:root{--dunkel:#3b3530;--akzent:#9a6b3f;--linie:#d9d0c4}
+*{box-sizing:border-box}
+body{margin:0;font:10.5pt/1.5 "Segoe UI",system-ui,Arial,sans-serif;color:#1d1d1d;background:#8a8a8a}
+.blatt{background:#fff;max-width:210mm;margin:16px auto;padding:20mm 18mm 20mm 22mm;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+.leiste{position:sticky;top:0;background:var(--dunkel);color:#fff;padding:8px 16px;display:flex;gap:10px;align-items:center;font:14px system-ui;z-index:2}
+.leiste button{font:inherit;padding:4px 12px;border:0;border-radius:5px;background:#b8834f;color:#fff;cursor:pointer}
+h1{font-size:20pt;margin:0 0 4mm;color:var(--dunkel)}
+h2{font-size:13.5pt;margin:9mm 0 2mm;color:var(--dunkel);border-bottom:1.5pt solid var(--akzent);padding-bottom:1mm;break-after:avoid}
+h3{font-size:11pt;margin:5mm 0 1.5mm;color:var(--dunkel);break-after:avoid}
+p{margin:0 0 2.5mm;text-align:justify;hyphens:auto}
+table{border-collapse:collapse;width:100%;margin:2mm 0 4mm;font-size:9.5pt;break-inside:auto}
+th{background:#ece6dd;text-align:left;padding:1.5mm 2mm;border:.5pt solid var(--linie);vertical-align:top}
+td{padding:1.5mm 2mm;border:.5pt solid var(--linie);vertical-align:top}
+tr{break-inside:avoid}
+.ein{background:#fff4c2;padding:0 1mm;border-radius:2px}
+.deckblatt{min-height:230mm;display:flex;flex-direction:column;justify-content:space-between}
+.deckblatt .titel{margin-top:40mm}
+.deckblatt .titel .unter{font-size:13pt;color:#555;margin-top:3mm}
+.klein{font-size:9pt;color:#555}
+.kasten{border:1pt solid var(--akzent);background:#faf6f0;padding:3mm 4mm;margin:3mm 0 4mm;break-inside:avoid}
+.neu{break-before:page}
+.inhalt ol{margin:0;padding-left:6mm}.inhalt li{margin:.6mm 0}
+.unterschrift{display:grid;grid-template-columns:1fr 1fr;gap:12mm;margin-top:14mm}
+.unterschrift div{border-top:.6pt solid #000;padding-top:1mm;font-size:9pt}
+[data-f]{min-width:12mm;display:inline-block}td[data-f]{display:table-cell}
+[contenteditable=true]:focus{outline:2px solid #b8834f;background:#fff}
+.ein.gefuellt{background:#e8f3e6}
+@media print{.ein.gefuellt{background:none;border-bottom:none}}
+@media print{body{background:#fff}.leiste{display:none}.blatt{box-shadow:none;margin:0;padding:0;max-width:none}.ein{background:none;border-bottom:.5pt dotted #999}}
+</style>
+</head>
+<body>
+<div class="leiste"><b>Datenschutz-Dokumentation (DSGVO)</b><span style="flex:1"></span><span id="vdStatus">Gelb markierte Stellen anklicken und ausfüllen – wird automatisch im Programm gespeichert</span><button onclick="window.print()">Drucken / als PDF speichern</button></div>
+<div class="blatt">
+<section class="deckblatt">
+<div class="titel">
+<h1>Datenschutz-Dokumentation</h1>
+<div class="unter">Verzeichnis von Verarbeitungstätigkeiten, technische und organisatorische Maßnahmen, Löschkonzept und Abläufe nach DSGVO für den Betrieb (Website, Büroprogramm „Jahresring“, Archiv, Buchhaltung)</div>
+<p style="margin-top:14mm"><b><span data-e="firma">[Firma]</span></b><br>Inhaber <span data-e="firma_inhaber">[Inhaber]</span><br><span data-e="anschrift"></span><br><span data-e="kontakt"></span></p>
+</div>
+<table>
+<tr><th style="width:38%">Dokumentversion</th><td><span class="ein" data-f="g_version">[1.0]</span></td></tr>
+<tr><th>Stand</th><td><span class="ein" data-f="g_stand">[Datum, Programmversion; ersetzt …]</span></td></tr>
+<tr><th>Verantwortlicher (Art. 4 Nr. 7 DSGVO)</th><td><span data-e="firma_inhaber">[Inhaber]</span>, Inhaber <span data-e="firma">[Firma]</span></td></tr>
+<tr><th>Datenschutzbeauftragter</th><td>nicht benannt – nicht erforderlich, da weniger als 20 Personen ständig mit der automatisierten Verarbeitung beschäftigt sind (§ 38 Abs. 1 BDSG) und keine Kerntätigkeit nach Art. 37 Abs. 1 DSGVO</td></tr>
+<tr><th>Zuständige Aufsichtsbehörde</th><td><span class="ein" data-f="g_behoerde">[Landesbeauftragte(r) für den Datenschutz des Bundeslands, Anschrift]</span></td></tr>
+<tr><th>Rechtsgrundlagen</th><td>DSGVO, BDSG, TDDDG, UWG § 7 (Werbung per E-Mail), AO/HGB (Aufbewahrung)</td></tr>
+</table>
+</section>
+
+<section class="neu inhalt">
+<h2>Inhalt</h2>
+<ol>
+<li>Zweck und Aufbau</li>
+<li>Überblick: Systeme und Datenflüsse</li>
+<li>Verzeichnis von Verarbeitungstätigkeiten (Art. 30 DSGVO)</li>
+<li>Empfänger und Auftragsverarbeiter (Art. 28 DSGVO)</li>
+<li>Technische und organisatorische Maßnahmen (Art. 32 DSGVO)</li>
+<li>Löschkonzept</li>
+<li>Rechte der betroffenen Personen (Art. 12–22 DSGVO)</li>
+<li>Informationspflichten (Art. 13 DSGVO)</li>
+<li>Datenschutzverletzungen (Art. 33, 34 DSGVO)</li>
+<li>Datenschutz-Folgenabschätzung (Art. 35 DSGVO)</li>
+<li>Beschäftigtendatenschutz</li>
+<li>Änderungshistorie und Freigabe</li>
+</ol>
+<p class="klein" style="margin-top:4mm">Gelb markierte Stellen anklicken und ausfüllen; sie werden im Programm gespeichert. Danach „Drucken / als PDF speichern“, unterschreiben und ablegen. Die Dokumentation ist bei Änderungen fortzuschreiben und mindestens jährlich zu prüfen. Sie ersetzt keine Rechtsberatung.</p>
+</section>
+
+<h2>1. Zweck und Aufbau</h2>
+<p>Diese Dokumentation weist nach, dass <span data-e="firma">[Firma]</span> personenbezogene Daten mit dem Programm „Jahresring“ rechtmäßig, zweckgebunden, sparsam und sicher verarbeitet (Rechenschaftspflicht, Art. 5 Abs. 2 DSGVO). Sie enthält das Verzeichnis von Verarbeitungstätigkeiten, die technischen und organisatorischen Maßnahmen, das Löschkonzept und die Abläufe für Auskunft, Löschung und Datenpannen. Beschrieben sind alle Verarbeitungen des Betriebs: die im Programm Jahresring und die in den übrigen Systemen (Website mit Kontaktformular, E-Mail, Archiv, Buchhaltung, Aufmaß- und CAD-Programme, Cloud-Speicher). Die Buchführung erledigt der Inhaber selbst; ein Steuerberater ist derzeit nicht beauftragt.</p>
+
+<h2>2. Überblick: Systeme und Datenflüsse</h2>
+<table>
+<tr><th style="width:28%">System</th><th>Welche Daten, wo gespeichert</th></tr>
+<tr><td>Jahresring (Büro-PC)</td><td>Alle Daten in der Datenbank <i>daten\buero.db</i> und im Datenordner (Belege, Anhänge, Bilder, E-Mail-Kopien, Unterschriften, Sicherungen). Läuft nur auf dem Büro-PC im geschäftlichen Benutzerkonto; erreichbar am PC und – wenn eingeschaltet – im eigenen WLAN, nicht aus dem Internet. Keine Übertragung an den Programmentwickler oder Dritte, keine Telemetrie, keine Cookies außer dem Anmeldecookie.</td></tr>
+<tr><td>Handys/Tablets im WLAN</td><td>Stempeluhr, Rapport, Unterschriften, Scan: Anzeige im Browser; gespeichert wird nur auf dem PC. Die Stempeluhr puffert Stempelungen ohne WLAN kurz im Browser des Handys.</td></tr>
+<tr><td>E-Mail-Konto bei <span class="ein" data-f="g_mail">[Anbieter]</span> (E-Mail-Programm und Jahresring)</td><td>Versand von Belegen, Rapporten, Briefen, Glückwünschen und Rundmails per SMTP; Lesen von Posteingang, Gesendet und „Kundenkontakt“ per IMAP (nur lesend). Kopien der zugeordneten Mails liegen im Datenordner.</td></tr>
+<tr><td>Projektordner <span class="ein" data-f="g_proj">[lokal / im Cloud-Speicher …]</span></td><td>Arbeitskopien von Angeboten, Rechnungen, Rapporten, Aufmaßen, Plänen und Fotos je Auftrag.</td></tr>
+<tr><td><span class="ein" data-f="g_sys1a">[Archiv / DMS]</span></td><td><span class="ein" data-f="g_sys1b">[welche Dokumente, Index, Zugriff]</span></td></tr>
+<tr><td><span class="ein" data-f="g_sys2a">[Buchhaltung]</span></td><td><span class="ein" data-f="g_sys2b">[Programm oder Steuerberater, welche Daten]</span></td></tr>
+<tr><td><span class="ein" data-f="g_sys3a">[Aufmaß, CAD]</span></td><td><span class="ein" data-f="g_sys3b">[Geräte, welche Daten, Export]</span></td></tr>
+<tr><td><span class="ein" data-f="g_sys4a">[Website, Hoster]</span></td><td><span class="ein" data-f="g_sys4b">[Server-Logdaten, Kontaktformular]</span></td></tr>
+<tr><td><span class="ein" data-f="g_sys5a">[weitere Systeme]</span></td><td><span class="ein" data-f="g_sys5b">[……]</span></td></tr>
+<tr><td>Google Kalender (optional)</td><td>Das Programm liest die eingetragenen Kalender über die geheime iCal-Adresse nur lesend und zeigt Termine an; es überträgt keine Daten zu Google.</td></tr>
+<tr><td>Bank</td><td>SEPA-Überweisungsdateien (Name, IBAN von Lieferanten und Mitarbeitern) werden im Onlinebanking hochgeladen.</td></tr>
+</table>
+
+<h2>3. Verzeichnis von Verarbeitungstätigkeiten (Art. 30 Abs. 1 DSGVO)</h2>
+<p class="klein">Rechtsgrundlagen: b = Vertrag/vorvertragliche Maßnahmen (Art. 6 Abs. 1 b), c = rechtliche Pflicht (Art. 6 Abs. 1 c, z. B. § 147 AO, § 14b UStG, § 41 EStG, § 17 MiLoG), f = berechtigtes Interesse (Art. 6 Abs. 1 f), a = Einwilligung (Art. 6 Abs. 1 a), § 26 BDSG = Beschäftigungsverhältnis.</p>
+<table>
+<tr><th style="width:17%">Tätigkeit / Zweck</th><th style="width:15%">Betroffene</th><th style="width:22%">Datenkategorien</th><th style="width:10%">Rechtsgrundlage</th><th style="width:14%">Empfänger</th><th>Löschfrist</th></tr>
+<tr><td>Betrieb der Website (Hosting)</td><td>Website-Besucher</td><td>IP-Adresse, Browserdaten, Zugriffszeitpunkte</td><td>f</td><td><span class="ein" data-f="g_host1">[Hoster, ggf. Drittland und Garantie]</span></td><td>i. d. R. 30 Tage (Logdaten)</td></tr>
+<tr><td>Kontaktformular</td><td>Website-Besucher, Interessenten</td><td>Name, E-Mail-Adresse, Nachrichtentext</td><td>b, f</td><td><span class="ein" data-f="g_host2">[Hoster]</span>, E-Mail-Anbieter</td><td>so lange wie zur Bearbeitung nötig; wird daraus ein Angebot, wie Geschäftsbriefe (6 Jahre)</td></tr>
+<tr><td>Kunden- und Auftragsverwaltung, Angebote, Kalkulation, Aufträge</td><td>Kunden, Ansprechpartner, Interessenten</td><td>Name, Anrede, Titel, Firma, Anschriften (Rechnung/Lieferung), Telefon, E-Mail, Kundengruppe, Konditionen, Auftragsinhalte, Maße, Fotos des Objekts, Notizen</td><td>b, f</td><td>–</td><td>Interessenten ohne Auftrag: 3 Jahre nach letztem Kontakt löschen; mit Auftrag siehe Löschkonzept</td></tr>
+<tr><td>Rechnungen, offene Posten, Mahnwesen</td><td>Kunden</td><td>Rechnungsdaten, Zahlungseingänge, Mahnungen, Leitweg-ID, USt-IdNr.</td><td>b, c</td><td>Finanzverwaltung bei Außenprüfung; E-Mail-Anbieter beim Versand</td><td>8 Jahre (Buchungsbelege) bzw. 10 Jahre (Aufzeichnungen) ab Jahresende</td></tr>
+<tr><td>Digitale Unterschriften (AB, Lieferschein, Abnahme, Rapport, Monatsbeleg, Unterweisung, Freigaben im Arbeitsschutz)</td><td>Kunden, Mitarbeiter</td><td>Unterschriftsbild, Name in Druckschrift, Ort, Zeitpunkt, angemeldeter Benutzer, Gerät (Browserkennung), Prüfsumme des unterschriebenen Inhalts, optional Standort des Tablets (nur wenn der Browser es erlaubt und bestätigt wird)</td><td>b, c, f (Beweis)</td><td>–</td><td>wie das unterschriebene Dokument (Belege 6 bzw. 8 Jahre, Monatsbelege wie die Lohnunterlagen, Unterweisungen siehe Arbeitsschutz)</td></tr>
+<tr><td>Eingangsrechnungen aus dem Postfach (Vorschläge zum Buchen)</td><td>Lieferanten, deren Mitarbeiter</td><td>Absenderadresse, Betreff, Rechnungsanhang (PDF/XML), Rechnungsnummer, Betrag</td><td>b, c</td><td>–</td><td>gebucht: mit der Eingangsrechnung (8 Jahre); ignoriert: mit Testdaten bzw. auf Wunsch</td></tr>
+<tr><td>Korrespondenz: E-Mails, Anrufnotizen, Briefe</td><td>Kunden, Lieferanten, deren Mitarbeiter</td><td>Absender, Empfänger, Betreff, Text, Anhangsnamen, Kopie der E-Mail (.eml), Rufnummer, Gesprächsnotiz</td><td>b, f, c (Handelsbriefe)</td><td>–</td><td>6 Jahre (Handelsbriefe), sonst mit dem Kunden</td></tr>
+<tr><td>Glückwunschmails zum Geburtstag</td><td>Kunden</td><td>Geburtsdatum, E-Mail</td><td>a <span class="ein" data-f="d8">[Einwilligung einholen und vermerken]</span></td><td>E-Mail-Anbieter</td><td>Geburtsdatum löschen bei Widerruf oder mit dem Kunden</td></tr>
+<tr><td>Rundmails (z. B. Weihnachtsgruß, Neuigkeiten)</td><td>Kunden</td><td>Name, E-Mail, Sperrvermerk „keine Rundmails“</td><td>f i. V. m. § 7 Abs. 3 UWG (Bestandskunden, ähnliche Leistungen, Hinweis auf Widerspruch) oder a</td><td>E-Mail-Anbieter; alle Empfänger in BCC</td><td>Sperrvermerk dauerhaft bis Löschung des Kunden</td></tr>
+<tr><td>Lieferanten, Eingangsrechnungen, Zahlungsaufträge</td><td>Lieferanten, Ansprechpartner</td><td>Name, Anschrift, Kontakt, Bankverbindung, Rechnungen</td><td>b, c</td><td>Bank</td><td>8 Jahre (Belege), Stammdaten bei Ende der Geschäftsbeziehung + Fristen</td></tr>
+<tr><td>Zeiterfassung, Abwesenheiten, Lohnvorbereitung</td><td>Beschäftigte, Auszubildende</td><td>Name, Personalnummer, Arbeitszeiten (Beginn, Ende, Pausen, Auftrag, Tätigkeit), Urlaub, Berufsschule, Arbeitsunfähigkeit „krank“ (ohne Diagnose), Zeitkonto, Zahlbeträge, Bankverbindung</td><td>§ 26 BDSG, c; Krank: Art. 9 Abs. 2 b DSGVO i. V. m. § 26 Abs. 3 BDSG</td><td>Steuerberater (Lohn), Bank</td><td>Arbeitszeitnachweise mind. 2 Jahre (§ 17 MiLoG), als Lohnunterlagen bis 6 Jahre; Abwesenheitsgrund „krank“ nach Ablauf des Folgejahres auf „Abwesend“ prüfen</td></tr>
+<tr><td>Arbeitsschutz: Unterweisungen, Nachweise, Gefährdungsbeurteilungen</td><td>Beschäftigte, Auszubildende, Ersthelfer und Beauftragte</td><td>Name, Teilnahme und Unterschrift je Unterweisung, Inhalt und Datum, Geburtsdatum (nur zur Erkennung Jugendlicher, § 29 JArbSchG), Aus- und Fortbildungen mit Bescheinigung (z. B. Ersthelfer), Beteiligte an Gefährdungsbeurteilungen</td><td>c (§ 12 ArbSchG, § 4 DGUV Vorschrift 1, § 14 GefStoffV, § 29 JArbSchG), § 26 BDSG</td><td>Berufsgenossenschaft und Aufsichtsbehörde bei Prüfung</td><td>gesetzlich nicht festgelegt; empfohlen während der Beschäftigung und drei Jahre danach (Beweis); Geburtsdatum nach dem 18. Geburtstag leeren</td></tr>
+<tr><td>Verbandbuch (Erste-Hilfe-Dokumentation)</td><td>verletzte Beschäftigte, Ersthelfer, Zeugen</td><td>Zeitpunkt, Ort, Name, Hergang, Art und Umfang der Verletzung (Gesundheitsdaten), Erste-Hilfe-Maßnahmen, Ersthelfer, Zeugen</td><td>c, Art. 9 Abs. 2 b DSGVO i. V. m. § 22 Abs. 1 Nr. 1 b BDSG und § 24 Abs. 6 DGUV Vorschrift 1</td><td>Berufsgenossenschaft nur bei einer Unfallanzeige</td><td>5 Jahre nach dem Eintrag; lesen und löschen nur der Inhaber</td></tr>
+<tr><td>Rapporte, Bautagebuch, Fotos</td><td>Kunden, Mitarbeiter, ggf. zufällig abgebildete Personen</td><td>Datum, Stunden je Person, Tätigkeiten, Wetter, Fotos der Baustelle</td><td>b, f</td><td>Kunde (auf Wunsch)</td><td>mit dem Auftrag; Personen auf Fotos vermeiden oder unkenntlich machen</td></tr>
+<tr><td>Aufmaß, Zeichnung, Arbeitsvorbereitung</td><td>Kunden</td><td>Name, Objektanschrift, Maße, handschriftliche Notizen (gescannt), Fotos, Pläne</td><td>b</td><td>–</td><td>mit dem Auftrag; im Archiv nach dem Löschkonzept, im Projektordner manuell</td></tr>
+<tr><td>Dokumentenarchiv</td><td>Kunden, Lieferanten, deren Mitarbeiter</td><td>alle archivierten Belege, E-Mails und Dokumente mit Indexdaten</td><td>c, f</td><td>–</td><td>nach den Aufbewahrungsfristen (6, 8 bzw. 10 Jahre), mit Löschprotokoll</td></tr>
+<tr><td>Buchführung</td><td>Kunden, Lieferanten</td><td>Namen, Rechnungsbeträge, Bankumsätze</td><td>c</td><td>Finanzamt (ELSTER), Bank (Umsatzabruf)</td><td>Bücher und Aufzeichnungen 10 Jahre, Buchungsbelege 8 Jahre</td></tr>
+<tr><td>Benutzer, Anmeldung, Protokoll</td><td>Benutzer des Programms</td><td>Login, Name, E-Mail-Adresse (für „Passwort vergessen“), Passwort-Hash, Rolle, Sitzungen (Gerät/Browser), Protokolleinträge mit Benutzer</td><td>f, c (GoBD-Protokoll)</td><td>–</td><td>Sitzungen nach Ablauf; Protokoll 10 Jahre</td></tr>
+<tr><td>Datensicherung</td><td>alle oben</td><td>vollständige Kopien</td><td>f, Art. 32</td><td>Cloud-Anbieter der Sicherung</td><td>rollierend (30 Tagessicherungen, 12 Monatssicherungen, 15 Vollsicherungen); Kopien auf verschlüsselter externer Festplatte und in verschlüsselter Cloud; Jahresarchive bis Ablauf der Fristen</td></tr>
+</table>
+<p>Daten werden nicht in Drittländer übermittelt, außer über die in Abschnitt 4 genannten Dienste (ggf. mit Garantien nach Art. 46 DSGVO bzw. Angemessenheitsbeschluss EU-US Data Privacy Framework). Eine automatisierte Entscheidungsfindung oder Profilbildung (Art. 22) findet nicht statt; die Kundenstatistik wertet nur eigene Umsätze aus.</p>
+
+<h2>4. Empfänger und Auftragsverarbeiter (Art. 28 DSGVO)</h2>
+<table>
+<tr><th style="width:26%">Dienstleister</th><th style="width:30%">Zweck</th><th>Vertrag / Prüfung</th></tr>
+<tr><td><span class="ein" data-f="g_host3">[Website-Hoster]</span> (Website-Hosting, Kontaktformular)</td><td>Bereitstellung der Website, Weiterleitung der Formularanfragen</td><td><span class="ein" data-f="d16">[AV-Vertrag akzeptiert am …; ggf. Drittland und Garantie]</span></td></tr>
+<tr><td>E-Mail-Anbieter <span class="ein" data-f="g_mail2">[Anbieter]</span></td><td>Postfach, Versand und Empfang</td><td><span class="ein" data-f="d10">[AV-Vertrag abgeschlossen am … / Hinweis: private Freemail-Konten bieten meist keinen AV-Vertrag – für die geschäftliche Nutzung ein Geschäftskonto mit AV-Vertrag verwenden]</span></td></tr>
+<tr><td>Cloud-Speicher <span class="ein" data-f="g_cloud">[Anbieter]</span></td><td>Projektordner <span class="ein" data-f="d11">[und externe Sicherung / Sicherung bei: ……]</span></td><td><span class="ein" data-f="d12">[Datenschutznachtrag/DPA des Anbieters, Speicherort EU, Drittlandbezug USA: EU-US Data Privacy Framework bzw. Standardvertragsklauseln]</span></td></tr>
+<tr><td>Google (Kalender, optional)</td><td>eigene Termine</td><td><span class="ein" data-f="d13">[nur Termine ohne Kundendaten / Google Workspace mit Auftragsverarbeitungsbedingungen]</span></td></tr>
+<tr><td>IT-Betreuung / Programmentwicklung</td><td>Updates, Fernwartung</td><td><span class="ein" data-f="d14">[keine Fernwartung mit Zugriff auf Echtdaten / AV-Vertrag mit …]</span>. Updates werden als Programmdateien ohne Daten ausgeliefert; Echtdaten verlassen den PC dafür nicht.</td></tr>
+<tr><td>Steuerberater</td><td><span class="ein" data-f="g_stb">[Name, Umfang (z. B. Buchführung, Lohnabrechnung) oder keiner]</span></td><td>eigene Verantwortung als Berufsgeheimnisträger (kein Auftragsverarbeiter)</td></tr>
+<tr><td>Finanzamt</td><td>Steuererklärungen (ELSTER), Außenprüfung</td><td>gesetzliche Pflicht, eigene Verantwortung</td></tr>
+<tr><td>Bank</td><td>Zahlungsverkehr</td><td>eigene Verantwortung</td></tr>
+</table>
+
+<h2>5. Technische und organisatorische Maßnahmen (Art. 32 DSGVO)</h2>
+<p>Schutzbedarf: normal (Kontakt-, Auftrags- und Rechnungsdaten); erhöht für Beschäftigtendaten (Arbeitsunfähigkeit, Bankverbindung, Lohnbeträge). „Programm“ = im Jahresring umgesetzt, „Betrieb“ = organisatorisch durch den Inhaber umzusetzen.</p>
+<table>
+<tr><th style="width:20%">Ziel</th><th style="width:48%">Maßnahme</th><th style="width:12%">Umgesetzt durch</th><th>Status</th></tr>
+<tr><td>Zutritt</td><td>Büro-PC und Sicherungsmedien verschlossen bzw. unter Aufsicht des Inhabers</td><td>Betrieb</td><td class="ein" data-f="d20"></td></tr>
+<tr><td>Zugang</td><td>eigenes geschäftliches Windows-Konto mit starkem Kennwort, getrennt von privaten Konten (kein Zugriff auf geschäftliche Daten); automatische Bildschirmsperre, Windows-Updates und Virenschutz aktiv; Zwei-Faktor-Authentifizierung für E-Mail und Cloud; geschäftliche Scans nur im Konto des Inhabers</td><td>Betrieb</td><td class="ein" data-f="d21"></td></tr>
+<tr><td>Verschlüsselung des Datenträgers</td><td>BitLocker (oder Geräteverschlüsselung) für das Laufwerk mit dem Programmordner; Kopien auf dem externen Sicherungsziel verschlüsselt das Programm mit dem Sicherungskennwort (getrennt vom PC aufbewahrt). Wichtig, weil die Datenbank und die Sicherungen auf dem PC selbst nicht verschlüsselt sind.</td><td>Betrieb</td><td class="ein" data-f="d22"></td></tr>
+<tr><td>Anmeldung im Programm</td><td>persönliche Benutzer, Passwort als gesalzener Hash (PBKDF2-SHA256, 200 000 Runden), Sperre nach Fehlversuchen, Sitzungscookie HttpOnly und SameSite=Strict (über https zusätzlich Secure), Sitzungen in der Datenbank nur als Hash gespeichert, Abmelden möglich</td><td>Programm</td><td>umgesetzt</td></tr>
+<tr><td>Zugriff (Berechtigungen)</td><td>Rollen und Rechte je Bereich (kein Zugriff / ansehen / bearbeiten), Preise nur mit Preisrecht, Werkstatt sieht nur Werkstattpapiere, Einstellungen, Service und Vorlagen nur für den Inhaber; Werkstatt und Mitarbeiter erhalten aus den Einstellungen nur Auswahllisten; Benutzer ohne Kunden- bzw. Lieferantenrecht erhalten von Kunden nur Name, Anschrift und Erreichbarkeit und von Lieferanten keine Bankdaten, Lohn-Empfänger nur mit Personalrecht, Kalender-Sicht je Benutzer einschränkbar (Terminarten, nur eigene Termine, externer Kalender, Abwesenheiten der Kollegen), Rücksicherung und Anonymisierung nur Inhaber; Verbandbuch (Gesundheitsdaten) nur für den Inhaber lesbar, Nachweise zu Personen nur mit Arbeitsschutzrecht; Sicherheitsdatenblätter und freigegebene Betriebsanweisungen für alle Beschäftigten</td><td>Programm</td><td>umgesetzt</td></tr>
+<tr><td>Netz</td><td>Programm standardmäßig nur am PC erreichbar; WLAN-Freigabe nur auf Wunsch, nur im privaten Netz (Firewallregel „Private Netzwerke“), kein Zugriff aus dem Internet, keine Portfreigabe im Router. Verbindung im WLAN verschlüsselt (https mit eigenem, auf das lokale Netz beschränktem Zertifikat, Einstellung „nur https“); zusätzlich WLAN mit WPA2/WPA3 und eigenem Kennwort, Gäste nur im Gästenetz</td><td>Programm / Betrieb</td><td class="ein" data-f="d23"></td></tr>
+<tr><td>Schutz im Browser</td><td>Abweisung ändernder Anfragen fremder Webseiten (Herkunftsprüfung), keine Einbettung in fremde Seiten, kein MIME-Raten, kein Weitergeben der Adresse an fremde Seiten, Bereinigung von Rich-Text-Eingaben</td><td>Programm</td><td>umgesetzt</td></tr>
+<tr><td>Zugangsdaten</td><td>Mail-Passwort wird nie an den Browser zurückgegeben und unter Windows mit DPAPI an das Benutzerkonto gebunden verschlüsselt gespeichert; Übertragung zum Mailserver nur verschlüsselt (TLS)</td><td>Programm</td><td>umgesetzt</td></tr>
+<tr><td>Weitergabe</td><td>Mails mit Belegen nur an die beim Kunden hinterlegten Adressen; Rundmails in BCC; Datenauskunft als Datei an den Betroffenen</td><td>Programm / Betrieb</td><td>umgesetzt</td></tr>
+<tr><td>Eingabekontrolle</td><td>Zeitstempel und Benutzer an Datensätzen; unveränderbares Protokoll mit Hash-Kette für Festschreibungen, Löschungen, Rücksicherungen, Datenauskünfte, Anonymisierungen und Passwort-Zurücksetzungen; Zugriffsprotokoll des Archivs</td><td>Programm</td><td>umgesetzt</td></tr>
+<tr><td>Verfügbarkeit</td><td>stündliche Zwischensicherung und automatische Tagessicherung der Datenbank, vollständige Sicherungen mit Prüfung, verschlüsselte Kopie auf externes Ziel, Sicherung des Projektordners mit früheren Fassungen, Wiederherstellung beim Start bei beschädigter Datenbank; Probe-Rücksicherung <span class="ein" data-f="d24">[einmal jährlich]</span>; wöchentliche Prüfung des Backup-Logs; Sicherung auch von Archiv und Buchhaltung; USV/Überspannungsschutz <span class="ein" data-f="d25">[ja/nein]</span></td><td>Programm / Betrieb</td><td class="ein" data-f="d26"></td></tr>
+<tr><td>Website</td><td>TLS/SSL, DDoS-Schutz und Zugangskontrolle beim Hoster; Kontaktformular nur mit den nötigen Feldern (Datenminimierung)</td><td>Betrieb</td><td>umgesetzt</td></tr>
+<tr><td>Trennung</td><td>Testdaten nur vor Echtbetrieb; Werkstatt-Benutzer ohne Kunden-, Preis- und Korrespondenzdaten</td><td>Programm</td><td>umgesetzt</td></tr>
+<tr><td>Speicherort</td><td>Programm- und Datenordner nicht in synchronisierten Cloud-Ordnern (Warnung auf der Startseite); empfohlen C:\Jahresring</td><td>Programm / Betrieb</td><td class="ein" data-f="d27"></td></tr>
+<tr><td>Überprüfung</td><td>jährliche Prüfung dieser Dokumentation, der Benutzer und Rechte, der Löschfristen</td><td>Betrieb</td><td class="ein" data-f="d28"></td></tr>
+</table>
+
+<h2>6. Löschkonzept</h2>
+<p>Grundsatz: Daten werden gelöscht, sobald der Zweck entfällt und keine Aufbewahrungspflicht entgegensteht (Art. 17 Abs. 1 a, Abs. 3 b DSGVO). Die steuer- und handelsrechtlichen Fristen beginnen mit dem Ende des Kalenderjahres, in dem die Unterlage entstanden ist. Während einer laufenden Frist wird statt gelöscht gesperrt (Kunde auf „inaktiv“, keine Rundmails).</p>
+<table>
+<tr><th style="width:28%">Daten</th><th style="width:20%">Frist</th><th>Verfahren im Programm</th></tr>
+<tr><td>Interessenten ohne Auftrag</td><td>3 Jahre nach letztem Kontakt (mit versandtem Angebot: 6 Jahre)</td><td>Ohne Auftrag und ohne geschäftliche E-Mails oder versendete Briefe: Kunde löschen (Notizen, Anhänge und Gesprächsnotizen werden mit gelöscht, Protokolleintrag). Gibt es E-Mails oder Briefe (Handelsbriefe) oder eine Anfrage bzw. ein Angebot, sperrt das Programm das Löschen; der Kunde wird auf inaktiv gesetzt und nach Ablauf der 6 Jahre anonymisiert.</td></tr>
+<tr><td>Kunden mit Aufträgen</td><td>Rechnungen: 10 Jahre nach Ende des Belegjahres (sicherer Wert; Buchungsbelege 8 Jahre, Aufzeichnungen 10 Jahre); nur Angebote, AB, Lieferscheine, E-Mails: 6 Jahre. Maßgeblich ist das späteste Fristende.</td><td>„Anonymisieren …“ beim Kunden (nur Inhaber): prüft Frist und offene Posten, entfernt Name, Anschrift, Kontakt, Notizen, Korrespondenz, Anhänge, Unterschriften und archivierte Beleg-PDFs; Zahlen bleiben. Projektordner manuell löschen (Pfad wird angezeigt).</td></tr>
+<tr><td>Angebote, AB, Mahnungen, geschäftliche E-Mails</td><td>6 Jahre</td><td>über die Anonymisierung des Kunden; im Archiv löschen; Postfach beim Anbieter entsprechend aufräumen</td></tr>
+<tr><td>Geburtsdatum, Rundmail-Einwilligung</td><td>bei Widerruf sofort</td><td>Feld leeren bzw. „keine Rundmails“ setzen</td></tr>
+<tr><td>Beschäftigtendaten (Zeiten, Abwesenheiten)</td><td>Zeitnachweise 2 Jahre (MiLoG), Lohnunterlagen 6 Jahre, steuerlich relevante 8–10 Jahre</td><td>derzeit keine Beschäftigten; ausgeschiedene Mitarbeiter auf inaktiv, Fristen jährlich prüfen</td></tr>
+<tr><td>Verbandbuch</td><td>5 Jahre nach dem Eintrag</td><td>Arbeitsschutz › Erste Hilfe &amp; Notfall: Einträge älter als fünf Jahre lassen sich löschen; die Übersicht weist darauf hin</td></tr>
+<tr><td>Unterweisungsnachweise, Nachweise zu Personen</td><td>empfohlen während der Beschäftigung und drei Jahre danach</td><td>Nachweise unter Beauftragte &amp; Nachweise löschen; abgeschlossene Unterweisungen bleiben als Nachweis unverändert</td></tr>
+<tr><td>Geburtsdatum eines Mitarbeiters</td><td>nach dem 18. Geburtstag</td><td>im Mitarbeiterstamm leeren (nur für den Jugendarbeitsschutz nötig)</td></tr>
+<tr><td>Fotos, Bautagebuch, Rapporte</td><td>mit dem Auftrag</td><td>über die Anonymisierung des Kunden (Rapport-Unterschriften und Namen); Fotos im Projektordner manuell</td></tr>
+<tr><td>Sicherungen</td><td>rollierend; Jahresarchive bis Ablauf der längsten Frist der enthaltenen Daten</td><td>Tagessicherungen 30 Tage, Monatssicherungen 12 Monate, danach automatisch gelöscht. In einer zurückgespielten Sicherung enthaltene, bereits gelöschte Daten sind danach erneut zu löschen.</td></tr>
+<tr><td>Protokoll (Journal)</td><td>10 Jahre</td><td>unveränderbar; enthält nur Kundennummer und Vorgang, keine Inhalte</td></tr>
+</table>
+<p><b>Altbestand aus früheren Programmen:</b> Kunden, die beim Start des Echtbetriebs schon im Programm sind oder später importiert werden, stammen aus früheren Programmen (z. B. einem anderen Branchenprogramm); ihre Rechnungen und Briefe liegen dort und unterliegen der Aufbewahrung. Das Programm setzt bei ihnen „Aufbewahren bis“ auf das Jahresende + 10 Jahre; bis dahin sind Löschen und Anonymisieren gesperrt. Ist die letzte Rechnung im alten Programm bekannt, trägt der Inhaber beim Kunden das passende Datum ein (Jahr der Rechnung + 10, 31.12.; Kunden ganz ohne frühere Rechnung: + 6 Jahre bei Angeboten/Briefen, sonst sofort möglich). Jede Änderung steht im Protokoll.</p>
+<p>Jährliche Löschprüfung im <span class="ein" data-f="d31">[Januar]</span>: Kundenliste nach letzter Aktivität sichten, Interessenten löschen, Kunden nach Ablauf der Frist anonymisieren, abgelaufene Dokumente im Archiv löschen, manuelles Löschprotokoll führen und archivieren, Ergebnis in Abschnitt 12 vermerken.</p>
+
+<h2>7. Rechte der betroffenen Personen</h2>
+<table>
+<tr><th style="width:24%">Recht</th><th>Umsetzung</th></tr>
+<tr><td>Auskunft (Art. 15)</td><td>Kunde › „Datenauskunft“ › „Brief an den Kunden“ erstellt einen Brief mit allen gespeicherten Daten (Stammdaten, Aufträge, Belege, Schriftverkehr, Notizen, Termine, Dateien, Rapporte) sowie Zweck, Empfängern, Speicherdauer, Herkunft und Rechten. Nach Prüfung drucken oder per E-Mail senden; der Versand steht als Nachweis in der Korrespondenz, die Erstellung im Protokoll. Ergänzend Archiv, Projektordner und Postfach prüfen. Frist: ein Monat.</td></tr>
+<tr><td>Datenübertragbarkeit (Art. 20)</td><td>„Datenauskunft“ › „Datei für die Datenübertragung“ (JSON, maschinenlesbar) – nur auf ausdrücklichen Wunsch.</td></tr>
+<tr><td>Berichtigung (Art. 16)</td><td>Stammdaten ändern; bereits erstellte Belege bleiben unverändert (Pflicht zur Unveränderbarkeit), bei Rechnungen ggf. Korrektur per Storno.</td></tr>
+<tr><td>Löschung (Art. 17)</td><td>siehe Löschkonzept; während laufender Aufbewahrungsfristen Sperre statt Löschung, dem Betroffenen mitteilen.</td></tr>
+<tr><td>Einschränkung (Art. 18)</td><td>Kunde auf inaktiv setzen, „keine Rundmails“, Vermerk in Notizen.</td></tr>
+<tr><td>Widerspruch (Art. 21)</td><td>gegen Werbung: „keine Rundmails“ sofort setzen; der Kunde erscheint dann nicht mehr in der Empfängerliste.</td></tr>
+</table>
+<p>Anfragen werden in der Korrespondenz des Kunden notiert (Datum, Art, Erledigung). Zuständig: <span data-e="firma_inhaber">[Inhaber]</span>.</p>
+
+<h2>8. Informationspflichten (Art. 13 DSGVO)</h2>
+<p>Kunden werden bei der ersten Kontaktaufnahme bzw. mit dem Angebot über die Verarbeitung informiert: <span class="ein" data-f="d40">[Datenschutzerklärung auf der Website … / Hinweis im Angebotstext bzw. in den AGB]</span>. Mustertext für Angebote/AGB:</p>
+<div class="kasten">„Ihre Daten (Name, Anschrift, Kontaktdaten, Auftragsdaten) verarbeiten wir zur Erstellung des Angebots, zur Durchführung des Auftrags und zur Rechnungsstellung (Art. 6 Abs. 1 b DSGVO) sowie zur Erfüllung gesetzlicher Aufbewahrungspflichten (Art. 6 Abs. 1 c DSGVO, 8–10 Jahre). Eine Weitergabe erfolgt nur, soweit nötig, an Lieferanten, Banken und Behörden. Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit und Widerspruch sowie auf Beschwerde bei der Aufsichtsbehörde. Verantwortlich: <span data-e="firma">[Firma]</span>, <span data-e="firma_inhaber">[Inhaber]</span>, <span data-e="anschrift">[Anschrift]</span>, <span data-e="kontakt">[Kontakt]</span>.“</div>
+<p>Besucher der Website werden durch die Datenschutzerklärung <span class="ein" data-f="g_web">[auf www.…]</span> informiert (Hosting, Kontaktformular). Beschäftigte erhalten ein eigenes Informationsblatt zur Zeiterfassung (Abschnitt 11) <span class="ein" data-f="d41">[ausgehändigt am …]</span>.</p>
+
+<h2>9. Datenschutzverletzungen (Art. 33, 34 DSGVO)</h2>
+<p>Beispiele: Verlust oder Diebstahl des Büro-PCs, einer Sicherungsplatte oder eines Tablets mit offener Sitzung; Fehlversand einer Rechnung an einen falschen Empfänger; Schadsoftware/Verschlüsselungstrojaner; unbefugter Zugriff im WLAN.</p>
+<p><b>Ablauf:</b> 1. sofort eindämmen (Passwörter ändern, Sitzungen beenden durch Passwortwechsel, Gerät vom Netz, Mailpasswort beim Anbieter ändern); 2. Sachverhalt, Zeitpunkt, betroffene Daten und Personen notieren; 3. Risiko bewerten; 4. bei Risiko für die Betroffenen innerhalb von <b>72 Stunden</b> Meldung an die zuständige Aufsichtsbehörde (Online-Formular); 5. bei hohem Risiko Betroffene benachrichtigen; 6. jeden Vorfall – auch ohne Meldung – in Abschnitt 12 dokumentieren. Ein verschlüsselter Datenträger (BitLocker) senkt das Risiko bei Verlust erheblich.</p>
+
+<h2>10. Datenschutz-Folgenabschätzung (Art. 35 DSGVO)</h2>
+<p>Nicht erforderlich: Es handelt sich um übliche Verarbeitungen eines Handwerksbetriebs ohne umfangreiche Verarbeitung besonderer Kategorien, ohne systematische Überwachung und ohne Profilbildung. Die Angabe „krank“ bei Abwesenheiten betrifft wenige Beschäftigte, enthält keine Diagnose und ist für die Entgeltfortzahlung erforderlich. Die Zeiterfassung dient der gesetzlichen Arbeitszeitaufzeichnung, nicht der Leistungs- oder Verhaltenskontrolle; eine Ortung findet nicht statt.</p>
+
+<h2>11. Beschäftigtendatenschutz</h2>
+<p><span class="ein" data-f="g_ma">[Gilt seit … / ab der ersten Einstellung]</span> Die Stempeluhr erfasst Beginn, Ende, Pausen, Auftrag und Tätigkeit. Es werden keine Standortdaten der Handys erfasst; beim Unterschreiben eines Belegs auf dem Tablet kann optional der Standort des Tablets abgelegt werden (nur nach Bestätigung im Browser). Jeder Mitarbeiter sieht seine eigenen Zeiten und Konten; Zeiten anderer sieht nur, wer das Personalrecht hat. Krankmeldungen werden nur als Abwesenheitsart ohne Diagnose erfasst; AU-Bescheinigungen werden nicht im Programm abgelegt. <span class="ein" data-f="d50">[Betriebsrat: keiner]</span>. Beschäftigte sind auf die Vertraulichkeit verpflichtet <span class="ein" data-f="d51">[Verpflichtungserklärung am …]</span>.</p>
+
+<h2 class="neu">12. Änderungshistorie, Prüfungen und Vorfälle</h2>
+<table>
+<tr><th style="width:15%">Datum</th><th>Änderung, Prüfung oder Vorfall</th><th style="width:16%">Kürzel</th></tr>
+<tr><td class="ein" data-f="d60"></td><td class="ein" data-f="d61"></td><td class="ein" data-f="d62"></td></tr>
+<tr><td class="ein" data-f="d63"></td><td class="ein" data-f="d64"></td><td class="ein" data-f="d65"></td></tr>
+<tr><td class="ein" data-f="d66"></td><td class="ein" data-f="d67"></td><td class="ein" data-f="d68"></td></tr>
+</table>
+<h3>Freigabe</h3>
+<p>Ich habe diese Dokumentation geprüft; sie beschreibt die Verarbeitung zutreffend und wird bei Änderungen fortgeschrieben.</p>
+<div class="unterschrift"><div>Ort, Datum</div><div><span data-e="firma_inhaber">[Inhaber]</span>, Inhaber</div></div>
+</div>
+<script>
+// Platzhalter ausfüllen: Eingaben werden in den Einstellungen des Programms gespeichert (nur Inhaber/Einstellungsrecht)
+(async () => {
+  const st = document.getElementById("vdStatus");
+  const felder = [...document.querySelectorAll("[data-f]")];
+  const vorgabe = new Map(felder.map(el => [el.dataset.f, el.innerHTML]));
+  let werte = {};
+  try {
+    const r = await fetch("/api/einstellungen", {credentials: "same-origin"});
+    if (!r.ok) throw new Error("nicht angemeldet");
+    const j = await r.json();
+    werte = j.datenschutzdoku || {};
+    // Firmenangaben aus den Einstellungen (Einstellungen › Firma)
+    const an = String(j.firma_anschrift || "").split("\n").map(x => x.trim()).filter(Boolean).join(", ");
+    const ko = [j.firma_telefon && "Tel. " + j.firma_telefon, j.firma_email, j.firma_web].filter(Boolean).join(" · ");
+    const fw = {firma: j.firma, firma_inhaber: j.firma_inhaber, anschrift: an, kontakt: ko};
+    document.querySelectorAll("[data-e]").forEach(el => { if (fw[el.dataset.e]) el.textContent = fw[el.dataset.e]; });
+    if (j.firma) document.title += " · " + j.firma;
+  } catch (e) { st.textContent = "Zum Ausfüllen bitte zuerst im Programm anmelden"; return; }
+  const zeigen = el => { const v = werte[el.dataset.f]; if (v) { el.textContent = v; el.classList.add("gefuellt"); } };
+  felder.forEach(el => { zeigen(el); el.contentEditable = "true"; el.spellcheck = true;
+    el.addEventListener("focus", () => { if (!werte[el.dataset.f]) { el.textContent = ""; } });
+    el.addEventListener("blur", async () => {
+      const t = el.textContent.trim();
+      if (t === (werte[el.dataset.f] || "")) { if (!t) el.innerHTML = vorgabe.get(el.dataset.f); return; }
+      werte[el.dataset.f] = t; if (!t) { delete werte[el.dataset.f]; el.innerHTML = vorgabe.get(el.dataset.f); el.classList.remove("gefuellt"); } else el.classList.add("gefuellt");
+      try {
+        const r = await fetch("/api/einstellungen", {method: "PUT", credentials: "same-origin", headers: {"Content-Type": "application/json"}, body: JSON.stringify({datenschutzdoku: werte})});
+        if (!r.ok) throw new Error((await r.json()).fehler || r.status);
+        st.textContent = "gespeichert ✓ " + new Date().toLocaleTimeString("de-DE", {hour: "2-digit", minute: "2-digit"});
+      } catch (e) { st.textContent = "Nicht gespeichert: " + e.message; }
+    });
+    el.addEventListener("keydown", e => { if (e.key === "Enter" && el.tagName === "SPAN") { e.preventDefault(); el.blur(); } });
+  });
+})();
+</script>
+</body>
+</html>

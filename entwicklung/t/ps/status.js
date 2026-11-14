@@ -1,0 +1,25 @@
+const { chromium } = require('playwright'); const U='http://127.0.0.1:8799';
+(async () => { const b = await chromium.launch(); const p = await (await b.newContext({viewport:{width:1300,height:900}, locale:'de-DE'})).newPage(); const f=[]; p.on('pageerror',e=>f.push(e.message));
+  await p.goto(U+'/'); await p.waitForTimeout(600);
+  await p.fill('[name=name]','Jonas'); await p.fill('[name=login]','jonas'); await p.fill('[name=passwort]','geheim123'); await p.fill('[name=passwort2]','geheim123'); await p.click('button[type=submit]'); await p.waitForTimeout(1200);
+  const api = (m, pfad, body) => p.evaluate(async ([m,pfad,body]) => { const r = await fetch('/api/'+pfad,{method:m,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}); const j = await r.json().catch(()=>({})); return r.ok ? j : {FEHLER:j.fehler}; }, [m,pfad,body]);
+  const k = await api('POST','kunden',{kurzname:'Test'}); const a = await api('POST','auftraege',{kunde_id:k.id,bezeichnung:'Tisch'});
+  console.log('ohne Status „Geliefert“ in der Liste:', (await api('PUT','auftraege/'+a.id,{lieferung:'2026-11-10'})).status);
+  await api('PUT','auftraege/'+a.id,{lieferung:''});
+  await api('PUT','einstellungen',{auftragsstatus:["Anfrage","Angebot","Auftrag","Fertigung","Montage","Geliefert","Nacharbeit","Abgerechnet","Erledigt","Abgesagt"]});
+  console.log('Fertigung-Datum:', (await api('PUT','auftraege/'+a.id,{fertigung:'2026-11-13'})).status);
+  console.log('Geliefert-Datum:', (await api('PUT','auftraege/'+a.id,{lieferung:'2026-11-20'})).status);
+  console.log('Fertigung-Datum geändert (nicht zurück):', (await api('PUT','auftraege/'+a.id,{fertigung:'2026-11-12'})).status);
+  console.log('Status von Hand + Datum im selben Zug:', (await api('PUT','auftraege/'+a.id,{status:'Auftrag', lieferung:'2026-11-21'})).status);
+  console.log('Datum geleert:', (await api('PUT','auftraege/'+a.id,{lieferung:''})).status);
+  await api('PUT','einstellungen',{status_automatik:{auftrag:{datum_lieferung:''},position:{}}});
+  console.log('abgeschaltet:', (await api('PUT','auftraege/'+a.id,{lieferung:'2026-11-22'})).status);
+  await api('PUT','einstellungen',{status_automatik:{auftrag:{},position:{}}});
+  // Oberfläche
+  const a2 = await api('POST','auftraege',{kunde_id:k.id,bezeichnung:'Schrank'});
+  await p.goto(U+'/#/auftrag/'+a2.id); await p.waitForTimeout(1200);
+  await p.fill('[data-f=fertigung]','2026-11-13'); await p.dispatchEvent('[data-f=fertigung]','change'); await p.waitForTimeout(1500);
+  console.log('UI Status nach Datum:', await p.inputValue('[data-f=status]'));
+  const h = await api('GET','auftraege/'+a2.id+'/historie'); console.log('Historie:', JSON.stringify(h).slice(0,200));
+  await p.goto(U+'/#/einstellungen/kunden'); await p.waitForTimeout(1000); console.log('Einstellung sichtbar:', await p.locator('[data-art=datum_fertigung]').inputValue(), '/', await p.locator('[data-art=datum_lieferung]').inputValue());
+  console.log('fehler', f); await b.close(); })();

@@ -1,0 +1,599 @@
+# Jahresring – Technische Dokumentation
+
+Beschreibt den aktuellen Programmstand (Version unter Einstellungen › Service › Infos). Zielgruppe: Softwareentwickler, die das Programm warten, prüfen oder erweitern.
+
+Ergänzende Dokumente im Programm: Benutzerhandbuch (`static/hilfe/handbuch.html`, im Programm über „?“ bzw. F1), Verfahrensdokumentation nach GoBD (`static/hilfe/verfahrensdokumentation.html`), Änderungsprotokoll (`LIESMICH.txt`).
+
+---
+
+## 1. Überblick
+
+Jahresring ist eine Einzelplatz-Webanwendung für einen Tischlereibetrieb: Kunden, Aufträge mit Kalkulation nach dem Zuschlagsverfahren, Belege (Angebot bis Schlussrechnung, E-Rechnung), offene Posten und Mahnwesen, Lieferanten, Eingangsrechnungen und SEPA-Zahlungen, Materialstamm und Lager, Werkstattpapiere, Zuschnitt, Rapporte, Fertigungsleitstand, Kalender, Mitarbeiter mit Zeiterfassung und Lohnzahlungen.
+
+Architektur in einem Satz: Ein Python-Prozess startet einen `ThreadingHTTPServer` (nur Standardbibliothek), hält die Daten in einer SQLite-Datei und liefert eine Single-Page-Anwendung aus Vanilla-JavaScript aus; PDFs erzeugt ein headless Edge/Chrome, der die Druckansicht des eigenen Servers rendert.
+
+| Schicht | Technik |
+|---|---|
+| Server | Python ≥ 3.8, nur Standardbibliothek; mitgeliefert in `lib/`: `pypdf` (BSD), `segno` (BSD) |
+| Datenbank | SQLite 3 (`daten/buero.db`), Zugriff über `sqlite3` mit `row_factory = sqlite3.Row` |
+| Oberfläche | eine HTML-Datei (`static/index.html`) plus Skripte in `static/*.js`, kein Build-Schritt, kein Framework |
+| PDF | Edge/Chrome `--headless=new --print-to-pdf` auf `/druck/…`, `/papier/…`; Nachbearbeitung mit `pdfseiten.py` und `pypdf` |
+| Betrieb | Windows 10/11, Start über `start.bat`, Taskleistensymbol (`tray.py`), optional Autostart |
+
+Bewusste Entscheidungen: keine Abhängigkeiten außer Python (Installation beim Kunden ohne pip), alle Bezeichner und Texte auf Deutsch (Fachsprache des Betriebs), Daten und Programm strikt getrennt (`daten/` wird bei Updates nicht angefasst).
+
+## 2. Verzeichnisstruktur
+
+```
+Jahresring/               (Programmordner)
+├── app.py                 Server, Routing, Datenbank-Schema, Großteil der Fachlogik (Aufträge, Belege, PDFs, OP, Zahlungen …)
+├── benutzer.py            Benutzer, Sitzungen, Rollen, Rechteprüfung, Preisfilter
+├── kalkulation.py         Positionskalkulation, Kalkulationsvorgaben (Werkstoffe, Beschläge, Löhne, Zuschläge)
+├── personal.py            Mitarbeiter, Zeiten, Stempeluhr, Abwesenheiten, Konten, Monatsbeleg, Lohnzahlung
+├── material.py            Materialstamm, Sets, Lagerbewegungen, Auftragskosten
+├── werkzeuge.py           Werkzeugverzeichnis, Import
+├── arbeitsschutz.py      Gefährdungsbeurteilungen, Betriebsanweisungen, Unterweisungen, Gefahrstoffe, Verbandbuch, Druckseiten
+├── arbeitsschutz_vorlagen.json  aus den Unterlagen der Berufsgenossenschaft erzeugte Vorlagen
+├── unterschrift.py       digitale Unterschriften (Bild, Zeitpunkt, Prüfsumme des Inhalts)
+├── montage.py             Rapporte mit Unterschrift, Übernahme in Zeiten/Kosten/Notizen
+├── projekte.py          Projekte als Klammer über mehrere Aufträge, Summen, Soll/Ist-Aggregation, Nachkalkulation
+├── korrespondenz.py     E-Mail-Verlauf (IMAP Posteingang/Gesendet, nur lesend), Anrufe, Notizen; Hintergrundprüfung
+├── bautagebuch.py       Bautagebuch je Auftrag mit Fotos (daten/bautagebuch)
+├── reste.py               gemeinsames Platten-/Restelager mit dem Zuschnittprogramm, Beschaffung, Etiketten
+├── werkstatt.py           Werkstattpapiere und Auswertungen (HTML), Zuschnittdaten
+├── erechnung.py           ZUGFeRD/XRechnung erzeugen (CII), PDF/A-3-Einbettung, GiroCode
+├── eingangsrechnung.py    Eingangsrechnungen lesen (CII, UBL, ZUGFeRD 1/2, Text-PDF)
+├── mahnwesen.py           Mahnstufen, Zinsen, Mahnungs-HTML
+├── mailversand.py         SMTP-Versand, Ablage im IMAP-Ordner „Gesendet“
+├── kalender.py            iCal lesen (Google), iCal-Export
+├── kundenimport.py        CSV/XLSX/vCard lesen (u. a. gelb markierte Excel-Zeilen erkennen)
+├── stuecklistenimport.py  CSV-Stücklisten (CSV-Format mit 22 Feldern, optional mit Werkstoffbezeichnung)
+├── adressen.py            Anschrift/Briefanrede aus Einzelfeldern
+├── service.py             Infos, Datensicherung, Rücksicherung, Relationencheck
+├── protokoll.py           unveränderbares Protokoll (Journal) mit Hash-Kette, Echtbetrieb
+├── export.py              Belegpaket (Steuerberater) und Datenträgerüberlassung nach Beschreibungsstandard
+├── pdfseiten.py           Seitenzahlen in fertige PDFs stempeln (inkrementelles Update, ohne Fremdpakete)
+├── tray.py                Windows-Taskleistensymbol (ctypes)
+├── lib/                   pypdf, segno, sRGB.icc
+├── static/                Oberfläche (siehe Abschnitt 8), Stempeluhr, Zuschnittprogramm, Hilfe
+├── vorlagen_start/        mitgelieferte Briefbogen-/AGB-Vorlagen (SVG + Original-AGB-PDF)
+├── docs/                  diese Dokumentation
+├── start.bat, einrichten.bat, Handy-Freigabe.bat/.ps1
+├── LIESMICH.txt           Änderungsprotokoll je Version (UTF-8, CRLF)
+└── daten/                 (nicht im Auslieferungs-Zip) Datenbank, Archive, Sicherungen
+```
+
+`daten/` enthält: `buero.db`, `belege/JJJJ/` (Archiv-PDFs, XRechnung), `mahnungen/JJJJ/`, `eingangsrechnungen/`, `anhaenge/`, `bilder/` (Original + Druckfassungen `_k/_m/_g`), `vorlagen/` (Briefbogen, AGB inkl. Original-PDF), `montage/` (Unterschriften, PDFs), `backup/` (Tagessicherungen `buero_JJJJ-MM-TT.db`, Vollsicherungen `Sicherung_*.zip`), `tmp/`, `browser-profil/` (Profil des headless Browsers), `protokoll.txt`, `zuschnitt.html` (veraltet), Logo/Unterschrift.
+
+## 3. Start und Konfiguration
+
+`start.bat` sucht ein echtes `python.exe` (nicht den Windows-Store-Alias) und startet `app.py`. `main()` macht in dieser Reihenfolge: ggf. Neustart ohne Konsolenfenster mit `pythonw` (`im_hintergrund_neu_starten`), Umleitung von stdout/stderr nach `daten/protokoll.txt`, `init_db()`, `vorlagen_einrichten()`, `backup()` (Tagessicherung), Server binden, Programmfenster öffnen, Taskleistensymbol.
+
+| Einstellung | Wirkung |
+|---|---|
+| Umgebungsvariable `BUERO_PORT` | Port (Standard 8765) |
+| Umgebungsvariable `BUERO_BROWSER` | Pfad zu Edge/Chrome für die PDF-Erzeugung (sonst automatische Suche) |
+| Argument `kein-browser` / `--kein-browser` | kein Programmfenster öffnen (Autostart ohne Fenster, Tests) |
+| Argument `--konsole` | im Vordergrund mit Konsole laufen (Fehlersuche) |
+| Einstellung `netzwerk` (DB) | bindet an `0.0.0.0` statt `127.0.0.1`; Programmfenster am PC öffnet immer maximiert (`--start-maximized`) unter `http://localhost:<Port>` (`pc_adresse()`, sicherer Kontext für Web Bluetooth); einmaliger Umzug von der LAN-Adresse: `app_fenster()` öffnet, solange `daten/umzug_localhost.erledigt` fehlt, `http://<LAN-IP>:<Port>/umzug.html`, die Seite schickt `localStorage` per `POST /api/umzug` (nur vom PC selbst) an den Server und springt nach `localhost/umzug.html?t=…`; `GET /api/umzug/<t>` (einmalig, 5 min, nur localhost) liefert die Daten und setzt das Sitzungscookie der alten Adresse, vorhandene Werte bleiben, `POST /api/umzug/fertig` legt die Markierungsdatei an |
+
+Der Server bindet unter Windows mit `SO_EXCLUSIVEADDRUSE` (`BueroServer`), damit kein zweiter Prozess denselben Port belegt; ist der Port belegt, öffnet der zweite Start nur das Fenster der laufenden Instanz.
+
+## 4. Anfrageverarbeitung
+
+```
+Handler.do_GET/POST/PUT/DELETE
+  └─ verarbeiten(methode)                    Anmeldung und grobe Rechte
+       ├─ /api/anmeldung…  → anmeldung()     Einrichten, Login, Logout, Passwort
+       ├─ statische Dateien, /api/version, /api/logo → öffentlich
+       ├─ Anfrage vom PC mit ?intern=<INTERN> (oder im Referer) → ohne Login (PDF-Erzeugung)
+       ├─ Sitzungscookie „jr_sitzung“ → benutzer.sitzung_benutzer() sonst 401 bzw. Umleitung
+       ├─ roh_recht(pfad)                    Rechte für /druck, /papier, /liste, Dateien
+       └─ _verarbeiten(methode)
+            ├─ Sonderrouten (PDF, Druckansichten, Dateien, Zuschnitt, Etiketten …)
+            ├─ statisch()                     alles außer /api/
+            └─ /api/<ressource>/… → benutzer.pruefen() → api() → JSON
+                 Nachfilter: Preise entfernen (ohne Preisrecht), sensible Einstellungen ausblenden
+```
+
+`api(methode, teile, q, daten)` öffnet eine Verbindung (`with verbindung() as con` → Commit am Ende, Rollback bei Ausnahme) und verteilt nach `teile[0]` (Ressource), `teile[1]` (ID) und `teile[2]` (Unterressource). Einige Ressourcen delegieren an Module (`personal.api`, `material.api`, `werkzeuge.api`, `benutzer.api`, `montage.api`). Antworten sind JSON; Fehler werden als `{"fehler": "…"}` mit HTTP-Status geliefert. Fehlerklassen: `ApiFehler` (app.py, mit `code`), `benutzer.Fehler`, `personal.Fehler`, `material.Fehler`, `werkzeuge.Fehler`, `montage.Fehler`, `reste.Fehler` (werden in `api()` bzw. `_verarbeiten` auf JSON abgebildet), `sqlite3.IntegrityError` → 409.
+
+## 5. Benutzer und Rechte (`benutzer.py`)
+
+Tabellen `benutzer` (login, name, rolle, rechte-JSON, passwort als `pbkdf2$salz$hash` mit 200 000 Iterationen SHA-256, mitarbeiter_id, aktiv) und `sitzungen` (token, benutzer_id, ablauf, gleitend verlängert). Der aktuelle Benutzer liegt threadlokal (`setze_aktuell`, `aktuell`, `aktuelle_rechte`).
+
+Bereiche: `start, kunden, auftraege, op, lieferanten, material, kalender, personal, arbeitsschutz, einstellungen`, Stufen 0/1/2 (kein Zugriff, ansehen, bearbeiten). Rollen: `inhaber` (alles), `buero`, `werkstatt` (Aufträge nur Reiter Werkstatt, ohne Preise), `mitarbeiter` (nur Stempeluhr/eigene Zeiten), `eigen` (frei).
+
+`RESSOURCEN` bildet jede API-Ressource auf `(bereiche, stufe_lesen, stufe_schreiben)` ab; `pruefen()` wirft 403. Sonderregeln in `pruefen()`: Werkstatt darf `PUT auftraege/{id}` nur mit `status, fertigung, lieferung`; bei `auftrag_reiter == "werkstatt"` sind nur die Unterressourcen in `WERKSTATT_UNTER` erlaubt. Neue Ressourcen **müssen** in `RESSOURCEN` eingetragen werden, sonst sind sie nur mit Einstellungsrecht 2 erreichbar. `preise_entfernen()` entfernt rekursiv preisbezogene Schlüssel für Benutzer ohne Preisrecht.
+
+Im Frontend spiegelt `darf(bereich, stufe)` (static/personal.js) die Rechte für die Anzeige; maßgeblich ist immer der Server.
+
+## 6. Datenbank
+
+### 6.1 Schema und Migration
+
+Das Grundschema steht als `SCHEMA` in `app.py`, Modulschemata in `material.SCHEMA`, `mahnwesen.SCHEMA`, `werkzeuge`, `benutzer`, `personal`, `montage`, `reste`, `projekte` (jeweils `schema(con)`). `init_db()` führt alle `CREATE TABLE IF NOT EXISTS` aus und ergänzt fehlende Spalten aus der Liste `NACHRUESTEN` per `ALTER TABLE … ADD COLUMN`. **Es gibt keine destruktiven Migrationen**; Spalten werden nie entfernt oder umbenannt. Neue Spalten gehören immer in `NACHRUESTEN` (und für Neuinstallationen optional ins Schema).
+
+### 6.2 Tabellen
+
+| Tabelle | Inhalt (wichtige Spalten) |
+|---|---|
+| `kunden` | nummer (eindeutig), kurzname, gruppe, Anschrift (Einzelfelder + `anschrift`), Konditionen (ust, zahlungsziel, skonto, preise, rabatt, rechnungsformat, leitweg_id), Liefer-/Rechnungsanschrift |
+| `auftraege` | nummer (JJJJ-NNNN), kunde_id, bezeichnung, gruppe, status, fertigung, lieferung, plan_von/bis, ordner, `kunde_daten` (JSON-Kopie), `kalk` (JSON: Kopie der Kalkulationswerte), `titel` (JSON), leitstand, leitstand_sort, nachgefasst, projekt_id (optional → projekte) |
+| `projekte` | nummer (PJJJJ-NN, eindeutig), bezeichnung, kunde_id (optional), status (aktiv, abgeschlossen), bemerkungen |
+| `positionen` | auftrag_id, parent_id (Unterposition), titel, sort, gesperrt, alternativ, menge, einheit, text (HTML), einzelpreis, preis_manuell, `masse`, `zeige`, `stueckliste`, `beschlaege`, `zeiten`, `extras`, `bilder` (alle JSON), zeitmodus, unterdruck |
+| `rechnungspost` | GET Liste (`status`=neu|erfasst|gebucht|ignoriert|leer=alle), POST `{id}/lesen`, `{id}/ignorieren`, `{id}/wieder` |
+| `belege` | auftrag_id, kunde_id, art (angebot, kv, ab, lieferschein, abschlag, rechnung, storno), lfd, nummer, status (offen, entwurf, fest, storniert), datum, leistungsdatum, Texte, `daten` (JSON-Snapshot: Kunde, Firma, Zeilen, Summen, Abzüge, Abschläge), netto, ust, brutto, zahlbetrag, faellig, bezug_id (Storno → Original), pdf, `druck` (JSON), versendet, versendet_an |
+| `offene_posten` | nummer, art, kunde_id, auftrag_id, beleg_id, betrag, offen, faellig, mahnstufe, mahnkosten, mahnsperre |
+| `zahlungseingaenge` | op_id, datum, betrag, art, auf_mahnkosten |
+| `mahnungen` | op_id, stufe, datum, gebuehr, zinsen, pauschale, pdf, daten (JSON) |
+| `lieferanten`, `zahlungen` | Lieferantenstamm; Zahlungsaufträge (belegnr, belegdatum, betrag, vorsteuer, skonto, skonto_bis, faellig, bezahlt, datei = Originalrechnung) |
+| `zuordnungen` | gelernte Zuordnungen beim Rechnungsimport (lieferant_id, schluessel → material/kostenart) |
+| `material`, `material_sets`, `material_set_pos`, `lagerbewegungen`, `auftragskosten` | Materialstamm (kategorie, nummer, cad, ean, ek_preis, verschnitt, lager, bestand, lagerpreis), Sets, Lagerbuchungen, Kostenbuchungen auf Aufträge |
+| `werkzeuge` | Werkzeugverzeichnis inkl. nutzungsdauer, pruefung_bis, wartung_bis |
+| `termine`, `stunden` | Kalendertermine; Ist-Stunden je Auftrag (zeit_id → personal.zeiten, mitarbeiter_id, termin_id) |
+| `briefe`, `notizen`, `anhaenge` | Schriftverkehr, Notizen, Dateien (zu Kunde, Auftrag oder Lieferant) |
+| `mitarbeiter`, `zeiten`, `stempel_ereignisse`, `abwesenheiten`, `kontobuchungen`, `lohn` | Personal (modelle = Arbeitszeitmodelle als JSON; stempel_ereignisse.client_id verhindert Doppelbuchungen aus dem Offline-Puffer) |
+| `montageberichte` | auftrag_id, status, positionen/zeiten/material (JSON), anmerkungen, kunde_name, unterschriften (Dateinamen), uebernahme (JSON mit IDs der erzeugten Datensätze), pdf |
+| `reste_lager` | genau eine Zeile: Lagerdokument im Format der Zuschnitt-App (`jahresring-lager`), rev (Optimistic Locking) |
+| `zuschnitt_buchungen` | Abgleich Plattenbuchung (Schlüssel jobId\|plateId) → auftragskosten-ID |
+| `einstellungen` | schluessel → JSON-Wert; Vorgabewerte in `STANDARD_EINSTELLUNGEN`; Zugriff über `einstellungen(con)` |
+| `benutzer`, `sitzungen` | siehe Abschnitt 5 |
+
+Konventionen: Datums- und Zeitwerte als ISO-Text (`JJJJ-MM-TT`, `JJJJ-MM-TTThh:mm:ss`), Beträge als REAL mit Rundung auf 2 Stellen im Code, JSON-Spalten mit `json.dumps(…, ensure_ascii=False)`; Lesehilfe `jl(text, standard)`. `angelegt`/`geaendert` über `jetzt()`.
+
+### 6.3 Einstellungen
+
+`einstellungen(con)` liefert `STANDARD_EINSTELLUNGEN` überlagert mit den gespeicherten Werten. `PUT /api/einstellungen` speichert nur Schlüssel, die in `STANDARD_EINSTELLUNGEN` existieren. Ein neuer Einstellungswert braucht daher immer einen Eintrag dort. `einstellungen_oeffentlich()` ergänzt Laufzeitinfos (`_netz`, `_autostart`, `_datenordner`) und entfernt das Mail-Passwort.
+
+### 6.4 Leistung bei großen Beständen
+
+`indizes_anlegen(con)` (Ende von `init_db`) legt für jede Spalte `…_id` aller Tabellen einen Index `ix_<tabelle>_<spalte>` an (außer `message_id`), dazu `INDEX_EXTRA` (Datum/Status der großen Tabellen), und frischt danach die Planerstatistik mit `PRAGMA analysis_limit=400; ANALYZE` auf. Lasttest (synthetischer Datenbestand): 4.000 Kunden, 8.000 Aufträge, 120.000 Positionen, 24.000 Belege, 150.000 Zeiten, 30.000 Stunden, 20.000 Termine, 40.000 Korrespondenz, 30.000 Auftragskosten/Lagerbewegungen, 12.000 Zahlungen (≈ 220 MB). Ohne Indizes dauerten `GET projekte` 29 s, `mahnwesen` 6 s, `offeneposten` 5,7 s, `kalender` 4,4 s, `start` 3,9 s; mit Indizes zusammen für alle Seiten ≈ 3 s, langsamster Aufruf `start` ≈ 0,7 s. `personal.konten()` rechnet abgeschlossene Monate über `_vorlauf()` mit Zwischenspeicher (`_VORLAUF`, Schlüssel: Mitarbeiterzeile, Prüfsumme der Zeiten, Abwesenheiten, Tagesdatum). `auftrag_rechnen()` liest nur die Einstellung `bezug_eigen` statt aller Einstellungen. Verbleibender Aufwand: `start_daten` und Kalender rechnen jeden nicht abgeschlossenen Auftrag (≈ 2,5 ms je Auftrag).
+
+WAL-Modus: `indizes_anlegen()` stellt die Datei auf `journal_mode=WAL` um (persistent, nach `commit()`, da nur außerhalb einer Transaktion möglich); jede Verbindung setzt `synchronous=NORMAL`. Sicherungen laufen über die Backup-API und werden danach mit `journal_mode=DELETE` als Einzeldatei abgelegt (`backup()`, `service.sicherung_erstellen`). Rücksicherung schreibt per Backup-API in die laufende Datenbank und ist WAL-tauglich. `db_optimieren()` (`POST service/optimieren`, nur Inhaber, Protokollart `datenbank`): `integrity_check` (bei Fehler Abbruch 409), `ANALYZE` ohne Stichprobenlimit, `VACUUM`, `wal_checkpoint(TRUNCATE)`.
+
+Protokoll: `protokoll.eintragen()` liest für die Kettenfortsetzung nur noch die letzte Zeile der Journaldatei (`_letzter_datei()`, von hinten), vorher wurde bei jedem Eintrag die ganze Datei gelesen. `pruefen(con, voll=False)` prüft unter `_sperre` nur Einträge nach `_STAND` (nr, hash, Byte-Offset der Journaldatei, Zeit der Vollprüfung) und vergleicht zusätzlich die Gesamtzahl der DB-Einträge; `voll=True` oder fehlender Stand → ganze Kette, bei Erfolg wird `_STAND` gesetzt. `protokoll_vollpruefung()` läuft nach `backup()` beim Start in einem Thread; Unstimmigkeiten setzen `PROTOKOLL_PRUEFUNG["text"]` (Startseitenhinweis über `_ort_warnung`). `einrichten()` (Start, Rücksicherung) leert `_STAND`. Messung: 20.000 Einträge Vollprüfung ≈ 0,4 s, Prüfung neuer Einträge ≈ 3 ms.
+
+Sicherungsliste: `service.sicherungen()` prüft jede Sicherung (ZIP: `testzip()` über das ganze Archiv, DB: `quick_check`) nur einmal und merkt das Ergebnis in `backup/pruefung.json` (Schlüssel Dateiname, Stempel Größe + Änderungszeit). Vorher wurden bei jedem Öffnen von Datensicherung/Rücksicherung alle Sicherungen komplett gelesen. Vor einer Rücksicherung wird die gewählte Datei weiterhin frisch geprüft.
+
+Handbuch: Abschnitt `#zaehlweisen` beschreibt die Bezugsgrößen aus `kalkulation.BEZUG` / `teil_rechnen()` (Platte = Werkstoff nicht `typ=massiv`; Seiten oben/unten × Länge, links/rechts × Breite; `massiv_kanten` = Kante, sonst Fräsen, sonst Umfang; `oberflaeche` = Seitenflächen + Umfang × Fertigdicke) mit Rechenbeispiel.
+
+Tätigkeitskatalog-Vorgabe: `kalkulation.TAETIGKEITEN_KATALOG` (50 Tätigkeiten, Stand `TAETIGKEITEN_KATALOG_STAND`). `taet_katalog_ergaenzen(con)` in `init_db` übernimmt sie einmal je Stand (`_taet_katalog_stand`): Zuordnung über Kostenstelle + Bezeichnung (Leerzeichen und Groß-/Kleinschreibung egal), erst mit gleicher Bezugsgröße, dann ohne; Treffer bekommen Lohngruppe Standard, Minuten, Bezugsgröße, Rüstzeit, Helfer (auch in Listenzeilen mit dieser `tid`), sonst neue Kennung `t<n>`. Andere Tätigkeiten bleiben. `TAETIGKEITEN_VORGABE` bleibt die kleine Standardliste.
+
+Tätigkeitskatalog: `nachKst(liste, ksts)` (kalk.js) sortiert beim Öffnen von Einstellungen › Tätigkeiten und im Dialog „+ Tätigkeit …“ nach Reihenfolge der Kostenstellen, dann Name; Tätigkeitslisten behalten ihre eigene Reihenfolge.
+
+Startseite: `ansichtStart(wieder)` rendert lange Listen (`laufend`, `ueberfaellig`, `zahlungen_faellig`, `angebote`, `anfragen`, `beschaffung`) mit `erste(key, liste)` nur bis 20 Einträge; `[data-alle]` schaltet `START.alle[key]` um und rendert mit `ansichtStart(true)` aus `START._d` neu, ohne die API erneut abzufragen (Router übergibt ein anderes Argument, daher der Vergleich `=== true`). Lasttest: DOM der Startseite 9.100 → 1.200 Knoten.
+
+## 7. Fachlogik
+
+### 7.1 Kalkulation (`kalkulation.py`)
+
+`KALK_VORGABEN` definiert Lohngruppen (Mittellohn I, Lohnnebenkosten), Kostenstellen mit Gemeinkostenzuschlag, Materialgemeinkosten, Kleinmaterial, Wagnis und Gewinn, Helferumlage. Jeder Auftrag erhält beim Anlegen eine Kopie (`vorgaben_kopie(e)` → `auftraege.kalk`, siehe `auftrag_kalk()`); Werkstoffe und Beschläge sind dabei immer leer und kommen je Auftrag aus dem Materialstamm oder dem Stücklistenimport (in den Einstellungen gibt es dafür keine Vorgabe); Änderungen im Auftrag ändern nie die Vorgaben. `position_rechnen(pos, kalk, …)` berechnet Teile (Fläche/Volumen × Preis × (1 + Verschnitt)), Beschläge (Preis × Menge, kein Verschnitt), Zeiten (Stunden direkt oder Tätigkeiten mit Bezugsgrößen; Summen je Kostenstelle und Lohngruppe werden vor der Lohnberechnung auf 0,01 h gerundet) und die Zuschlagskalkulation. `auftrag_rechnen(con, aid)` (app.py) summiert Positionen inkl. Unterpositionen, Titel, gesperrte und Alternativpositionen und liefert `soll` für Soll/Ist. `PUT auftraege/{id}/kalk` akzeptiert Kostenstellen nur, wenn sie in den Einstellungen oder bereits im Auftrag existieren.
+
+### 7.2 Belege
+
+| Funktion | Aufgabe |
+|---|---|
+| `beleg_snapshot(con, aid, art, opts)` | friert Firma, Kunde, Zeilen (`beleg_zeilen`), Summen und bei Rechnungen die verrechneten Abschläge ein (`abschlaege_aus` aus `druck`; `abschlaege_verrechnet()` verhindert Doppelverrechnung) |
+| `beleg_anlegen` | Nummer für Nicht-Rechnungen sofort (Auftragsnummer-Kürzel-lfd), Rechnungen als Entwurf |
+| `beleg_aktualisieren` | neuer Snapshot, nur wenn nicht fest/storniert |
+| `beleg_festschreiben` | Rechnungsnummer aus `rechnungsnummer_info()` (gemeinsamer Kreis rechnung/abschlag/storno je Jahr, Präfix, Zähler nur nach oben), Status fest, offener Posten; danach PDF |
+| `beleg_stornieren` | Stornorechnung mit negierten Beträgen und `bezug_id`, OP-Ausbuchung; Sperre für verrechnete Abschläge |
+| `beleg_pdf` | Archiv-PDF in `daten/belege/JJJJ/` (bei fest/storniert nur einmal erzeugt), ZUGFeRD-Einbettung, XRechnung-Datei, Kopie in den Projektordner |
+
+**GoBD-relevant:** PUT/DELETE auf festgeschriebene oder stornierte Belege werden in `api()` abgewiesen. Diese Prüfungen, die Nummernvergabe und `beleg_pdf` dürfen nicht aufgeweicht werden; Änderungen hier sind in der Verfahrensdokumentation (Abschnitt 10) zu vermerken.
+
+### 7.3 PDF-Erzeugung
+
+`druck_html(con, bid, als_pdf)` baut die Belegseite; `briefbogen_html()` legt sie auf den Briefbogen (Variante Briefvorlage: `@page` ohne Rand, Hintergrundbilder je Seite, `thead/tfoot`-Abstandshalter; Variante einfach: `@page`-Ränder, fixe Fußzeile). `pdf_url_rendern(url, ziel)` hängt `intern=<INTERN>` an, ruft Edge/Chrome headless mit eigenem Profil auf und prüft das Ergebnis. `pdf_rendern(bid, ziel)` stempelt danach Seitenzahlen (`pdfseiten.nummerieren`, AGB-Seiten ausgenommen) und hängt bei vorhandener Original-AGB (`daten/vorlagen/agb_*.pdf`) diese mit `pypdf` an, statt die AGB-Vorlage zu rendern.
+
+`pdfseiten.py` arbeitet ohne Fremdpakete: liest Seitenbaum und Objekte (klassische Querverweistabellen, wie Chrome sie schreibt), hängt eine inkrementelle Aktualisierung an und zeichnet „Seite x von y“ als Vektorpfade (Umrisse aus Liberation Sans, OFL), damit keine Schrift eingebettet werden muss und PDF/A-3 gültig bleibt. Komprimierte Objekt-Streams werden nicht unterstützt (`PdfFehler`; die Seitenzahl entfällt dann, das PDF bleibt gültig).
+
+Positionsbilder: Der Browser verkleinert beim Hochladen auf max. 2400 px (JPEG q 0,88) und erzeugt Druckfassungen `_k` (900 px), `_m` (1400 px), `_g` (2000 px), begrenzt auf 2540 px Höhe (= 215 mm bei 300 dpi). `bild_fuer_druck()` wählt sie je Druckgröße; `GET/POST /api/bildvarianten` rüstet alte Bilder nach (`bildVariantenNachruesten()` beim Start im Frontend).
+
+### 7.4 E-Rechnung
+
+`erechnung.cii_xml(b, xrechnung, kunde)` erzeugt UN/CEFACT CII (Profil EN 16931 bzw. XRechnung 3.0), `pruefen()` meldet fehlende Pflichtangaben, `zugferd_pdf()` bettet `factur-x.xml` mit XMP-Metadaten und sRGB-OutputIntent als PDF/A-3 ein (pypdf). `eingangsrechnung.lesen()` erkennt XML (CII/UBL), eingebettete XML in PDFs und als Notlösung Text-PDFs; `eingang_lesen`/`eingang_buchen` in app.py ordnen Lieferant, Positionen, Material, Auftrag und Werkzeug zu und speichern die Originaldatei unverändert in `daten/eingangsrechnungen/`.
+
+### 7.5 Offene Posten, Mahnwesen, Zahlungen
+
+Zahlungseingänge reduzieren `offene_posten.offen`; Skonto wird als eigener Eingang gebucht. `mahnwesen.berechnen()` liefert Gebühr, Zinsen (§ 288 BGB, taggenau) und Pauschale; nur die jeweils letzte Mahnung ist löschbar. `sepa_xml()` erzeugt pain.001.001.09 aus Zahlungsaufträgen (Skontoprüfung zum Ausführungstag).
+
+### 7.6 Personal (`personal.py`)
+
+Zeiten sind Abschnitte (`beginn`, `ende`) je Mitarbeiter und Tag ohne Überlappung (`zeit_pruefen`). `zeit_speichern()` hält über `stunden_abgleichen()` die Auftragsstunden (`stunden.zeit_id`) synchron. `stempeln()` verarbeitet Ereignisse der Stempeluhr idempotent (`stempel_ereignisse.client_id`). Konten (`konten()`, `tage()`) rechnen Soll aus Arbeitszeitmodellen, Feiertage Baden-Württemberg, Abwesenheiten und Ist. `lohn_zahlungen()` erzeugt Zahlungsaufträge (Netto, Lohnsteuer zum 10. des Folgemonats, SV zum drittletzten Bankarbeitstag). Hilfsfunktionen aus app.py werden über `personal.HILFE` injiziert.
+
+### 7.7 Rapport (`montage.py`)
+
+`unterschreiben()` prüft Kundennamen und Unterschrift (PNG), speichert die Unterschriften, übernimmt Zeiten über `personal.zeit_speichern` (Pause wird in die Mitte gelegt, Überlappung → Hinweis statt Fehler), Personen ohne Stammsatz direkt in `stunden`, Material über `material.ak_buchen` (mit Lagerabgang bei Lagerartikeln) und eine Notiz, sperrt den Bericht und lässt über `HILFE["nach_druck"]` (`montage_pdf` in app.py) das PDF erzeugen. Positionstexte werden mit `klartext()` aus dem Editor-HTML in Text umgewandelt.
+
+### 7.8 Zuschnitt und Restelager (`reste.py`, `static/zuschnitt/`)
+
+Das Zuschnittprogramm ist eine eigenständige PWA (`static/zuschnitt/index.html`, jsPDF in `vendor/`). Wird es über `/zuschnitt/` ausgeliefert, injiziert der Server `window.JAHRESRING = {api: "/api/"}`. Im Büro-Modus lädt und speichert es das Lager über `GET/PUT /api/reste/lagerdatei` (mit `basis`-Revision, 409 bei Konflikt) und lädt mit `?auftrag=ID` den Plan über `GET /api/auftraege/{id}/zuschnittplan` (neueste passende JSON in `40_Kalkulation`, `reste.plan_suchen`). Der Plan trägt dann `bueroAuftrag`, Plattenbuchungen und Reservierungen erhalten `auftrag`. Ohne `JAHRESRING` verhält sich die App unverändert (Lagerdatei per Dateizugriff).
+
+Beim Speichern des Lagerdokuments ruft `reste.speichern()` den Abgleich `buchungen_abgleichen()` auf: neue Buchungen ganzer Platten mit Auftrag werden über `material_finden()` (CAD-Kürzel, Nummer, Bezeichnung) als Auftragskosten mit Lagerabgang gebucht (m² = Plattenfläche, m³ = Volumen, sonst 1 Stück), entfernte Buchungen storniert; die Zuordnung liegt in `zuschnitt_buchungen`. `beschaffung()` berechnet reserviert − Bestand − bestellt; `bestellung()`/`wareneingang()` ändern `orders`/`items` im Dokument. Etiketten: `etiketten_seite()` (app.py) + `reste.etiketten_html()`, QR mit `segno`, Inhalt ist die URL der Büro-Seite. Für 70 × 74 mm erzeugt `reste.etikett_svg()` je Etikett zusätzlich ein SVG (gleicher Inhalt, Titel 7 mm, erste Zeile fett mit Umbruch auf zwei Zeilen, QR 30 mm unten rechts); die SVGs liegen als JSON in `<script id="zsvgs">`, `reste.ZEBRA_JS` rendert sie wie die Zuschnitt-PWA auf ein Canvas (560 × 592 Punkte, 203 dpi), wandelt in 1 Bit, baut ZPL `^GFA` mit `:Z64:` und schreibt in 160-Byte-Blöcken an die Bluetooth-LE-Characteristic `38eb4a82-…` (Dienst `38eb4a80-c570-11e3-9507-0002a5d5c51b`). Der Druckername liegt in `localStorage` `etikett.zebra`, Wiederverbinden über `navigator.bluetooth.getDevices()`.
+
+### 7.9 Fertigungsleitstand
+
+`leitstand_daten()` liefert Spalten aus `leitstand_schritte` und Karten für Aufträge mit Status aus `leitstand_status`; `leitstand_setzen()` speichert Schritt und Sortierung und setzt den Auftragsstatus (Fertigung/Montage) nach.
+
+### 7.8a Werkstattpapiere, Zuschnittmaß, Lagerpreis
+
+`werkstatt.rahmen()` setzt das Logo über `werkstatt.LOGO["datenuri"]` (data:-URI, gesetzt in `app.py`), damit es auch im headless-PDF erscheint. `kalkulation.fertigdicke(t, w)` ist die einzige Quelle der Fertigdicke (Werkstoff-fdicke → Teil-dicke → Werkstoff-dicke). `werkstatt.zuschnitt_mass()` rechnet das Zuschnittmaß nach `einstellungen.zuschnitt_zugabe`. `material.PREISREGEL` liefert die Methode aus `lagerpreis_methode`; `material.laden()/liste()` ergänzen `kalkpreis` (Lagerartikel: Mittel- oder Höchstpreis, sonst EK), `ak_buchen()` nutzt ihn bei Lagerabgängen. Werkstattbenutzer: `sicht_ordner()` begrenzt alle Projektbrowser-Endpunkte auf `werkstatt_ordner` (Vorgabe 50_Werkstatt), `benutzer.pruefen()` sperrt `termine` außer GET. Mail: `mailversand.nachricht_bauen()` erzeugt zusätzlich eine HTML-Alternative mit Logo (cid) über `mailversand.LOGO`, abschaltbar mit `mail.logo_in_signatur`.
+
+### 7.8b Tätigkeiten, Bezugsgrößen, Titelbuchung
+
+Einstellungen: `taetigkeiten_katalog` (Liste mit `id`), `taetigkeit_listen` (Zeilen mit optionalem `tid` → Katalog), `bezug_eigen` (`k`, `name`, `einheit`, `quelle` teil|position). `taet_katalog(e)` bildet den Katalog beim ersten Aufruf aus den Listen. `kalkulation.bezug_alle()` liefert eingebaute plus eigene Bezugsgrößen (Schlüssel `x_<k>`); `auftrag_rechnen()` gibt sie als `kalk["_bezug_eigen"]` (nur zur Laufzeit) an `position_rechnen()`. Teile: `verbinden.anzahl` (sonst Zahl der Flags oben/unten), `bohren` (Anzahl), `bohren_lage`, `taschen`, `bezug_eigen{k}`; Position: `extras.bezug_eigen{k}`. Zeitzeilen: `ruest_aus`, `helfer_aus`. Auftragsspezifische Listen in `auftraege.kalk.taetigkeit_listen`; `POST positionen/{id}/taetigkeiten` mit `katalog:[ids]` oder `liste`+`quelle`. Titelbuchung: Spalten `stunden.titel`, `zeiten.titel`; `titel_buchbar()` prüft `titel[].buchung_gesperrt`; `personal.offene_auftraege()` liefert je Auftrag die buchbaren Titel; `soll_ist()` enthält `titel` (Soll-/Ist-Stunden, Netto, Auftragskosten je Titel).
+
+### 7.8c Unterschriften, Bautagebuch, Korrespondenz, Scan
+
+Belegart `abnahme` (Abnahmeprotokoll, kz AP, ohne Preise). `UNTERSCHREIBBAR = ab, lieferschein, abnahme`; `beleg_unterschreiben()` speichert `daten.unterschrift` (PNG als data:-URI, Name, Ort, Zeit, optional Geo) und bei Abnahme `daten.abnahme`, legt das PDF ab (`beleg_pdf`) und sperrt den Beleg (PUT/aktualisieren werfen Fehler); Unterschrift entfernen und Löschen unterschriebener Belege sind gesperrt (403). Druck: `unterschrift_html(b, teil)`. Tablet-API `kundenunterschrift` (auch für „nur Werkstatt“, AB nur mit Preisrecht); `/druck/{id}` ist für Werkstattbenutzer bei Lieferschein/Abnahme freigegeben. Bautagebuch: Tabelle `bautagebuch` (je Auftrag und Tag ein Eintrag), Fotos in `daten/bautagebuch`, Druck `/papier/bautagebuch/{aid}`. Korrespondenz: Tabelle `korrespondenz` (art mail_ein|mail_aus|anruf_aus|anruf_ein|notiz, eindeutige message_id), `korrespondenz.pruefen()` liest per IMAP mit BODY.PEEK Posteingang und Gesendet ab der letzten UID (Zustand in `daten/posteingang.json`, Erstlauf 30 Tage), ordnet über die E-Mail-Adressen von Kunden/Lieferanten und Auftragsnummern im Betreff zu und legt das Original als .eml in `daten/mails/JJJJ` ab; Hintergrundthread mit `posteingang_minuten`. Versand über das Programm wird mit der Message-ID eingetragen (keine Doppelten). Briefe: Tabelle `briefe` (+pdf, angelegt), API `briefe/{id}` (PUT, DELETE, `pdf`, `mail`), Druck `/druck/brief/{id}` über `briefbogen_html`. Rundmail `newsletter` (BCC in Paketen à 40, `mailversand.senden(..., bcc=)`), Kundenfelder `geburtstag`, `newsletter_aus`, `geburtstage()` für die Startseite, `kunde_mail()` (`kunden/{id}/mail`). `statistik()` liefert zusätzlich Umsatz je Jahr, Angebotsquote, Zahlungsdauer, Top-Kunden. Scan: `static/scan.html` (jsQR 1.4.0, Apache-2.0, in `static/lib`), API `scan` (auftraege, material/{id}, auftrag/{id}, suche, buchen → `material.ak_buchen`); QR-Inhalte `http://<PC>:<Port>/scan#m<id>` bzw. `#a<id>`; `/stempel?auftrag=ID` öffnet die Auswahl mit diesem Auftrag.
+
+### 7.9a Projekte (`projekte.py`)
+
+Ein Projekt ist nur eine Gruppierung über `auftraege.projekt_id`; Belege, Kalkulation und Leitstand bleiben je Auftrag. `projekte.laden()` liefert das Projekt mit Aufträgen und je Auftrag `zahlen` (`auftrag_zahlen()`: angeboten = letztes Angebot/KV netto, beauftragt = letzte AB netto bzw. Angebot ab Status Auftrag, berechnet = Summe `beleg_umsatz()` über festgeschriebene/stornierte Rechnungs-, Abschlags- und Stornobelege, bezahlt/offen aus `offene_posten`) sowie `sollist` (Auszug aus `soll_ist()`). Summen, aggregiertes Soll/Ist (`SI_KEYS`) und `ergebnis` (berechnet − Ist-Selbstkosten) werden addiert. `soll_ist` und `beleg_umsatz` kommen über `projekte.HILFE` aus `app.py`. Löschen eines Projekts setzt nur `projekt_id` der Aufträge auf NULL. Druckblatt: `projekt_html()` → `/papier/projekt/{id}` (CSS aus `werkstatt.CSS`). Mit der Einstellung `projekt_sammelordner` legt `ordner_anlegen()` neue Auftragsordner unter `<projektpfad>/<Projektnr>_<Bezeichnung>/` an und sucht verschobene Ordner auch dort.
+
+### 7.10a Protokoll / Journal (`protokoll.py`)
+
+Tabelle `protokoll` (nr, zeit, benutzer, art, objekt, text, daten JSON, version, vorher, hash) mit Triggern `protokoll_kein_update` und `protokoll_kein_loeschen` (RAISE ABORT). Jeder Eintrag wird zuerst als JSON-Zeile an `daten/protokoll/journal.jsonl` angehängt (flush + fsync) und dann in die Tabelle geschrieben; `hash = SHA-256(vorher + kanonisches JSON von [nr, zeit, benutzer, art, objekt, text, daten, version])`, Startwert 64 × „0“. `einrichten()` (aus `init_db`) gleicht Datei und Tabelle ab: fehlende Tabellenzeilen werden aus der Datei nachgetragen (nach Rücksicherung), fehlende Dateizeilen aus der Tabelle wiederhergestellt und vermerkt. `pruefen()` verifiziert beide Ketten und ihren Gleichstand. `echtbetrieb()` liest den Beginn aus Tabelle oder Datei, damit die Sperre Rücksicherungen überlebt. Aufruf in app.py über `prot(con, art, objekt, text, daten)`.
+
+Protokolliert werden (art): `festschreiben`, `storno`, `beleg_geloescht`, `zahlungsauftrag_geaendert` (nur betragsrelevante Felder oder bezahlte Aufträge, mit Alt/Neu), `zahlungsauftrag_geloescht`, `zahlungseingang_geloescht`, `mahnung_geloescht`, `nummernkreis`, `sicherung`, `ruecksicherung` (Start mit Grund, Abschluss), `testdaten_geloescht`, `echtbetrieb`, `version`, `journal`. API: `GET service/protokoll`, `POST service/echtbetrieb`, `/api/service/protokoll.csv`. `service.ruecksichern()` überspringt `dateien/protokoll/`. Neue GoBD-relevante Löschungen oder Änderungen müssen ebenfalls `prot()` aufrufen.
+
+### 7.10b Exporte (`export.py`)
+
+`belegpaket(con, von, bis)` schreibt `daten/exporte/Belegpaket_…zip`: Archivdateien der festgeschriebenen Rechnungen (`belegdateien()` sucht `daten/belege/JJJJ/<Nummer>_*`, fehlende PDFs werden über `HILFE["archiv_pdf"]` = `beleg_pdf` erzeugt), Originale der Eingangsrechnungen, Excel-CSV (Semikolon, UTF-8 mit BOM) und LIESMICH mit Lückenprüfung (`nummern_luecken`). `pruefer_export(con, von, bis)` schreibt `Datentraeger_GoBD_…zip` nach dem Beschreibungsstandard: `index.xml` (DTD `lib/gdpdu-01-09-2004.dtd`, je Tabelle `<UTF8/>`, Dezimalkomma, `VariableLength` mit Primär- und Fremdschlüsseln), CSV ohne Kopfzeile in Spaltenreihenfolge der index.xml (Primärschlüssel zuerst), Belegdateien, LIESMICH. Neue Tabellen: Eintrag in die Liste `tabellen` mit (Datei, Name, Beschreibung, Spalten[(Name, Typ A/N/N0/D, Beschreibung)], Anzahl PK-Spalten, Zeilen, Fremdschlüssel). API: `GET service/exporte`, `POST service/belegpaket`, `POST service/pruefer`, Download `/api/service/export/<datei>.zip`; jede Erstellung → Protokoll `export`. Prüfen mit `xmllint --valid index.xml` (die Meldung „Content model of Media is not determinist“ stammt aus der offiziellen DTD).
+
+### 7.10 Service (`service.py`)
+
+`sicherung_erstellen()` (konsistente DB-Kopie mit der SQLite-Backup-API + alle Dateien als ZIP, behält 15, Kopie ins externe Ziel), `ruecksichern()` (vorher Sicherung „vor-Ruecksicherung“, Rückspielen über Backup-API, danach `init_db`), `relationen()` (Liste `PRUEFUNGEN` mit SQL-Abfragen, Dateiprüfung, `PRAGMA integrity_check`). `testdaten_loeschen()` (app.py) löscht Gruppen von Bewegungsdaten nach einer Vollsicherung; nur Inhaber, Bestätigungswort „LÖSCHEN“.
+
+### 7.11 Weitere Bausteine
+`lohnanteil_rechnen(erg, summen, ust)` (app.py) bildet beim Beleg-Snapshot der Rechnung `daten.lohnanteil {netto, ust, brutto}`: je zählender Hauptposition Anteil `lohn_gk·(1+wg_pz/100)` (rekursiv mit Unterpositionen × Menge) am `ep_gesamt`, mal `gesamtpreis`, reine Arbeitspositionen voll, anteilig um den Rabatt gekürzt. `druck_html` gibt den Satz (`text_lohnanteil`, Platzhalter `{lohn_netto}`, `{lohn_ust}`, `{lohn_brutto}`) vor dem § 14b-Hinweis aus; Regel `lohnanteil` = privat|alle|nie, Druckoption `druck.lohnanteil` (Vorgabe in `druck_einstellung`). `text_14b` hat eine Oberfläche; `_text_14b_standard` liefert den Standardtext.
+
+`anrede_aufloesen(k)` ersetzt `{nachname}`, `{vorname}`, `{titel}` in der Briefanrede des Kunden; genutzt im Beleg-Snapshot, Brief, Kundenmail, Mahnwerte, Rapport-Mail. Brief: `status` ist per PUT nicht mehr änderbar; GET liefert `anrede_kunde` für die Anrede-Auswahl.
+
+`soll_ist(con, aid, titel=None)`: Soll je Titel aus `auftrag_rechnen()["soll_titel"]`, Ist je Titel aus Stunden und `material.ak_summen(con, aid, titel)` (Zahlungen nur beim ganzen Auftrag); Ist-W&G = Netto − Selbstkosten − Sonderkosten Vertrieb; `wg_pz`, `titel_liste`, `gewaehlt`. API `GET /api/auftraege/{id}/sollist?titel=N`, Papier `/papier/{id}/sollist?titel=N`. `werkstatt.SOLLIST_ZEILEN` und `sollist_abweichung()` (Kosten Soll − Ist, Ertrag Ist − Soll).
+
+`zeiten_fixieren(e, p, neu)`: beim PUT einer Position im Tätigkeitsmodus kommen `kst`/`name` aus dem Katalog (`tid`); unbekannte neue Zeilen werden verworfen. `kalkulation.BEZUG` mit der Bezugsgrößenliste des Branchenprogramms (`platte_st`, `platte_lfm`, `platte_kanten`, `platte`, `platte2`, `massiv_*`, `kante_st`, `furnier_st`, `oberflaeche_st`, `gehrung` …); `platte`/`platte2` zählen nur noch Plattenteile. Teilfeld `gehrung`.
+
+Material: Spalten `plattenlaenge`, `plattenbreite`; `reste.formate_ergaenzen(con, lager)` beim GET der Lagerdatei, `material_finden(..., laenge, breite)` bevorzugt passendes Format. Stückzahl ↔ Bestand: `reste._gruppen()` ordnet ganze Platten (`kind=platte`) über `materialNr` bzw. `material_finden` + Format (±2 mm) + Dicke (±0,6) einem Holzwerkstoff zu, `ist_platte()` (Gruppe leer/Platten/Leimholz, Einheit nicht lfm) filtert, `formate_ergaenzen()` entfernt unbenutzte Einträge (0 Stück, keine Buchung) zu anderen Holzwerkstoffen; `platten_faktor()` = Plattenfläche bei m² bzw. 1 bei Stück. Maßgeblich ist `material.bestand`; `stueck_aus_bestand()` setzt `qty = floor(bestand/faktor)`. `speichern()` ruft nach dem Buchungsabgleich `bestand_nachziehen()` auf (Differenz Stück × Faktor über `HILFE["lagerbuchung"]` → `material.lager_buchen`). `material.BESTAND_GEAENDERT` (Rückruf nach jeder Bestandsänderung) → `reste.bestand_geaendert()` schreibt die neue Stückzahl mit neuer `rev`, damit offene Zuschnitt-Geräte neu laden (409). Rekursion verhindert `_IM_SPEICHERN`. `stueck_abgleich()` beim GET (Lagerdatei, Übersicht): beim ersten Mal (`stueckSync` fehlt) gilt eine im Zuschnitt gezählte Stückzahl > 0 und der Bestand wird per Zugang/Abgang angeglichen.
+
+`werkstatt.logo_zeile()`: Logo rechts über dem grauen Kopf (Werkstattpapiere, Auswertungen, Projekt-Nachkalkulation). Kalender: Planbalken `plan` (Angebot, schraffiert, „vorgemerkt“) bzw. `plan fest` („geplant“). `montage_mail()` (GET/POST `/api/montage/{id}/mail`, nur unterschrieben). Fehlerbehebung: der globale Klick-Handler für „Zahlung löschen“ hörte auf `data-zdel` und griff auch beim Entfernen einer Person im Rapport; jetzt `.modal [data-zedel]`, im Rapport `data-mbzdel`.
+
+### 7.12 Weitere Bausteine
+`vorlagen.py`: sichere Formelauswertung (`auswerten`, AST-Whitelist, Funktionen `s32`, `s32ab`, `s32auf`, `ab`, `auf`, `runden`, `min`, `max`, `abs`, `wenn`), `berechnen(vorlage, eingaben)`, `aus_position()`, `beispiel_system32()`. Einstellung `pos_vorlagen`. API `GET/PUT /api/positionsvorlagen`, `POST /api/positionsvorlagen/berechnen` ({id|vorlage, werte}), `POST /api/positionsvorlagen/beispiel`, `POST /api/positionen/{id}/vorlage` ({id, werte, neu}) – Material-Parameter über `stuecklistenimport.auftrags_werkstoff()` in die Auftragswerte, `extras.vorlage {id, name, werte, text}` –, `POST /api/positionen/{id}/als-vorlage`. Oberfläche `static/vorlagen.js` (`vorlageDialog`, `positionsvorlagenVorgabe`, Route `#/einstellungen/kalkulation/vorlagen/<id>`). Recht `positionsvorlagen` wie `kalkvorgaben`.
+
+`GET /api/positionen/{id}/konstruktion[?datei=]` listet bzw. liest CSV/TXT im Ordner `konstruktion_ordner` (20_Konstruktion). Import: Gehrungen als `gehrung`, Preis aus `kalkpreis`. `lohnanteil_wg` (Vorgabe true). `teil_rechnen`: Massivholz einheitabhängig, `volumen`, Position `massiv_m3`. `auftragUnterseite()` (montage.js) für Rapport, Unterschrift, Bautagebuch und Brief: Auftragskopf mit Reitern und Projektordner; `auftragKopf(..., {zurueck})`.
+
+### 7.13 Weitere Bausteine
+Korrespondenz: `_auftrag_finden()` ordnet Mails ohne Auftragsnummer dem einzigen offenen Auftrag des Kunden zu (Status nicht in `ERLEDIGT`); `pruefen()` sucht für neu eingetragene Adressen (SHA-256-Kurzhashes in `posteingang.json` unter `_adressen`) per IMAP `SEARCH SINCE … FROM/TO/CC` die letzten 60 Tage nach; `liste(q.ohne_auftrag)`. `kunde_mail` nimmt `?auftrag=` (Betreff mit Auftragsnummer, Eintrag mit `auftrag_id`); `mailDialog` hängt die Abfrage auch beim POST an. Kalkulation: Helfer = Anteil während Bearbeitung **und** Rüsten; fehlen Helfer-Kostenstelle/-Lohngruppe in den Auftragswerten, wird auf Zeilen-Kostenstelle bzw. Lohnbasis gebucht; Zeitzeilen liefern `ruest_h`, `helfer_h`, `h_pos`. `kunde_block()` druckt das Land bei Ausland bzw. mit `land_immer` (`LAND_EINST`). Plattenformat nur für Holzwerkstoffe. Sicherheit und Datenschutz siehe Abschnitt 13.
+
+### 7.14 Weitere Bausteine
+Vorlagen: Parameterart `auswahl` (`optionen` „Zahl=Text; …“, `vorlagen.optionen()`), Platzhalter `{K:text}`, Funktion `s32r(h, d, rundung)` (1 auf, −1 ab, 0 nächstes), `pruefungen [{bedingung, text}]` → `hinweise`, Hilfswert-Flag `verdeckt`. Beispiele `beispiel_system32()` (Nische mit Abschluss links/rechts: ohne/Passleiste/Blende) und `beispiel_korpus()`; `POST /api/positionsvorlagen/beispiel {art: nische|korpus}`. CAD-Import: ein Knopf, Ordner `konstruktion_ordner` in den Einstellungen (auch Unterpfad, ohne „..“).
+
+### 7.15 Weitere Bausteine
+Erscheinungsbild: Kopf mit Jahresring-Scheibe `static/jahresring-hell.svg`, Wasserzeichen `static/jahresring.svg` über `body::after`, Symbole `jahresring.ico` und `jahresring-192/512.png`, Autostart `Jahresring.lnk`. Kunden: Spalte `aufbewahren_bis`, `altbestand_sperren()` beim Echtbetrieb-Start, beim Import und einmalig per Migration (`_altbestand_gesetzt`); Löschen/Anonymisieren gesperrt bis dahin; Änderung nur Inhaber, Protokoll `aufbewahrung_geaendert`. `auskunft_brief()` (POST `/api/kunden/{id}/auskunft`) legt einen Brief an. CAD-Ordner-Überwachung: Tabelle `cad_importe (auftrag_id, datei, mtime, status, position_id)`, `cad_neu()`, `cad_vermerken()`, API `GET /api/cad/neu[?auftrag=]`, `POST /api/cad/ignorieren`; `stueckliste-import` mit `cad_datei` vermerkt die Übernahme.
+
+### 7.16 Weitere Bausteine
+Rechnungen aus dem Postfach: Tabelle `rechnungspost (hash UNIQUE, message_id, datei, dateiname, betreff, von, datum, ordner, lieferant_id, auftrag_id, belegnr, belegdatum, betrag, format, status neu|erfasst|gebucht|ignoriert, zahlung_id, hinweis)`. `korrespondenz.pruefen(..., rechnung_ordner=[...])` liest die Rechnungsordner (Einstellung `rechnung_ordner`, Vorgabe `["Rechnungen"]`) zusätzlich und ruft für jede eingehende Mail den Haken `HILFE["rechnung"]` = `app.rechnungspost_mail(con, msg, mid, absender, im_rg_ordner, lieferant_id)`. Lieferant per Adresse (E-Mail 1–4) oder Domain (`_lieferant_per_mail`, ohne Freemail); Anhänge PDF/XML werden mit `eingangsrechnung.lesen` geprüft (E-Rechnung, Wort „Rechnung“ o. ä. im Namen/Betreff oder Nummer + Betrag; im Rechnungsordner alle), per SHA-256 entdoppelt, unter `daten/rechnungspost/JJJJ/` abgelegt; Auftrag über `auftrag_finden` (Betreff, Mailtext, Rechnungstext), Dublette gegen `zahlungen(lieferant_id, belegnr)` → Status `erfasst`. Einmaliger Nachlauf der Lieferantenmails der letzten 30 Tage (Flag `_rg_nachlauf` in posteingang.json). API `GET /api/rechnungspost?status=`, `POST /api/rechnungspost/{id}/lesen` (liefert das Ergebnis von `eingang_lesen` plus Lieferant/Auftrag aus der Mail und `rechnungspost_id`), `.../ignorieren`, `.../wieder`; `eingang_buchen` mit `rechnungspost_id` setzt `gebucht` und entfernt die Kopie. Recht `rechnungspost` = Lieferanten. Startseite: `kennzahlen.rechnungspost`.
+
+Weitere Änderungen: `brief_html` hängt `gruss_html()` (Name + Unterschriftsbild) an. `gueltig_bis(datum, tage)` und Platzhalter `{gueltig_bis}` in `beleg_platzhalter` und Mailtexten, Einstellung `angebot_gueltig_tage` (7); Migration ersetzt „4 Wochen gültig“ in `beleg_texte`. `backup()` prüft jede Tagessicherung mit `PRAGMA integrity_check` (fehlerhaft → `.defekt`, Warnung über `_ort_warnung`), behält 30 Tage + erste Sicherung je Monat für 12 Monate. `material.aendern` lehnt eine geänderte Nummer ab. Kunden-DELETE gesperrt bei E-Mails oder nicht-Entwurfs-Briefen bis Jahresende + 6. `testdaten_loeschen` entfernt .eml-Dateien und Brief-PDFs (`dateien_weg`) sowie `rechnungspost`. `neuerAuftrag(kunde, projekt, {titel, status})` mit Neukunde im Dialog (Felder `nk_*`). Telefax aus der Oberfläche und dem Kundenimport entfernt (Spalte bleibt). Startseite neu geordnet. Alle Hinweistexte unpersönlich formuliert. Bezüge auf ein Fremdprogramm entfernt; das Stücklistenformat heißt „Standard (22 Felder)“.
+
+### 7.17 Weitere Bausteine
+XML-Ansicht: Modul `xmlansicht.py` (`extrahieren` holt die XML aus einer PDF über pypdf-Anhänge, bevorzugt `factur-x.xml`/`zugferd-invoice.xml`/`xrechnung.xml`; `pruefen` = Wohlgeformtheit, Art CII/UBL, Profil BT-24, Pflichtfelder BT-1/2/3/5/27/31/44, Leitweg-ID BT-10 bei XRechnung, Summen BT-106/109/110/112/115, Zeilensumme, Übersicht über `eingangsrechnung.lies_xml`). API `POST /api/xml` {daten, dateiname}, `GET /api/xml/eingang/{token}`, `/xml/zahlung/{id}`, `/xml/rechnungspost/{id}`, `/xml/beleg/{id}[?format=xrechnung]` (festgeschrieben: archivierte XRechnung bzw. eingebettete XML; sonst Vorschau aus `erechnung.cii_xml`), `/xml/projekt/{auftrag}?pfad=`. Recht `xml` (Lieferanten oder Aufträge, nur mit Preisrecht; Werkstatt gesperrt). Oberfläche `static/xmlansicht.js`: `xmlAnsicht(quelle, titel)` mit Reitern Prüfung/Baum (DOMParser, `XML_BT` = deutsche Bezeichnungen mit BT-Nummer)/Quelltext, Suche, Kopieren, Download; `xmlDateiWaehlen()`. Eingangsrechnung: unbekannter Lieferant → `lieferantNeuDialog()` (POST `/api/lieferanten` mit erkannten Daten, E-Mail notfalls aus dem Mail-Absender `mail_von`), Buchen ohne Lieferant nur nach Anlage. `erechnung.cii_xml`: BT-44 ohne Briefanrede („Herrn“, „Frau“, „Firma“).
+
+### 7.18 Weitere Bausteine
+E-Mail-Adressen: Mail-Symbol bei Kunde und Lieferant immer gerendert (`a[data-mailto]`, ausgeblendet ohne gültige Adresse), globaler `input`-Listener auf `input[data-f^="email"]` blendet es beim Tippen ein und setzt `href`. `mailDialog`: Adress-Schalter `[data-adr]` unter „An“ (Klick = An umschalten, Umschalt-Klick = Cc; eine Adresse steht nur in einem der Felder). `rechnungsadressen_vorn(adr)` stellt rechnung@/buchhaltung@/invoice@ … nach vorn bei Rechnungsbelegen (`mail_vorschlag`) und Mahnungen.
+
+### 7.19 Weitere Bausteine
+Offizielle E-Rechnungsprüfung: Modul `epruefung.py`, Regelwerke in `pruefregeln/` (CEN `EN16931-CII/UBL-validation.xslt` 1.3.17, `cii-schema/` D16B-Subset, `XRechnung-CII/UBL-validation.xsl` = KoSIT-Schematron 2.6.0 mit Peppol BIS 3.0.21, per `peppol-into-xr.xsl` gemischt und mit dem ISO-Skeleton `iso_svrl_for_xslt2.xsl` kompiliert; Herkunft und Lizenzen in `pruefregeln/HERKUNFT.txt`). Ausführung mit `saxonche` (Saxon-HE, XSLT 3.0) und `lxml` (XSD); beide optional, Installation über `POST /api/xml/einrichten` (nur Inhaber, `pip install --user` im Hintergrund, Status `GET /api/xml/pruefung`). `epruefung.pruefen(bytes)` → `{moeglich, gueltig, schritte[{name, status, hinweis, meldungen[{regel, stufe, text, ort}]}]}`; SVRL `failed-assert`/`successful-report` mit `flag`. XSD nur für CII-Profile EN16931/BASIC/XRechnung (EXTENDED, MINIMUM, BASIC WL haben eigene Schemata), UBL ohne XSD; ZUGFeRD 1.0 (`CrossIndustryDocument`) nicht prüfbar. Kompilierte Stylesheets werden je Programmlauf zwischengespeichert (erste Prüfung ca. 1 s, danach < 0,1 s). Jede `xml/...`-Antwort enthält `offiziell`. `xmlansicht`: ZUGFeRD-1.0-Summen (`SpecifiedTradeSettlementMonetarySummation` im Kopf) werden gefunden; Kodierung aus der XML-Deklaration (`_als_text`).
+
+### 7.20 Weitere Bausteine
+XML-Ansicht mit Reitern Prüfung · Übersicht · Baum · Quelltext. „Übersicht“ = KoSIT XRechnung-Visualisierung (Release v2026-10-13, `pruefregeln/visualisierung/`): `epruefung.ansicht_html(bytes)` wandelt CII (`cii-xr.xsl`) bzw. UBL (`ubl-invoice-xr.xsl`, `ubl-creditnote-xr.xsl`) ins XR-Zwischenformat und mit `xrechnung-html.xsl` in HTML (Saxon-HE, Stylesheets zwischengespeichert), ergänzt `VIS_STIL` (Programmfarben, leere `.boxzeile` per `:has()` ausgeblendet). Antwortfelder `ansicht_html`, `ansicht_grund`. Anzeige im `iframe srcdoc` mit `sandbox="allow-scripts allow-downloads allow-modals"` (ohne same-origin); „Drucken / PDF“ und „In neuem Fenster“ über eine Blob-URL. Ersatzdarstellung `xmlAnsichtZeigen()` aus `uebersicht` für ZUGFeRD 1.0 oder ohne Saxon.
+
+### 7.21 Weitere Bausteine
+`lieferant_mail(con, lid, methode, q, d)` (GET/POST `/api/lieferanten/{id}/mail[?an=&auftrag=]`) analog `kunde_mail` (Betreff mit „Kunden-Nr.“ aus `unsere_kundennr`, Notiz + `korrespondenz_eintragen(mail_aus, lieferant_id)`); `kunde_mail` nimmt `?an=`. Mail-Symbole (`a[data-mailto="kunden/{id}"|"lieferanten/{id}"]`) öffnen per globalem Klick-Handler `mailDialog` mit der Adresse, Strg/Cmd-Klick lässt `mailto:` durch. Korrespondenz beim Lieferanten mit „E-Mail schreiben“. Neue Unterlage `static/hilfe/kalkulation.html` (Kalkulationslogik, Prüfplan, Befunde F1–F9, K1–K11, Rechenbeispiel aus `kalkulation.position_rechnen`).
+
+### 7.22 Kalkulationsprüfung
+`kalkulation.position_rechnen`: Stunden je Kostenstelle/Lohngruppe ungerundet (6 Stellen) statt 0,01 h je Anzahl (F1); gesperrte Unterpositionen ohne Preis (F2, ebenso `summiere`, `stunden_von`, `beleg_zeilen`, `lohnanteil_rechnen`); `lohn_von(kalk, gruppe, warnungen)` weicht bei 0 €/h auf die Lohnbasis aus (F3, auch im Soll/Ist); leere Stückzahl = 1 (F4); unbekannte Bezugsgröße → `zeitzeilen[].bezug_fehlt` und Warnung (F5); Oberfläche mit Schmalflächen `2(L+B) × Fertigdicke` für alle Werkstoffe (F6). Rückgabe `warnungen` (Liste), Anzeige ⚠ in der Positionsliste, im Reiter Zeiten und Summen (`kalkWarnHtml`). `soll_ist`: Stunden ohne bekannte Kostenstelle mit dem nach Soll-Stunden gewichteten GK-Satz, Rückgabe `ohne_kst`. Briefe: Spalten `ihr_zeichen`, `unser_zeichen` (leer → Briefnummer) im Infoblock. Unterlage `hilfe/kalkulation.html` aktualisiert.
+
+### 7.23 Weitere Bausteine
+`beleg_snapshot` (Abschlag): Prozent vom Auftragsnetto nach Kundenrabatt (F7). `soll_ist`: `ist.nettopreis` = Σ netto der festgeschriebenen Rechnungen (`art='rechnung'`, `status='fest'`), sonst Kalkulationssumme × (1 − Rabatt); Rückgabe `erloes` (Herkunft, Hinweis in der Oberfläche) (F8).
+
+### 7.24 Weitere Bausteine
+`stuecklistenimport.zeilen_lesen`: Feld 23 (erweitert 24) = Anzahl Taschen/Ausschnitte → Teil `taschen` (Bezugsgröße `tasche`). Vollständige Formatbeschreibung im Handbuch, Abschnitt `#importformat`, Beispieldatei `static/hilfe/beispiel-stueckliste.csv`.
+
+### 7.25 Weitere Bausteine
+Startseite: Rohertrag wie EÜR – Material = Zahlungsaufträge (mit Auftrag oder Lieferantengruppe in `ist_kategorien`), netto, nach Zahlungsdatum `bezahlt` (Skonto abgezogen, wenn bezahlt ≤ `skonto_bis`); bei `umsatz_basis` = Rechnung nach Belegdatum; Rückgabe `material_basis`. Verbindlichkeiten getrennt: `verbindlichkeiten_ueberfaellig` (+ Anzahl), `verbindlichkeiten_7t` nur heute bis +7 Tage; überfällige Lieferantenzahlungen rot im Kasten Geld. Teile: `tasche_l`, `tasche_b`, `tasche_t` (mm); Bezugsgrößen `tasche_lfm` (Anzahl × 2(L+B)), `tasche_m2` (Anzahl × L × B); Import Feld 23 „n“ oder „nxLxB[xT]“ (`stuecklistenimport.tasche_lesen`); Positionsvorlagen und Werkstattpapier mit Taschengröße.
+
+### 7.26 Weitere Bausteine
+Auftragshistorie: `auftrag_historie(con, aid)` sammelt Ereignisse aus `auftraege.angelegt`, `notizen` (neue Spalten `art` = ''/notiz, status, datei und `benutzer`), `anhaenge`, `belege` (angelegt, festgeschrieben), `korrespondenz` (ohne art 'brief'), `briefe`, `termine`, `zahlungseingaenge`, `stunden` (je Tag summiert) und `cad_importe`; Sortierung nach Zeit und Einfügereihenfolge absteigend. Route `GET /api/auftraege/{id}/historie`. `historie_eintrag(con, aid, art, text)` schreibt automatische Einträge: Statuswechsel im PUT des Auftrags, Dateiablage über `POST auftraege/{id}/hochladen` mit `historie: true`. Oberfläche `historieSeite()` in `kalk.js`, Reiter `historie` (alter Hash `anhaenge` wird umgeleitet).
+
+Kapazität: `termine.mitarbeiter` (JSON-Liste von IDs). `personal.verfuegbar_tage()` liefert die Sollstunden je Tag aus dem Arbeitszeitmodell abzüglich Feiertage und Abwesenheiten; `personal.kapazitaet()` verteilt Terminstunden auf Mitarbeiter und Wochen (ohne Stunden = Tag voll verplant, ohne Mitarbeiter = `ohne_zuordnung`). `kapazitaet_daten()` in `app.py` ergänzt Arbeitsvorrat (Soll − Ist der erteilten Aufträge, verplant ab heute), freie Stunden der nächsten 8 Wochen und Reichweite; Ausgabe als `kapazitaet` in `GET /api/kalender`. Darstellung `kapazitaetHtml()` in `kalender.js`.
+
+### 7.27 Weitere Bausteine
+Rohertrag: Material/Einkauf = alle bezahlten Zahlungsaufträge außer Lieferantengruppen in `rohertrag_ohne_gruppen` (neue Einstellung, Vorgabe Mitarbeiter, Finanzamt, Krankenkasse(n), Versicherungen, Werkzeug & Maschinen) und vom Lohn erzeugten Zahlungen (Belegnr. `Lohn|LStA|SV MM/JJJJ`); mit `auftrag_id` zählt immer. Vorher zählten nur Gruppen aus `ist_kategorien`, Lieferanten ohne Gruppe fielen heraus.
+
+Planung: `kapazitaetHtml(k, {von, tage, tw, raster, heuteX, balken, sichtbar, termine})` zeigt je Mitarbeiter den Wochenstreifen (oben, 30 px) und darunter die zugeordneten Termine als Balken (`balken(..., oben=30)`, gleiche Zieh-/Klicklogik über `data-t`); Zeile „Nicht zugeordnet“ mit Terminen ohne Mitarbeiter und `.kk-oz`-Wochenzellen. Zuklappen je Auftrag: `KAL.zu` (Set, `localStorage` `kal_zu`), Knöpfe `data-zu`/`data-zualle`; zugeklappt nur Planbalken bzw. Sammelbalken `art: "sum"`.
+
+Stempeluhr: `personal.mein_plan(con, m)` (Termine des Mitarbeiters heute bis +6 Tage, nicht erledigt) als `plan` in `stempel_status`; Anzeige „Mein Plan“ in `stempel.html`, „Stempeln“ öffnet `waehlen()` mit vorgewähltem Auftrag.
+
+### 7.28 Weitere Bausteine
+Zahlungsbestätigung: `zahlbest_mail(con, opid, methode, q, d)` hinter `GET/POST /api/offeneposten/{id}/mail` (gleiches Schema wie die anderen Mail-Endpunkte, Oberfläche `mailDialog`). GET füllt `zahlbest_betreff`/`zahlbest_text` (neue Einstellungen, dazu `zahlbest_vorschlagen`) mit Platzhaltern aus dem letzten Zahlungseingang (ohne Skonto-Zeilen; Skonto vom selben Datum), Posten, Auftrag und Kunde; POST sendet und trägt `mail_aus` in die Korrespondenz (Kunde, Auftrag) ein. `zahlungBuchen()` in `mahnwesen.js` öffnet den Dialog nach dem Buchen, wenn der Haken gesetzt ist; OP-Liste (`kalk.js`) mit Knopf `data-zbest` für bezahlte Posten. Platzhalter `{belegart}` (= `offene_posten.art`, z. B. Abschlagsrechnung), `{auftrag_bezahlt}` und `{schlusssatz}` (Einstellungen `zahlbest_schluss_rechnung` / `zahlbest_schluss_abschlag`); ältere gespeicherte Texte werden beim Ausfüllen auf `{belegart}`/`{schlusssatz}` umgestellt.
+
+### 7.29 Gesamtprüfung der Oberfläche
+Prüfung: `py_compile` und `pyflakes` aller Module ohne Befund (keine undefinierten Namen), alle Skripte der Oberfläche zusammengefügt mit ESLint (`no-undef`, doppelte Schlüssel u. a.) ohne Befund, Klickrundgang über rund 370 Seiten/Reiter ohne JS-Fehler oder Serverfehler, Regressionstests t34–t50 grün, alle Hilfe-Anker vorhanden. Kapazität: Stunden eines Termins, dessen Mitarbeiter an allen Tagen abwesend oder nicht mehr aktiv sind, erscheinen unter „Nicht zugeordnet“ statt zu verschwinden.
+
+### 7.30 Weitere Bausteine
+Passwort vergessen: `benutzer.schema()` ergänzt `benutzer.email`, `notfall_hash`, `notfall_erstellt` und die Tabelle `pw_codes` (je Benutzer ein Code: SHA-256-Hash, Ablauf 15 Min., Versuchszähler). Endpunkte ohne Sitzung: `POST /api/anmeldung/vergessen {login}` (Antwort immer gleich, verrät keine Benutzer; Code an `reset_adresse()`: Benutzer-Mail → Mitarbeiter-Mail → beim Inhaber Absenderadresse; höchstens ein Code je Minute, IP-Drosselung über `_fehlversuch`), `POST /api/anmeldung/zuruecksetzen {login, code, neu}` (Code oder beim Inhaber Notfallschlüssel; danach alle Sitzungen gelöscht, neue Sitzung gesetzt, Hinweismail, Protokolleintrag `passwort`). Mit Sitzung: `POST /api/anmeldung/email`, `POST /api/anmeldung/notfallschluessel {passwort}` (nur Inhaber, 16 Hex-Zeichen, nur Hash gespeichert, einmal gültig). Oberfläche: `passwortVergessen()` in `personal.js`, `vergessen()` in `stempel.html`, „Passwort & E-Mail“ im Benutzermenü, E-Mail-Feld im Benutzerdialog, Kachel Notfallschlüssel.
+
+Zuschnittprogramm heißt „Zuschnitt · Jahresring“ (Titel, Manifest, Service Worker); die Lagerdatei des eigenständigen Betriebs heißt `Lager_Jahresring.json`.
+
+### 7.31 Weitere Bausteine
+-63: Datenauskunft (`auskunft_brief`): Briefanrede über `anrede_aufloesen()` statt Rohtext mit Platzhaltern, mehrzeilige Felder zeilenweise mit Komma verbunden; Brief „PDF ablegen“ meldet den Ablageort (Archiv `daten/briefe/<Jahr>/`, ggf. Projektordner).
+
+-64: Zuschnitt-PWA mit Jahresring-Farbvariablen (`:root` in `static/zuschnitt/index.html`), dunkle Kopfleiste (`header.bar`, volle Breite über negative `margin-inline`), Marke mit `ring-hell.svg` (Kopie von `static/jahresring-hell.svg`, im Service Worker gecacht). `img#logo` bleibt im DOM (versteckt), weil PDF und Etiketten das Firmenlogo daraus lesen. Manifest `theme_color` #3b3530, Cache-Version neu.
+
+### 7.32 Weitere Bausteine
+Hilfe-Dokumente `static/hilfe/verfahrensdokumentation.html` und `datenschutz.html` auf Version 2.0: betriebliche Angaben (Anschrift, Kontakt, Systeme mit Versionen, Prozesse außerhalb des Programms, keine Steuerberatung) sind fest eingetragen statt Platzhalter; neue Platzhalter `f72`–`f74`, `d16`; entfallene Platzhalter (`f1`, `f5`, `f6`, `f8`, `f9`, `f11`, `f12`, `f13`–`f17`, `f19`–`f23`, `f44`, `f49`, `f50`, `d1`–`d7`, `d9`, `d15`, `d30`) werden ignoriert, falls Werte gespeichert sind. Datenauskunft (`auskunft_brief`) mit Abschnitt „Speicherorte“ und Empfängern ohne Steuerberater.
+
+### 7.33 Weitere Bausteine
+-66: Handbuch und Kalkulationslogik ohne Verweise auf frühere Programmstände; Bezugsgrößen-Tabelle, Kennzahlen der Startseite, Herkunft der Ist-Werte.
+
+-67: `testdaten_loeschen.loesen()` löscht Zeilen, deren Verweisspalte NOT NULL ist (z. B. `cad_importe.auftrag_id`), statt sie auf NULL zu setzen. `auftrag_loeschen()` ersetzt das bisherige DELETE: Sperre bei Belegen mit Status fest/storniert, `versendet` oder `pdf`, bei Korrespondenz, Briefen und Rapporten; löscht Entwürfe, Positionen, Stunden, Termine, CAD-Vermerke, Bautagebuch, automatische Historie und Auftragskosten (mit Lagerrückbuchung) und löst alle übrigen `auftrag_id`-Verweise generisch (NOT NULL → löschen, sonst NULL); Protokolleintrag `auftrag`. Relationencheck: `service.LOESBAR` und `verweise_loesen()`, Route `POST /api/service/relationen/loesen` (nur Inhaber, Protokoll `relationen`).
+
+### 7.34 Weitere Bausteine
+Zeitbericht: `zeitbericht_daten(con, auftrag_ids, q)` (stunden ⟕ zeiten ⟕ mitarbeiter ⟕ auftraege; Tätigkeit aus `zeiten.taetigkeit`, sonst `stunden.taetigkeit`; Filter `von`, `bis`, `ma`, Sortierung `sort=auf|ab`), Darstellung `werkstatt.zeitbericht()` mit Bedienleiste `werkstatt.zeitbericht_filter()` (wird nicht gedruckt). Auftrag: Papierart `zeitbericht` in `werkstatt.AUSWERTUNG` (`/papier/{aid}/zeitbericht`, PDF über `POST auftraege/{id}/papier`); Projekt: `/papier/projekt/{pid}/zeitbericht` (`projekt_zeitbericht_html`). `werkstatt.rahmen()` hat dafür den Parameter `leiste_extra`.
+
+## 8. Oberfläche
+
+### 8.1 Aufbau
+
+`static/index.html` enthält CSS, Menüleiste, Grundfunktionen und den Router; weitere Skripte werden der Reihe nach geladen und teilen sich den globalen Namensraum: `kalk.js` (Aufträge, Positionen, Belege, Soll/Ist), `kalender.js`, `start.js`, `werkstatt.js`, `material.js` (Lager, Reste, Etiketten), `import.js`, `mahnwesen.js`, `eingang.js` (Eingangsrechnungen, Werkzeuge), `personal.js` (Anmeldung, Benutzer, Mitarbeiter, Rechte im Frontend), `service.js`, `montage.js`, `leitstand.js`. Separate Seiten: `stempel.html` (Handy-Stempeluhr mit Offline-Warteschlange in `localStorage`), `zuschnitt/`, `hilfe/`.
+
+Wichtige globale Helfer: `api(pfad, {method, body})` (JSON, wirft `Error` mit Servermeldung, lädt bei 401 neu), `$`/`$$`, `esc`, `kopf({krumen, reiter, reiter2, kontext, zurueck})`, `zeile(label, inner, voll)`, `modal(titel, html, ok)` (liefert Formularwerte oder `null`), `frage(text, {ok})`, `toast(text, fehler)`, `tabelle()`, `autospeichern(form, pfad, danach)`, `speicherer(pfad)`, `n2`, `eur`, `datum`, `zahlEin` (deutsches Zahlenformat lesen), `materialWaehlen(kategorien, titel)`, `darf()`, `E` (Einstellungen), `ICH` (angemeldeter Benutzer).
+
+Router: `render()` zerlegt `location.hash` (`#/bereich/id/reiter/unter`) und ruft `ansicht…()`; Rechteprüfung über `ROUTE_BEREICH`. Breite Tabellen (`table.liste`) packt ein `MutationObserver` automatisch in `.tab-scroll`. Die Hilfe öffnet `hilfe/handbuch.html#<anker>`, der Anker kommt aus `hilfeZiel()` (Zuordnung Route → Kapitel); neue Seiten dort ergänzen.
+
+### 8.2 Konventionen
+
+Deutsche Bezeichner, 2 Leerzeichen Einrückung, Template-Strings für HTML, Ausgaben immer über `esc()`. Zahlen werden im deutschen Format angezeigt (`n2`) und mit `zahlEin` gelesen. Speichern erfolgt automatisch (debounced PUT). Die Oberfläche passt sich per CSS (`@media (pointer:coarse)`, Breakpoints 1000/600 px) an Tablets an.
+
+
+Breite: `tabellenEinpacken()` (MutationObserver auf `#inhalt` und `.modal`) packt jede `table.liste` in `.tab-scroll` und setzt davor `.tab-oben` (zweite Bildlaufleiste, per `ResizeObserver` nur sichtbar, wenn die Tabelle breiter ist; Scrollposition wird gegenseitig übernommen; nur `pointer:fine`). Hauptmenü `.lb-nav`: am PC dünne Bildlaufleiste, Mausrad waagrecht, Pfeile `.lb-pfeil` bei `#leiste.nav-voll` (`navPruefen()` bei Aufbau und Größenänderung, hält den aktiven Eintrag sichtbar).
+
+## 9. API-Referenz (Auszug)
+
+Alle Pfade unter `/api/`. Rechte siehe `benutzer.RESSOURCEN`.
+
+| Ressource | Methoden und Unterpfade |
+|---|---|
+| `anmeldung` | GET (Status), POST `einrichten`, `login`, `logout`, `passwort` |
+| `kunden` | GET Liste/Detail, POST, PUT, DELETE, POST `import`, GET `{id}/statistik` |
+| `auftraege` | GET/POST/PUT/DELETE (Liste filterbar mit `kunde`, `gruppe`, `status`, `projekt`={id}|ohne, `q`); `{id}/positionen` (GET, POST, Sortierung), `{id}/kalk` (GET, PUT, `_zuruecksetzen`), `{id}/titel`, `{id}/sollist`, `{id}/belege` (GET, POST), `{id}/papier` (POST: PDF in Projektordner), `{id}/ordner`, `{id}/dateien`, `{id}/zuschnitt`, `{id}/zuschnittplan`, `{id}/kunde` |
+| `positionen` | GET/PUT/DELETE `{id}`, POST `{id}/kopieren`, `{id}/bild`, `{id}/stueckliste-import` (vorschau/ausführen), `{id}/taetigkeiten`, `{id}/runden` |
+| `belege` | GET/PUT/DELETE `{id}`, POST `{id}/aktualisieren`, `{id}/festschreiben`, `{id}/storno`, `{id}/pdf`, GET/POST `{id}/mail`, GET `{id}/erechnung` |
+| `offeneposten`, `zahlungseingaenge` | Liste, `{id}/zahlungen`, POST `{id}/zahlung`, `{id}/mahnsperre`, `{id}/mahnkosten_erlassen`; DELETE Zahlungseingang |
+| `mahnwesen`, `mahnungen` | Vorschläge; Mahnung erzeugen, PDF, Mail, DELETE (nur letzte) |
+| `lieferanten`, `zahlungen`, `zahlungsstatistik`, `naechste_zahlung` | Stammdaten, Zahlungsaufträge, POST `zahlungen/sepa`, `zahlungen/bezahlt` |
+| `eingang` | POST lesen (Datei) / buchen |
+| `material`, `materialsets`, `lager`, `auftragskosten` | über `material.api` |
+| `werkzeuge` | über `werkzeuge.api`, inkl. `import`, `meta` |
+| `reste` | GET Übersicht, POST Rest, PUT `{id}` (Aktion), PUT `platte/{id}`, GET/PUT `lagerdatei`, POST `import`, PUT `bestellung`, POST `wareneingang` |
+| `montage` | GET Liste/`meta`/`material`, POST, GET/PUT/DELETE `{id}`, POST `{id}/unterschreiben`, `{id}/pdf` |
+| `leitstand` | GET, PUT `{auftrag_id}` |
+| `projekte` | GET Liste (`status`=aktiv/abgeschlossen/alle, `q`), GET `{id}` (mit Summen und Soll/Ist), POST (`bezeichnung`, `kunde_id`, `auftraege`), PUT `{id}` (Felder, `zuordnen`, `loesen`), DELETE `{id}` (nur Klammer) |
+| `termine`, `kalender`, `kalendertest`, `stunden` | Kalender, externe Kalender, Ist-Stunden |
+| `mitarbeiter`, `zeiten`, `abwesenheiten`, `konten`, `monatsbeleg`, `lohn`, `stempel` | über `personal.api` |
+| `start`, `statistik`, `suche`, `naechste` | Startseite, Auswertungen, globale Suche, nächste Nummern |
+| `einstellungen`, `vorlagen`, `nummernkreise`, `kalkvorgaben`, `benutzer`, `mail` | Konfiguration |
+| `service` | GET `infos`, `sicherungen`, `relationen`, `testdaten`; POST `sicherung`, `ruecksichern`, `testdaten` |
+| `bildvarianten`, `autostart`, `fenster`, `beenden`, `version`, `zuschnitt` | Hilfsfunktionen |
+
+Nicht-API-Routen: `/druck/{id}` (Belegansicht), `/druck/{id}.pdf`, `/druck/mahnung/{id}`, `/druck/monatsbeleg/{mid}/{JJJJ-MM}[.pdf]`, `/papier/{aid}/{art}`, `/papier/{aid}/zuschnitt.csv`, `/papier/montage/{id}`, `/papier/projekt/{id}`, `/liste/werkzeuge[.pdf]`, `/liste/lager[.pdf]`, `/liste/etiketten`, `/api/bild/{datei}`, `/api/vorlage/{datei}`, `/api/belege/{id}/(zugferd|xrechnung).xml`, `/api/zahlungen/{id}/datei`, `/api/service/datei/{name}`, `/api/kalender/export.ics`, `/stempel`, `/zuschnitt/`, `/hilfe/…`.
+
+## 10. Entwicklung, Test, Auslieferung
+
+**Lokal starten:** `BUERO_PORT=8799 python3 app.py kein-browser` in einer Kopie des Programmordners ohne `daten/` (frische Installation zeigt die Einrichtung). Für PDFs ohne installiertes Chrome kann `BUERO_BROWSER` auf ein Skript zeigen, das mit Playwright `page.pdf({preferCSSPageSize: true})` aufruft.
+
+**Tests:** End-to-End mit Playwright (Node): anmelden bzw. einrichten, Daten per `fetch('/api/…')` im Seitenkontext anlegen, Seiten aufrufen, Screenshots und API-Ergebnisse prüfen. Python-Module lassen sich direkt importieren (z. B. `pdfseiten.nummerieren`, `montage.klartext`, `reste.beschaffung`). Prüfen nach Änderungen: `python -c "import ast; ast.parse(open('app.py').read())"`, JavaScript-Syntax mit `node -e "new Function(src)"`, PDFs mit `qpdf --check` und `pdffonts`.
+
+**Auslieferung:** `VERSION` in `app.py` und `static/index.html` erhöhen (Format `JJJJ.MM.TT-n`), Abschnitt unter „Änderungen“ in `LIESMICH.txt` ergänzen (UTF-8, CRLF), Zip ohne `daten/` und `__pycache__` erstellen und daraus `Jahresring-Setup.exe` bauen (siehe „Jahresring-Setup.exe“). Beim Betrieb: Setup ausführen; `init_db()` migriert beim Start. Das Frontend warnt, wenn Server- und Oberflächenversion abweichen.
+
+**Gesamtprüfung:** pyflakes ohne Befund außer bewusst optionalen Importen (`epruefung`, `erechnung`), eslint ohne Befund, Routen-Crawler fehlerfrei (96 Routen frisch, 181 Routen mit Lastdatenbank), Handbuch-Anker und Versionsstände konsistent. Behoben: Einstellungs-UI `pdf_ordner` (Inputs `data-po`, Speichern über `#sp`); `pdf_unterordner()` fällt für Belegarten ohne gespeicherten Wert auf `STANDARD_EINSTELLUNGEN["pdf_ordner"]` zurück (GET liefert dazu `_pdf_ordner_standard`); `soll_ist` Ist-Erlös über `art IN ('rechnung','gutschrift','korrektur')`; ungenutzte Importe und f-Strings ohne Platzhalter entfernt.
+
+**Betriebsneutral, Angebotsversand:** `STANDARD_EINSTELLUNGEN` ohne Firmen- und Inhabernamen (bestehende Installationen haben die Werte durch `INSERT OR IGNORE` gespeichert). Einrichtung (`POST anmeldung/einrichten`) speichert `firma` und `firma_inhaber` (aus `name`), wenn leer. Kopf: `#lbFirma`, `kopfFirma()` nach dem Speichern der Einstellungen. `hilfe/verfahrensdokumentation.html` und `hilfe/datenschutz.html` sind neutrale Vorlagen: `[data-e]` (firma, firma_inhaber, anschrift, kontakt) wird aus `GET einstellungen` gefüllt, betriebsindividuelle Stellen sind `[data-f]`-Felder (`v_*`, `g_*`). `statisch()` liefert für diese beiden Pfade `daten/dokumente/<name>`, falls vorhanden (`EIGENE_DOKUMENTE`). `eigene_dokumente_uebernehmen(bestand)` in `init_db` kopiert einen Ordner `uebernahme/` im Programmordner bei bestehender Installation einmalig dorthin und löscht ihn; **vor einer Weitergabe des Programms an Dritte muss `uebernahme/` aus dem Paket entfernt werden.** Zuschnitt: Logo nur über `/api/logo`, wenn `JAHRESRING.logo` (vom Server gesetzt) wahr ist.
+Angebote: `status_fortschreiben` setzt den Status für `angebot`/`kv` nur, wenn `belege.versendet` gesetzt ist; `mail_senden` ruft es danach auf. `POST/DELETE belege/{id}/versendet` (`weg`) vermerkt bzw. nimmt einen Versand außerhalb des Programms zurück (`versendet_an` beginnt mit `VERMERK` = "Vermerk: "; per E-Mail gesendete Belege sind nicht zurücknehmbar). Startseite: `letzte_belege` nur versendete Angebote, `entwuerfe` die übrigen; Anfragen = Status in `status_angebot` ohne versendetes Angebot und (Status = erster Angebotsstatus oder Entwurf vorhanden), mit `entwurf`; Nachfassbasis = Versanddatum; Angebotsquote über versendete Angebote nach Versandjahr.
+
+**Zukauf:** `extras.zukauf` je Position (Einkaufspreis je Anzahl). `position_rechnen`: `material` enthält `zukauf`, `gk_material = (material − zukauf) × gk_material %`, Rückgabe `zukauf`; `KATEGORIEN`, `projekte.SI_KEYS`, `werkstatt.SOLLIST_ZEILEN` und Materialkostentabelle ergänzt. `material.KOSTENARTEN["zukauf"]` = „Zukauf (Handelsware)“; `soll_ist` führt `ist["zukauf"]` und rechnet die Ist-Material-GK ohne Zukauf. Oberfläche: Feld `#zk` in der Position (setzt `preis_manuell=0`); `#wgE` ist ohne Kalkulation aktiv, sobald ein Einzelpreis steht, und übernimmt diesen beim ersten Tippen als `extras.zukauf`.
+
+**Fremdleistungen in der Position:** Felder `#fl`/`#flT` und `#zkT` im Preisbereich der Positionsseite (auch Unterpositionen) schreiben `extras.fremdleistungen`, `extras.fremdleistungen_text` und `extras.zukauf_text`; Betragsänderung setzt `preis_manuell=0`. `werkstatt.werkstattauftrag` druckt „Fremdleistung: …“ / „Zukauf: …“ unter der Position, die Summenansicht zeigt die Texte neben der Zeile.
+
+**Freie Kostenliste:** `extras.kostenliste` = Liste `{art: werkstoffe|fremdleistungen|zukauf, text, menge, einheit, preis}` je Position. `kalkulation.kostenliste(ex)` liest zusätzlich die alten Einzelfelder (`fremdleistungen`, `zukauf`, `*_text`) als Zeilen; `kl_betrag` = Menge (leer = 1) × Preis. In `position_rechnen` gehen Werkstoff-Zeilen in `werkstoffe` (damit Kleinmaterial und Material-GK), Fremdleistungen in `fremdleistungen`, Zukauf in `zukauf`; Rückgabe zusätzlich `kostenliste_werkstoffe` (der eigene GK-Satz für Zukauf wurde in -93 wieder entfernt). `init_db` überführt Einzelfelder einmalig in `kostenliste` (Ergebnis unverändert). Oberfläche: `klAusExtras`, `klBetrag` (global in kalk.js), `#klBox` in der Positionsseite; W+G ohne Kalkulation legt eine Zukauf-Zeile mit dem Einzelpreis an. Werkstattauftrag druckt die Zeilen als „Material/Fremdleistung/Zukauf: Menge Einheit Beschreibung“.
+
+**Sonderkosten in der Kostenliste:** `KOSTENLISTE_ARTEN` um `sonder_fertigung` und `sonder_vertrieb` erweitert; `KOSTENLISTE_ALT` (= frühere Einzelfelder `fremdleistungen`, `zukauf`, `sonder_fertigung`, `sonder_vertrieb` samt `*_text`) wird von `kostenliste()` gelesen und in `init_db` einmalig überführt. `position_rechnen` nimmt `sonder_fert`/`sonder_vertr` aus der Kostenliste (Rechenweg unverändert). Summenansicht zeigt beide nur an (`data-x`-Felder entfernt). Werkstattauftrag lässt `sonder_vertrieb` weg. JS: `KL_ALT`, `KL_BSP` (Platzhaltertexte je Kostenart).
+
+**Unterpositionen-Reiter, Einheiten:** `posKopfzeile(ctx, titel, extra, nurUnter)` – mit `nurUnter` (Reiter Unterpositionen) nur `#uNeu`; `posKopfBinden` bricht ohne `#pNeu` ab; Zeilenknopf `data-a="kopie"` → `POST positionen/{id}/kopieren`. `STANDARD_EINSTELLUNGEN["einheiten"]` = SB-Liste; einmalige Umstellung (`_einheiten_neu`: neue Liste + eigene Zusatzeinträge, Kostenlisten-Einheit „psch“ → „Pauschale“). `material/meta` liefert „(keine)“ + Einstellungsliste. Kostenliste: Einheit als `<select>` mit `opts(E.einheiten, …, "(keine)")`. `erechnung.EINHEITEN`: Garnitur→SET, Packung→XPK, Dose→XCA, Tube→XTU.
+
+**Unterpositionen Drag & Drop:** `position_einordnen` sortiert eine Unterposition (`parent_id` gesetzt) innerhalb der Geschwister vor `vor` (None = ans Ende). `unterSeite` setzt `draggable` auf `tr.klick` und nutzt dieselben CSS-Klassen wie die Positionsliste (`zieht`, `drop-vor`, `drop-nach`).
+
+**Soll/Ist ohne Kosten:** `soll_ist` liefert `ohne_kalk` (zählende Positionen/Unterpositionen mit Einzelpreis > 0 und `hat_kalk` falsch: posnr, Text, Betrag). Der eigene GK-Satz für Zukauf (`gk_zukauf`, -89) ist wieder entfernt: `gk_material = Material × gk_material %` einschließlich Fremdleistungen und Zukauf (Soll und Ist); ein in Auftragswerten noch gespeichertes `gk_zukauf` wird ignoriert. `speicherer().offen()` meldet ungesendete Änderungen; die Positionsseite übernimmt dann aus der Antwort nur `calc`, damit spätere Eingaben (z. B. Kostenliste) nicht durch eine ältere Antwort zurückgesetzt werden. `position_rechnen` liefert `unter_kat` (Summe der `KATEGORIEN` aller nicht gesperrten Unterpositionen × Menge, rekursiv); die Summenansicht zeigt bei Unterpositionen die Spalte „inkl. Unterpos.“ (`iw`), W+G inkl. = `ep_gesamt − kosten_gesamt − sonder_vertrieb inkl.`
+
+**GK-Sätze in Soll/Ist:** `gkSatz(k)` (kalk.js) und `gk_satz(kk)` (werkstatt.py) zeigen hinter `gk_material`/`gk_lohn` den Satz `gk / Basis × 100` (Basis `material` bzw. `lohn`), aus dem Soll; bei abweichendem Ist zusätzlich „(Ist …)“.
+
+**Unterschriftsgröße:** Einstellung `unterschrift_hoehe` (mm, Standard 17), Teil von `firma_daten` (wird mit dem Beleg festgeschrieben). `gruss_html(name, mit_unterschrift, hoehe)` setzt `height` und `top` (= −hoehe × 7/17 mm) inline, begrenzt auf 6–35 mm. `druck_html` nimmt bei festgeschriebenen/stornierten Belegen den Wert aus dem Snapshot (fehlt er: 17 mm), sonst die aktuelle Einstellung; Briefe die aktuelle Einstellung, Mahnungen Snapshot oder aktuelle Einstellung.
+
+**Zahlungsplan:** Druckeinstellung `konditionen` = `"plan"` (nur Nicht-Rechnungen) mit `plan_anzahlung` (%), `plan_rest` (Tage), `plan_wochen` in `belege.druck`. `zahlungsplan_text(e, dr, s)` füllt `zahlungsplan_text` bzw. `zahlungsplan_lieferung` (Platzhalter `{anzahlung}`, `{anzahlung_betrag}` = Brutto × %, `{rest_tage}`, `{lieferwochen}`), Vorgabe `zahlungsplan_rest`. `beleg_anlegen` übernimmt für angebot/kv/ab den Plan des jüngsten Angebots/KV/AB des Auftrags und speichert ihn in `druck`. Liste `GET auftraege/{id}/belege` liefert `konditionen` und `plan_anzahlung`; `neuerBeleg` setzt damit den Abschlags-Prozentsatz vor, solange noch kein (nicht stornierter) Abschlag existiert. Bei kundenunterschriebenen Belegen sind Plan-Felder gesperrt.
+
+**Ausführungszeitraum mit Zahlungsplan:** In `druck_html` bei angebot/kv/ab mit `plan_von`: ist `konditionen == "plan"` mit Anzahlung und `plan_wochen > 0`, wird `stichtag = plan_von − plan_wochen × 7 Tage` berechnet; liegt er am oder nach dem Belegdatum, folgen „Ausführung ca.“ und „bei Anzahlung bis <stichtag>“, sonst entfällt der Zeitraum. Hinweis dazu in `druckEinstellungen` (kalk.js).
+
+**Gesamtprüfung Kalkulation 10.11.2026:** Nachrechentest `position_rechnen` (Stückliste Platte/Massiv/Kante/Lack inkl. Schmalflächen, Beschläge, Kostenliste aller Kostenarten, Kleinmaterial, Material-GK, Lohn je Lohngruppe und Kostenstelle, Rüst-/Helferzeiten, W+G Standard/eigen, fester Preis, Unterpositionen mit Menge und gesperrter Unterposition, Altfelder) ohne Abweichung; große Testdatenbank (8001 Aufträge, 24002 Belege): alle Werkstatt-/Auswertungspapiere ohne Ausnahme, Materialliste = Kalkulation je Auftrag, Belegsummen (Positionen − Rabatt = Netto, Netto + USt = Brutto, Zahlbetrag) ohne Abweichung; Crawler 181/96 Routen fehlerfrei. Behoben: `werkstatt.stk()` (leere Stückzahl = 1) in Materialliste, Stückliste, Zuschnitt; Materialliste-Mengen wie `teil_rechnen` (lfm, Massiv-Einheiten, Schmalflächen 2(l+b)×Fertigdicke); `alle_positionen` ohne gesperrte/alternative Positionen und gesperrte Titel (außer `nur`); Materialliste-Abschnitt Kostenliste; `auswertung_kosten` W&G ohne Sonderkosten Vertrieb; Runden mit `round(…, 6)`; Kostenlisten-Übernahme sucht nur `"<altfeld>":`-Schlüssel.
+
+**Anteile ohne GK:** Spalte „Anteil“ in Soll/Ist (`anteil`, kalk.js und werkstatt.py) und Summenansicht auch für `material` und `lohn`.
+
+**Formatierung entfernen:** `rtFormatWeg(feld)` (index.html) statt `execCommand("removeFormat")`: bei Markierung removeFormat plus Entfernen von `span[style]`; danach werden die getroffenen `li` (Markierung bzw. Cursor) in `div`-Zeilen umgewandelt und die Liste an dieser Stelle geteilt (removeFormat allein lässt Listen stehen, ein Listen-Umschalten bei gemischter Markierung würde alles zur Liste machen).
+
+**Unterpositionen-Liste:** Tabelle mit Klasse `unterliste`, Zellen `vertical-align:top`.
+
+**Datensicherung:** `backup()` (mit `SICHERUNG_LOCK`) = `_backup()` (lokale Tagessicherung wie bisher) + `backup_extern()` (Kopie nach `<sicherung_ziel>/Jahresring-Datenbank/`, über `.tmp` + `os.replace`, die letzten 30; Fehlertext in `SICHERUNG_EXTERN`, erscheint in `_ort_warnung`). `sicherungs_waechter()` ruft `backup()` stündlich im Hintergrund auf; `PUT einstellungen` mit `sicherung_ziel` stößt `backup()` nach 2 s an. `sicherung_erinnerung()` → `_sicherung_erinnerung` (kein Ziel, keine oder > 7 Tage alte vollständige Sicherung), auf der Startseite für den Inhaber.
+
+**Lasttest 10.11.2026:** Testdatenbank 222 MB (4001 Kunden, 8001 Aufträge, 120016 Positionen, 24002 Belege, 30000 Stundenbuchungen) plus Großauftrag mit 200 Positionen und 600 Unterpositionen. Ergebnisse (in-process bzw. HTTP): Listen 10–470 ms, Startseite ~700 ms, Auftrag/Position/Beleg 1–5 ms, Großauftrag rechnen 144 ms, Speichern einer Position im Großauftrag ~150 ms, Werkstattpapiere 10–270 ms, Programmstart 0,1 s (einmalig nach Update mit Umstellungen ~6 s), tägliche Sicherung 1,9 s, vollständige Sicherung 4,2 s, Integritätsprüfung 1,3 s. Parallelbetrieb (6 Threads, 3 schreibend) ergab vorher vereinzelt `database is locked`. Behoben: `api()` beginnt nicht lesende Anfragen (außer `service`) mit `BEGIN IMMEDIATE`; `verbindung()` mit `timeout=30`. Danach 0 Fehler. `zwischenspeicher_vorwaermen()` berechnet nach dem Start die Mitarbeiterkonten (erster Aufruf 1,8 s → 0,4 s).
+
+**Sicherungshinweise:** `sicherung_erinnerung(ziel)` erhält das Ziel aus der laufenden Verbindung (in `einstellungen_oeffentlich`), da ein zweiter Lesezugriff während `BEGIN IMMEDIATE` noch den alten Stand sieht; alle `Sicherung_*.zip` zählen (auch „vor-…“). service.js lädt `E` nach „Datensicherung starten“ neu. `agb_anhaengen`: pypdf-Logger auf ERROR, `compress_identical_objects` mit den zur pypdf-Version passenden Parameternamen.
+
+**Zweite Installation:** `GET /api/version` liefert zusätzlich `ordner` (BASIS). Ist beim Start der Port belegt, prüft `laufendes_programm_fremd()` Version und Ordner des laufenden Programms; weichen sie ab, zeigt `meldung_fenster()` (Windows-MessageBox) einen Hinweis statt das Fenster des fremden Programms zu öffnen.
+
+### Letzte Seite unten bündig
+Einstellung `unten_buendig` (Vorgabe True) geht über `druck_standard` in die Druckeinstellung jedes Belegs (`druck.unten_buendig`, je Beleg überschreibbar). Festgeschriebene Belege ohne gespeicherten Schlüssel gelten als `False`; `beleg_festschreiben` speichert den Wert beim Festschreiben in `belege.druck`.
+Umsetzung in zwei Durchgängen, weil CSS das untere Ausrichten auf der letzten Seite nicht kann: `unten_abstand(bid, e)` rendert `/druck/{id}?pdf=1&marken=1` (unsichtbare Messpunkte `JRUBANFANG` vor den Summen und `JRUBENDE` nach Gruß/Signatur/Zusatz, `UB_MARKE`) und liest mit pypdf (`_ub_marken_lesen`) Seite und Höhe der Punkte. Stehen beide auf derselben Seite, ist der Abstand = Höhe von `JRUBENDE` − unterer Inhaltsrand (Briefbogen: `brief_layout.unten`, sonst 10 + 22 mm) − 3 mm Reserve. `pdf_rendern` rendert danach mit `&abstand=…` (`div.ub-abstand` vor `zusammen_html`, also innerhalb des Blocks „Letzte Position + Summen“) und fällt auf das Rendern ohne Abstand zurück, wenn sich die Seitenzahl ändert. `/druck/{id}?drucken=1` misst ebenso, bevor die HTML-Seite ausgeliefert wird.
+
+### Zahlungsplan-Text als Text speichern
+Das Textfeld `zahlungsplan_text` in Einstellungen › Belege & Briefbogen trägt `data-text`, damit das Speichern es als Text und nicht als Zeilenliste ablegt (Textfelder ohne `data-text` werden als Liste gespeichert). `zahlungsplan_text()` fügt eine bereits als Liste gespeicherte Fassung mit Leerzeichen zusammen.
+
+### E-Rechnung: Prüfung und Härtung
+`erechnung.cii_xml`: negative Zeilenbeträge als negative `BilledQuantity` mit positivem `ChargeAmount` (BR-27); `t()` entfernt in XML 1.0 unzulässige Zeichen (`_UNGUELTIG`); leere `SellerAssignedID`, Käufer-`ID` und `SellerOrderReferencedDocument` entfallen; `LAENDER` um alle EU-Staaten und weitere Länder ergänzt. `zugferd_pdf`: EmbeddedFile-`/Subtype` jetzt korrekt `/text#2Fxml` (vorher doppelt maskiert `/text#232Fxml`), PDF-Kopf `%PDF-1.7`, Dateikennung `/ID` im Trailer (PDF/A).
+`eingangsrechnung`: `EINHEITEN` um XUN, NPR, XCT, XPX, XBG, XSA, XBO, XJR, GRM, MLT, CMT, MMT u. a. ergänzt; `dtd_pruefen()` lehnt XML mit `<!DOCTYPE`/`<!ENTITY` ab (auch UTF-16), aufgerufen in `lies_xml`, `xmlansicht.pruefen`, `epruefung.pruefen` und `epruefung.ansicht_html`; `gutschrift_vorzeichen()` dreht bei CII 381/261 und UBL-CreditNote alle Beträge ins Minus (`erg["gutschrift"]`), `eingang_lesen` setzt dann Lager/Werkzeug auf Kosten bzw. Auftrag und lernt keine Zuordnung; UBL-Kopf-`AllowanceCharge` als eigene Zeilen. Migration `_einheit_xun`: `material.einheit` und `auftragskosten.einheit` von XUN/H87/C62 auf „Stk.“.
+`sepa_xml`: BIC normalisiert (Leerzeichen, Großschreibung) und nur bei gültigem Format geschrieben; MsgId mit Mikrosekunden.
+
+### Installation als App / Service Worker
+`static/sw.js` (Scope `/`, registriert in `index.html` und `stempel.html`, nur bei `window.isSecureContext`) beantwortet ausschließlich Seitenaufrufe (`mode == "navigate"`) per `fetch` und liefert bei Netzfehler eine Hinweisseite; es wird nichts zwischengespeichert, alle übrigen Anfragen laufen am Service Worker vorbei. Zweck: Chrome auf Android verlangt je nach Version einen Service Worker mit Fetch-Handler für die Installation. Über die Netzwerkadresse (http) ist die Seite kein sicherer Kontext; Installation dort nur mit dem Chrome-Flag `unsafely-treat-insecure-origin-as-secure` oder künftig über https. `mimetypes` setzt .js/.json/.css/.svg/.png fest, weil die Windows-Registry .js teils als text/plain meldet (Service Worker würden dann abgelehnt).
+
+### Gesamtprüfung: Sicherheit, GoBD, Ausfallsicherheit
+**Sicherheit.** `ANFRAGE` (thread-lokal) hält fest, ob die Anfrage vom Büro-PC kommt; `nur_am_pc()` sperrt `auftraege/{id}/oeffnen` und `…/zeigen` für andere Geräte (vorher konnte ein Benutzer mit Schreibrecht eine Datei hochladen und per `os.startfile` auf dem Büro-PC starten). `oeffnen()` lehnt Dateien mit Endungen aus `AUSFUEHRBAR` ab. `Handler.senden()` liefert Dateien, deren Typ nicht in `SICHER_ANZEIGEN` steht (HTML, SVG, XML …), statt `inline` als `attachment` mit `Content-Security-Policy: sandbox` (gespeichertes XSS über hochgeladene Dateien). Sitzungs-Tokens stehen nur noch als `h:`+SHA-256 in `sitzungen` (`benutzer.token_hash`, einmalige Umstellung in `benutzer.schema`). Einstellungen für Rollen ohne Einstellungsrecht zusätzlich ohne Konten, Sicherung, Zähler, SEPA, Mahnwesen, Netz. `server_version` ohne Python-Version.
+**GoBD.** `beleg_fingerabdruck()` (SHA-256 über Nummer, Art, Datum, Zeilen, freie Zeilen, Beträge) wird beim Festschreiben und Stornieren als `inhalt` protokolliert; `beleg_pdf` protokolliert `archiv_pdf` mit `sha256` der Datei. `belege_pruefen()` vergleicht alle festgeschriebenen Rechnungen mit dem Protokoll, prüft Archiv-PDFs, doppelte laufende Nummern und im Echtbetrieb protokollierte, aber fehlende Rechnungen; Aufruf in `protokoll_vollpruefung` (Start) und `GET service/protokoll?voll=1`, Ergebnis in `BELEG_PRUEFUNG` und `_ort_warnung`. `rechnungsnummer_info()` berücksichtigt im Echtbetrieb die im Protokoll vergebenen Nummern (`festschreiben`, `storno`).
+**Ausfallsicherheit.** `datenbank_starten()` ersetzt `init_db()` in `main`: bei `sqlite3.DatabaseError` (malformed/not a database) kopiert `datenbank_notfall()` die Datei nach `daten/beschaedigt/<Zeit>`, sucht die jüngste Sicherung mit bestandenem `quick_check` (`stunde_aktuell.db`, sonst `buero_*.db`), fragt per `frage_fenster()` (ohne Fenster: Umgebungsvariable `BUERO_NOTFALL=ja`) und spielt sie ein; Protokolleintrag `ruecksicherung`, Hinweis in `NOTFALL`. `stunden_sicherung()` läuft im `sicherungs_waechter` stündlich.
+
+### Verschlüsselte Sicherungen und https
+**Sicherungskennwort (`tresor.py`).** Nur Standardbibliothek. Schlüssel: `hashlib.scrypt(Kennwort, Salz, n=2^15, r=8, p=1, dklen=64)` → 32 Byte Verschlüsselung + 32 Byte MAC. Datei `.jrs`: `"JRSICH1\0"` (8) | KDF-Kennung 1 (1) | Salz (16) | Nonce (16) | Chiffrat | HMAC-SHA-256 über Kopf+Chiffrat (32). Chiffrat = Klartext XOR Schlüsselstrom, Block i (1 MiB) = `SHAKE256(enc ‖ Nonce ‖ i als 8 Byte big-endian)`. Entschlüsseln prüft zuerst den HMAC. Der abgeleitete Schlüssel liegt in `daten/sicherung.schluessel` (Salz + Schlüssel, unter Windows per DPAPI über `geheim`), nie in Datenbank oder Sicherung. `service.extern_ablegen()` verschlüsselt alle Kopien aufs externe Ziel (Vollsicherung, `backup_extern`), kopiert bei gesetztem, aber unlesbarem Schlüssel nichts; `extern_nachverschluesseln()` wandelt vorhandene lesbare Kopien um; Download `/api/service/datei/…` liefert `.jrs`. `service.sicherungen()` kennt `.jrs`, `externe_sicherungen()` listet das externe Ziel (`ort` = extern / extern-db), `ruecksichern(cfg, name, nach_db, kennwort, ort)` entschlüsselt in ein Temp-Verzeichnis. API: `POST service/kennwort` (setzen/ändern mit `alt`, `pruefen`, `entfernen`), `GET service/sicherungen?extern=1`, Status 428 = Kennwort nötig. Entschlüsseln ohne Programm: Kopf lesen, scrypt wie oben, HMAC prüfen, blockweise XOR.
+**https (`zert.py`).** Reines Python: RSA 2048 (Miller-Rabin), X.509 v3 in DER, Signatur SHA-256/RSA PKCS #1 v1.5. `bereitstellen()` legt in `daten/zertifikat` die Büro-CA an (10 Jahre, `pathlen:0`, kritische Name Constraints auf localhost, PC-Name, fritz.box und `NETZE`) und stellt das Server-Zertifikat aus (397 Tage, SAN: localhost, PC-Name, 127.0.0.1, Netzwerkadressen); Neuausstellung bei neuer Adresse oder < 30 Tagen Restlaufzeit. CA-Schlüssel per DPAPI, Ordner nicht in Sicherungen. `https_starten()` startet bei `netzwerk` und `https` ∈ {zusaetzlich, nur} einen `HttpsServer` auf `PORT+1` (`BUERO_HTTPS_PORT`), TLS ≥ 1.2, Handshake im Verbindungs-Thread. `Handler.ist_https()` setzt das Cookie-Attribut `Secure`. Modus „nur“: http-Anfragen anderer Geräte → 307 auf https bzw. 403 für `/api`. Öffentlich: `/zertifikat` (Anleitung, Fingerabdruck) und `/zertifikat/jahresring-ca.crt|.pem`. Status in `E._https`.
+
+### Jahresring-Setup.exe
+Quelltext in `docs/setup` (Go, nur Standardbibliothek). Bauen: Programmordner ohne `daten` als `payload.zip` und die Version als `version.txt` neben `main.go` legen, dann `GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w" -o Jahresring-Setup.exe .`. Ablauf: Zielordner bestimmen (Argument > `%APPDATA%\Jahresring\ordner.txt` > Ordner neben der Setup-Datei mit `app.py` > `C:\Jahresring` > `%USERPROFILE%\Jahresring`), Rückfrage, warten bis kein Programm mehr auf Port 8765 antwortet, ZIP entpacken (Einträge unter `daten/` werden übersprungen, Dateien erst als `.neu` geschrieben und dann ersetzt), Zielordner merken, Verknüpfungen per PowerShell (wie `einrichten.bat`), bei Neuinstallation optional Übernahme eines `daten`-Ordners (Ordnerdialog, verlangt `buero.db`, ohne `tmp`, `browser-profil`, `zertifikat`), `start.bat` starten. Protokoll in `%TEMP%\Jahresring-Setup.log`. Die Datei ist nicht signiert (SmartScreen-Hinweis). `start.bat` lädt Python als vierten Weg direkt von python.org (Installation nur für das Benutzerkonto).
+
+### Eigene Adresse der Stempeluhr
+`https_starten()` startet einen zweiten `HttpsServer` auf dem https-Port + 1 (`HTTPS["stempel_port"]`, Standard 8767) mit demselben Zertifikat und Handler; `GET /` dort leitet auf `/stempel`. Grund: Büro-App (Scope `/`) und Stempeluhr liegen sonst im selben Ursprung, Chrome meldet die Stempeluhr dann als bereits installiert. Ein anderer Port ist ein anderer Ursprung; Cookies gelten je Rechnername, die Anmeldung wird also geteilt. Manifest der Stempeluhr mit `id: stempeluhr`. Im Modus „nur https“ wird `http://…/stempel` auf den Stempel-Port umgeleitet. `Handy-Freigabe.ps1` gibt beide Ports frei.
+
+### Setup: Programmstart
+`starten()` in `docs/setup/ui_windows.go` ruft `start.bat` jetzt mit wörtlicher Befehlszeile `cmd.exe /c ""<Pfad>\start.bat""` und `CREATE_NEW_CONSOLE` auf. Der frühere Aufruf über `start Jahresring /min …` scheiterte, weil `start` den ersten Parameter ohne Anführungszeichen als Programmnamen las.
+
+### Setup: Firewall und Programmsymbol
+`firewallVorhanden()` prüft ohne Administratorrechte auf Regeln `Jahresring*`; fehlen sie, legt `firewallFreigeben()` nach Rückfrage über ein erhöht gestartetes PowerShell-Skript (`Start-Process -Verb RunAs`, UAC-Abfrage) die Regel „Jahresring Ports 8765-8767“ (TCP eingehend, Profile Private und Domain) an und meldet die Netzwerkprofile zurück; bei „Public“ erscheint ein Hinweis. `docs/setup/symbol.py <ico> rsrc_windows_amd64.syso` erzeugt ohne Fremdwerkzeuge das COFF-Objekt mit Symbol (RT_ICON/RT_GROUP_ICON aus `static/jahresring.ico`) und Manifest (asInvoker, DPI, Common Controls 6); die Datei muss beim Bauen neben `main.go` liegen.
+
+### Setup: Versionsangaben
+`docs/setup/symbol.py <ico> <syso> <Version> <Firma>` schreibt zusätzlich die Ressource VS_VERSIONINFO (Typ 16: CompanyName, ProductName, FileDescription, FileVersion u. a., Sprache 0407/Unicode). Der im Windows-Dialog gezeigte Herausgeber stammt dagegen nur aus einer Authenticode-Signatur; die Datei ist weiterhin nicht signiert.
+
+### Namen und Kennungen
+Symboldateien `static/jahresring.ico`, `jahresring-192.png`, `jahresring-512.png` (Manifeste, Seiten, Verknüpfungen, Tray, Setup). Lagerformat `jahresring-lager` (`reste.FORMAT`), Zuschnitt-Beispiel `jahresring-zuschnitt`, Lagerdatei des eigenständigen Zuschnitts `Lager_Jahresring.json`, Kalender-UID `jahresring-<art>-<id>@jahresring`, Ersatz-Message-ID `@jahresring`, DPAPI-Kennung `Jahresring-Zugangsdaten` (`geheim.py`), Cookie `jr_sitzung`, SEPA-MsgId-Präfix `JR`, Umgebungsvariablen `JR_*`, globale Variable `window.JAHRESRING` im Zuschnitt. Datenbankdatei `buero.db`, Tagessicherungen `buero_JJJJ-MM-TT.db`.
+
+### Datenauskunft
+Die Angaben „Speicherorte“ und „Empfänger“ im Auskunftsbrief (`auskunft_brief`) kommen aus den Einstellungen `auskunft_speicherorte` und `auskunft_empfaenger` (neutrale Vorgaben in `STANDARD_EINSTELLUNGEN`, Bearbeitung unter Einstellungen › Kunden & Aufträge).
+
+### Sicherung des Projektordners (`projektsicherung.py`)
+Nur Standardbibliothek. Ziel `<sicherung_ziel>/Jahresring-Projekte/aktuell/<relativer Pfad>` (Spiegel) und `…/frueher/<JJJJ-MM-TT_HHMMSS>/<relativer Pfad>` (bei diesem Lauf ersetzte oder im Projektordner gelöschte Dateien). Zustandslos: `_lesen()` liest Quelle und Ziel rekursiv mit `os.scandir` (Schlüssel = `os.path.normcase(relativer Pfad)`, im Ziel ohne `.jrs`); `_gleich()` vergleicht Größe (verschlüsselt: Zielgröße − `tresor.KOPF` − 32), Änderungszeit (Toleranz 2 s) und Form (verschlüsselt ja/nein). Ablauf `sichern(cfg, tage)`: prüfen (`_pruefen`: beide Ordner erreichbar, nicht ineinander), Schlüssel laden (Kennwort gesetzt, aber unlesbar → Abbruch, nie Klartext), Abbruch bei leerem Projektordner und vorhandener Sicherung, Gelöschtes nach `frueher` verschieben (`os.replace`, kein Kopieren), Neues/Geändertes nach `<Ziel>.part` schreiben (`tresor.verschluesseln` je Datei bzw. `shutil.copyfile`), Quelle erneut prüfen (während des Kopierens verändert → verwerfen), `os.utime` auf die Zeit der Quelle, alte Fassung nach `frueher`, umbenennen. Wechselt nur die Form (Kennwort gesetzt/entfernt), wird die alte Datei ohne Umweg über `frueher` ersetzt (`umgestellt`). Nicht lesbare Ordner/Dateien der Quelle gelten nicht als gelöscht. `aufraeumen()` entfernt `frueher`-Ordner (nur Namen im Stempelformat) nach `tage`; ausgesetzt, wenn `geaendert + entfernt > max(200, 30 %)` des Bestands (Hinweis im Ergebnis). Ausgelassen: `~$*`, `.~lock.*`, `*.tmp/.part/.crdownload`, `Thumbs.db`, `desktop.ini`, `*.jrs`, Verknüpfungen/Junctions, Unterordner `_Wiederhergestellt`. Lange Pfade unter Windows über `\\?\`. Ein Lauf zur Zeit (`_sperre`), Fortschritt in `LAUF`, Abbruch über `LAUF["abbruch"]`. Ergebnis und Zeitpunkte in `daten/projektsicherung.json` (`letzter`, `letzter_erfolg`, `versuch`, `fehler_folge`, `eingeschaltet`).
+Zurückholen: `staende()`, `inhalt(stand, pfad)` (eine Ebene), `kennwort_pruefen()`, `wiederherstellen(cfg, stand, pfad, kennwort)` nach `<Projektordner>/_Wiederhergestellt/<Zeit>_Stand_<stand>/…`; Schlüssel je Datei über `tresor.schluessel_fuer` (Salz im Dateikopf). Pfadprüfung in `_stand_pfad` (Stand nur `aktuell` oder Stempelformat, keine `..`, kein Laufwerk).
+Einstellung `projektsicherung` = `{aktiv, uhrzeit, tage}` (`einstellung()` bereinigt). `app.projekt_waechter()` prüft minütlich `faellig()` (einmal täglich ab Uhrzeit, nach gescheitertem Lauf stündlich, nach Abbruch von Hand am selben Tag nicht). `warnung()` liefert den Text für `_ort_warnung` (3 Tage ohne Erfolg, Hinweis des letzten Laufs, dreimal in Folge Dateifehler). API (Schreiben und `inhalt` nur Inhaber): `GET service/projektsicherung`, `GET …/inhalt?stand=&pfad=`, `POST …/einstellung|start|abbrechen|wiederherstellen` (428 = Kennwort nötig). Läufe mit Änderungen, Einstellungen und Rückholungen stehen im Protokoll (Art `projektsicherung`). Tests: `/tmp/claude-0/t/ps/test.py`, `e2e.js`.
+
+### https: Vertrauen am Büro-PC, PC-Name, eigenes Zertifikat
+`zert.windows_vertrauen()` trägt die Büro-CA mit `certutil -user -addstore Root` in den Benutzerspeicher ein (Windows fragt nach; Prüfung vorab mit `-verifystore` über den SHA-1-Fingerabdruck). `app.zertifikat_am_pc()` fragt je CA nur einmal von selbst (`daten/zertifikat/windows.gefragt`), Stand in `HTTPS["am_pc"]`. PC-Namen mit Unterstrich sind zulässig (`_name_ok`); der Name kommt nur ins Server-Zertifikat, wenn die CA ihn erlaubt (`pc_name_erlaubt`: Name Constraints), sonst wäre das Zertifikat insgesamt ungültig. `zert.ca_verwerfen()` + `app.zertifikat_neu()` stellen CA und Zertifikat neu aus und tauschen den TLS-Kontext der laufenden Server (`HTTPS_SERVER`). `zert.eigenes()` erkennt `daten/zertifikat/eigen.pem` + `eigen.key` (gültig, passend, nicht abgelaufen) und hat Vorrang. API `POST service/zertifikat` (`{}` = am PC einrichten, `{neu: true}` = neu ausstellen; nur Inhaber, nur am Büro-PC). `E._https.namen` zeigt die Namen des Zertifikats. Test: `/tmp/claude-0/t/ps/zert_test.py`.
+
+Benutzer: Ein Inhaber kann die eigene Rolle nicht selbst abgeben oder sich sperren (`benutzer.api`, zusätzlich zu `_inhaber_bleibt`). SQL: Werte ausschließlich über Platzhalter; dynamisch zusammengesetzte Spaltennamen stammen immer aus festen Feldlisten (`*_FELDER`, `pos_werte` usw.), nie aus der Anfrage.
+
+### Status durch Datum, Layoutprüfung
+`status_durch_datum(con, aid, feld)` setzt beim Eintragen von `fertigung`/`lieferung` (PUT `auftraege/<id>` ohne gleichzeitige Statusänderung, sowie `geliefert_setzen` durch den Lieferschein) den Auftragsstatus aus `status_automatik.auftrag.datum_fertigung|datum_lieferung` (Vorgabe „Fertigung“/„Geliefert“), nur vorwärts in der Reihenfolge von `auftragsstatus`, mit Historieneintrag.
+Layout: global `input,select,textarea{min-width:0;max-width:100%}`; für Raster aus Beschriftung + Feld die Klasse `.feldraster` verwenden (kein `display:flex` mit fester Beschriftungsbreite in `auto-fill`-Rastern). `/tmp/claude-0/t/layout/layout.js [Breiten]` ruft alle Seiten in mehreren Fensterbreiten auf und meldet überlappende Felder, Text unter Feldern und herausragende Elemente; gehört zu den Tests vor jeder Auslieferung (bei 1400 px muss die Liste leer sein).
+
+### Kalender-Sicht je Benutzer, nur zeitweise angeschlossenes Sicherungsziel
+`benutzer.kalender_sicht(rolle, eigen)` liefert `{typen, nur_eigene, extern, abwesenheit}` aus `KALENDER_STANDARD`, `KALENDER_ROLLE` (Werkstatt/Mitarbeiter: `extern` aus) und dem Schlüssel `kalender` im JSON-Feld `benutzer.rechte` (Schreiben über `PUT benutzer/<id>` mit `kalender`; `eigen` und `kalender` werden zusammengeführt). `rechte_von()` gibt es als `rechte.kalender` aus. `app.kalender_sicht_anwenden()` kürzt die Antwort von `GET kalender` (Termine nach Art und Zuteilung über `termin_sichtbar`, Aufträge ohne sichtbaren Termin, externe Einträge, Abwesenheiten der Kollegen, `netto` ohne Preisrecht); `export.ics` wendet dieselbe Prüfung an. Der Inhaber sieht alles. Test: `/tmp/claude-0/t/ps/kal.js`.
+Sicherungsziel: `projektsicherung.erreichbar()`; `faellig(…, ziel=)` wartet still, solange das Ziel fehlt. `projekt_waechter()` holt beim Wiedererscheinen des Ziels `backup_extern()` nach (`EXTERN_STAND`) und startet den fälligen Lauf. Einstellung `projektsicherung.warn_tage` (Vorgabe 3) steuert die Warnung für Projektsicherung und für `backup_extern` (letzte gelungene Kopie in `daten/extern.json`).
+
+### Sicht je Recht, Terminhinweise, Lager
+`benutzer.preise_entfernen()` entfernt Beträge auch unter Geld-Schlüsseln liegende Listen/Verzeichnisse (z. B. `titel_summen`), kurze Schlüssel (`ep`, `gp`, `wg`, `ek`, `vk`, `db`, `lnk`, `offen`, …) und bereinigt eingebettetes JSON in Feldern mit „kalk“ im Namen (`auftraege.kalk`: Löhne, Stundensätze). `app.sicht_einschraenken()` kürzt nach der Preisbereinigung: einzelner Kunde ohne Kundenrecht → nur `KUNDE_OHNE_KUNDENRECHT`; Lieferanten ohne Lieferantenrecht → ohne `LIEFERANT_OHNE_RECHT`; Lieferant der Gruppe „Mitarbeiter“ ohne Personalrecht → 403. `benutzer.pruefen()`: ohne Kundenrecht nur `GET kunden/<id>`. Die Auftragsliste liefert `kalk` und `kunde_daten` nicht mehr mit. Prüfskripte: `/tmp/claude-0/t/audit2/rechte.py` (alle Schnittstellen je Rolle auf Beträge/Geheimes), `xss.py` + `xss.js`/`xss2.js` (Schadtext in allen Feldern, alle Seiten), `fach.py` (Lager, Kalender, Zahlungen), `werkui.js`; `/tmp/claude-0/t/perf/bench5.py` (Antwortzeiten mit großem Bestand).
+`termin_konflikte(con, tid)` liefert beim Anlegen/Ändern eines Termins `warnung` (genehmigte Abwesenheit oder anderer ganztägiger Termin eines zugeteilten Mitarbeiters). `PUT auftraege/<id>` tauscht `plan_von`/`plan_bis`, wenn vertauscht. `POST zahlungen` meldet 409 bei gleicher `belegnr` desselben Lieferanten (mit `trotzdem` übersteuerbar). Ungültige Datums-/Zahleneingaben (`ValueError`) werden als 400 statt 500 gemeldet. Lager: Inventur mit 0 erlaubt; Buchungsart `auftrag` bucht `-menge` (negative Menge = Rückgabe); negative Bestände zählen im Lagerwert (Statistik, Liste, PDF) mit 0.
+
+### Sperre bezahlter Zahlungsaufträge, Lager im Protokoll, Einstellungen nur Inhaber, gepackte Übertragung
+Zahlungen: Mit gesetztem `bezahlt` lehnt `PUT zahlungen/<id>` Änderungen außer `ZAHLUNG_FREI` (bemerkung, auftrag_id, bezahlung) mit 409 ab, `DELETE` ebenso. `POST zahlungen/bezahlt` markiert nur offene und schreibt `zahlungsauftrag_bezahlt` ins Protokoll; `POST zahlungen/<id>/oeffnen` (nur Inhaber) nimmt `bezahlt` zurück (`zahlungsauftrag_geoeffnet`).
+Lager: `lager_inventur` (alter/neuer Bestand) und `lager_buchung_geloescht` (gelöschte Auftragsbuchung mit Lagerabgang) werden in `app.api` um den Aufruf von `material.api` herum protokolliert; gewöhnliche Zu-/Abgänge nicht (Bewegungsliste).
+Einstellungen: `rechte_von()` setzt den Bereich `einstellungen` für alle Nicht-Inhaber auf 0, `benutzer.darf("einstellungen")` ist nur für den Inhaber wahr; `pruefen()` sperrt Schreiben auf `einstellungen` und `vorlagen` sowie unbekannte Ressourcen für Nicht-Inhaber (zuvor konnte jeder angemeldete Benutzer Briefbogen-Vorlagen hochladen). `GET einstellungen`: Werkstatt/Mitarbeiter (kein Auftragsrecht oder nur Reiter Werkstatt) erhalten nur `EINSTELLUNGEN_WERKSTATT`, übrige Nicht-Inhaber die bisherige Ausschlussliste. `eur()` zeigt ohne Preisrecht „–“.
+Übertragung: `Handler.senden()` packt Antworten der Typen `PACKBAR` über 1,4 kB mit gzip (Stufe 4), wenn der Client es annimmt und die Anfrage nicht vom Büro-PC selbst kommt. Test: `/tmp/claude-0/t/audit2/sperre.py`.
+
+### Etikettengröße zentral
+Einstellungen `etikett_breite`/`etikett_hoehe` (mm, Vorgabe 70 × 74; `app.etikett_mass()` begrenzt auf 20–210). Das Zuschnittprogramm erhält sie beim Ausliefern der Seite in `window.JAHRESRING.etikett` (`LBL`), die Eingabefelder dort und die Gerätespeicherung (`zs.lblW/H`) sind entfallen. `reste.etiketten_html(…, mass)` setzt `@page` und einen Rahmen in Etikettengröße und skaliert den 70 × 74-Entwurf (`transform: scale`), `etikett_svg(…, mass)` setzt Breite/Höhe bei unverändertem `viewBox`; der Zebra-Druck der Etikettenseite liest `window.ETIKETT`.
+
+### Robustheit gegen falsche Eingaben
+Der Rumpf von POST/PUT muss ein JSON-Objekt sein (sonst 400). `TypeError`, `AttributeError`, SQLite-Bindungsfehler und Base64-Fehler aus der Verarbeitung werden als 400 „Die Eingabe konnte nicht verarbeitet werden“ gemeldet und mit Traceback im Log festgehalten; Ausnahmen der Klasse `Fehler` beliebiger Programmteile werden mit ihrem `code` beantwortet. `preise_entfernen()` blendet in `ereignisse[].text` (Auftragshistorie) Beträge aus. Prüfskripte: `/tmp/claude-0/t/audit3/fuzz.py` (rund 68.000 Anfragen mit Zufallsinhalten auf alle Schnittstellen; Ziel: keine 5xx), `/tmp/claude-0/t/audit3/export.py` (Datenträgerüberlassung: index.xml gegen die DTD, Spaltenzahl und Datentypen jeder CSV).
+
+### Arbeitsschutz (`arbeitsschutz.py`, `unterschrift.py`, `static/arbeitsschutz.js`)
+
+Ressource `arbeitsschutz` (Bereich `arbeitsschutz`, lesen 1, schreiben 2). Sonderregeln in `benutzer.pruefen()`: `GET arbeitsschutz/datei/<id>` für alle Angemeldeten (Sicherheitsdatenblätter; Nachweise zu Personen prüft `Handler.as_datei` zusätzlich), Unterschrift eines Teilnehmers (`POST unterweisungen/<id>/unterschreiben` ohne `rolle=unterweiser`) und `POST verbandbuch` mit Stufe 1, `dateien`/`gefahrstoff`/`ghs` auch mit Materialrecht, `GET/DELETE verbandbuch` nur Inhaber (§ 24 Abs. 6 DGUV V1). Freigaben (`gb|ba/<id>/freigeben`) nur Inhaber.
+
+Vorlagen: `arbeitsschutz_vorlagen.json` (aus den BGHM-Unterlagen erzeugt: 274 GBO-Vorlagen `gb[]` mit `gef[{g, m[]}]` und Schreiner-Gruppen, 28 Unterweisungsthemen `themen[]` aus UWH-Plakaten und Unterweisungsnachweisen, Checkliste psychische Belastung `psych[]` FI 0052 mit Maßnahmenbeispielen FI 0053, H-Sätze mit Wortlaut, Anlässe, Notfall-Felder). Piktogramme als PNG unter `static/arbeitsschutz/zeichen/` (Liste `zeichen.json`), UWH-Bildtafeln (Seite 1) unter `static/arbeitsschutz/uwh/`.
+
+Tabellen: `as_daten` (Schlüssel/Wert: `organisation`, `notfall`), `as_dateien` (SDB/TDB/Nachweise, Datei unter `daten/arbeitsschutz/dateien/`, `aktuell` – ein neues SDB/TDB setzt das vorige auf 0), `as_gefahrstoffe` (je material_id), `as_gb` (Zeilen als JSON: `{id, g, gruppe, risiko, quelle, auto, trifft, hinweis, m:[{id, t, art T/O/P, status offen|vorhanden|umsetzen|entfaellt, wer, bis, erledigt, wirksam, wirksam_am, wirksam_wer}]}`, Status entwurf → gueltig → ueberarbeitung bei inhaltlicher Änderung, archiv), `as_ba` (Abschnitte je Art, `BA_ABSCHNITTE`), `as_fassungen` (unveränderlicher Inhalt + SHA-256 + signatur_id je Freigabe; Druck `/druck/arbeitsschutz/fassung/<id>` rendert aus dem Snapshot), `as_themen`, `as_unterweisungen` (Inhalt als Snapshot der Themen beim Anlegen; nach der ersten Unterschrift sind Datum, Anlass, Inhalt gesperrt; `abschliessen` entfernt Teilnehmer ohne Unterschrift), `as_teilnehmer`, `as_qualifikationen`, `as_verbandbuch`. Fälligkeiten (`matrix`): letzte unterschriebene Teilnahme je (Mitarbeiter, Thema) + Intervall, Jugendliche (Geburtsdatum < 18 Jahre) höchstens 6 Monate; Beschäftigte = aktive Mitarbeiter ohne Lohnart Inhaber.
+
+`unterschrift.py`: Tabelle `signaturen` (art, bezug, rolle, name, benutzer, mitarbeiter_id, datei, bild_sha256, inhalt_sha256, geraet, zeit); Bilder unter `daten/unterschriften/`, nie gelöscht. `bild_url()` bettet das PNG nur ein, wenn sein Hash stimmt. Monatsbeleg: `bezug = "<mid>:<JJJJ-MM>"`, `inhalt_sha256` über die einzelnen Zeitbuchungen (Datum, Beginn, Ende, Auftrag, Kostenstelle, Tätigkeit), Abwesenheiten, Kontokorrekturen, Tageswerte und Summen (`monatsbeleg_hash` in app.py); weicht der aktuelle Hash ab, gilt die Unterschrift als „geändert“. Unterschriften aus Versionen bis -129 werden zusätzlich gegen die alte Formel `monatsbeleg_hash_v1` (nur Tageswerte) geprüft, die mit einem neuen Hash nie übereinstimmen kann. Protokollarten: `as_gb_freigabe`, `as_ba_freigabe`, `as_unterweisung`, `unterschrift_monatsbeleg`.
+
+Werkstatt: `werkstatt.as_links_html()` (Materialsummen je `matnr` über `arbeitsschutz.links_je_nummer`) und `gefahrstoff_block()` (Werkstattauftrag; Materialien aus Kalkulation und Auftragskosten über `auftrag_material_nummern`); im PDF ohne Links. Stempeluhr: `stempel/unterschriften|unterweisung/<id>|monatsbeleg|verbandbuch` (`stempel_arbeitsschutz` in app.py, immer nur für den eigenen Mitarbeiter). Druckseiten `/druck/arbeitsschutz/(gb|fassung|ba|unterweisung|gefahrstoffverzeichnis|notfall)[/<id>][.pdf]`; freigegebene BA und Notfall-Aushang auch für Benutzer mit Mitarbeiterverknüpfung, den eigenen Monatsbeleg sieht jeder Mitarbeiter.
+
+### Gesamtprüfung 2026.11.01-130
+
+Lager: `material.ak_loeschen()` löscht keine Lagerbewegung mehr, sondern schreibt eine Gegenbuchung `art='rueckbuchung'` (heutiges Datum, `auftragskosten_id` NULL) und setzt `auftragskosten_id` der Originalbewegung auf NULL; gibt es nach der Entnahme eine Inventur desselben Materials (`id` größer), bleibt der Bestand unverändert und die Antwort enthält `hinweis`. Damit bleiben `SUM(menge) WHERE datum<=Stichtag` (Bestandsliste zum Stichtag) und das Journal stabil. Invarianten (Prüfskript `/tmp/claude-0/t/gp/inv.py`): `material.bestand = SUM(lagerbewegungen.menge)`, `offene_posten.offen = betrag − SUM(zahlungseingaenge)`, Rechnungsnummern eindeutig auch bei 8 gleichzeitigen Festschreibungen/Stornos (Schreibsperre: jede Festschreibung schreibt vor dem Lesen des Nummernkreises).
+
+Statische Dateien: `mimetypes` wird für `.pdf`, `.jpg/.jpeg`, `.gif`, `.webp`, `.txt`, `.csv` fest belegt, weil Windows die Typen aus der Registry liefert. Bildtafeln (`a[data-tafel]`) zeigt `asPdfZeigen()` in einem Dialog (pdf.js, `/pdfjs/`), die Stempeluhr rendert sie aufklappbar unter dem Link. `.modal-hg` liegt mit `z-index:16` über der Kopfleiste (15).
+
+Arbeitsschutz: Gefahrstoffverzeichnis nur aktive Materialien; Material mit Arbeitsschutzbezug wird beim Löschen inaktiv; Mitarbeiter mit unterschriebener Unterweisung nicht löschbar (Qualifikationen behalten den Namen); Unterweiser nach seiner Unterschrift nicht mehr änderbar; Uploads bis 60 MB; GB-Editor schreibt ausstehende Änderungen vor Aktionen (`asDebounce().flush()`). Testdaten-Gruppe `arbeitsschutz` (Unterweisungen, Teilnehmer, Verbandbuch, Unterschriften); die Gruppe Personal löscht Monatsbeleg-Unterschriften samt PNG.
+
+## 11. Erweiterung – Checkliste
+
+Neue Spalte: in `NACHRUESTEN` eintragen; JSON-Spalten in den Lese-/Schreibfunktionen berücksichtigen. Neue Einstellung: Vorgabe in `STANDARD_EINSTELLUNGEN`, Feld in der Einstellungsseite (Textareas mit `name` werden zeilenweise als Liste gespeichert). Neue API-Ressource: Zweig in `api()` oder eigenes Modul mit `api()`, Eintrag in `benutzer.RESSOURCEN` (und ggf. `WERKSTATT_UNTER`), Fehler als `ApiFehler`. Neue Seite: Funktion `ansicht…()`, Route in `render()`, `ROUTE_BEREICH`, ggf. Menüeintrag in `HAUPTMENUE`/`MENUE_BEREICH`, Hilfe-Anker in `hilfeZiel()` und Kapitel im Handbuch. Neue Tabelle mit Dateien: in `service.PRUEFUNGEN`, `testdaten_loeschen()` und gegebenenfalls in der Sicherung berücksichtigen.
+
+GoBD-sensible Stellen (nur mit Dokumentation in der Verfahrensdokumentation ändern): `protokoll.py` und alle `prot()`-Aufrufe, `rechnungsnummer_info`, `zaehler_setzen`, `beleg_festschreiben`, `beleg_stornieren`, Prüfungen gegen Änderung/Löschung festgeschriebener Belege in `api()`, `beleg_pdf`, `erechnung.py`, Speicherung der Eingangsrechnungen, `testdaten_loeschen`, `service.ruecksichern`.
+
+## 12. Bekannte technische Schulden
+
+`app.py` ist sehr groß (~6000 Zeilen) und sollte schrittweise in Module (Belege, OP, Zahlungen, Druck) zerlegt werden. Es gibt keine automatisierte Testsuite im Repository; Tests erfolgen per Playwright-Skript. Stammdatenänderungen (Kunden, Lieferanten, Material) werden nicht im Protokoll erfasst (siehe Verfahrensdokumentation, Abschnitt 9). Das Frontend nutzt globale Funktionen ohne Module; Namenskollisionen zwischen Dateien müssen vermieden werden (Beispiel: `PMONATE` statt `MONATE` in personal.js). `pdfseiten.py` unterstützt keine Objekt-Streams. Die Datei `daten/zuschnitt.html` und die Einstellung `zuschnitt_url` stammen aus der Zeit vor dem eingebauten Zuschnittprogramm und werden nicht mehr verwendet.
+
+## 13. IT-Sicherheit und Datenschutz 
+
+Bedrohungsmodell: Einzelplatz-Webserver auf dem Büro-PC, optional im eigenen WLAN; kein Internetzugriff von außen. Angreifer: Gerät im selben WLAN (Gast, kompromittiertes Gerät), fremde Webseite im Browser des Benutzers (CSRF), Diebstahl von PC/Sicherungsplatte, Schadsoftware auf dem PC.
+
+| Bereich | Befund | Maßnahme / Status |
+|---|---|---|
+| Passwörter | PBKDF2-SHA256, 200 000 Runden, Salz; Sperre nach Fehlversuchen | in Ordnung |
+| Sitzungen | Token `secrets.token_urlsafe(32)`, Cookie HttpOnly + SameSite=Strict, 120 Tage gültig | in Ordnung; lange Laufzeit wegen Tablets bewusst gewählt |
+| CSRF | SameSite=Strict schützte bereits; zusätzlich Prüfung des `Origin`-Headers bei allen ändernden Anfragen | **neu**: Abweisung mit 403 |
+| Clickjacking/MIME | fehlende Schutz-Header | **neu**: `X-Frame-Options: SAMEORIGIN`, `Content-Security-Policy: frame-ancestors 'self'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` |
+| Transport im WLAN | HTTP unverschlüsselt (Passwörter und Daten im WLAN mitlesbar) | offen; Ausgleich organisatorisch (nur eigenes WPA2/3-WLAN, Gästenetz, keine Portfreigabe). Ausbau: TLS mit selbst erzeugtem Zertifikat – Aufwand wegen Zertifikatsinstallation auf Handys |
+| Mail-Passwort | lag im Klartext in `buero.db` (und damit in jeder Sicherung) | **neu**: `geheim.py` verschlüsselt mit Windows-DPAPI (Benutzerbindung, Entropie); Migration beim Start; nie an den Browser |
+| Datenträger | Datenbank, Archive und Sicherungen unverschlüsselt | organisatorisch: BitLocker/BitLocker To Go (Installationsanleitung, TOM) |
+| Pfadzugriffe | Projektordner, Konstruktion, Mail-Dateien mit Pfadprüfung; statische Dateien prüften Präfix ohne Trennzeichen | **behoben**: Präfix mit `os.sep` |
+| Anfragegröße | unbegrenzt (Speicherverbrauch durch Geräte im WLAN) | **neu**: Anmeldung max. 64 KB, sonst max. 300 MB (`MAX_ANFRAGE`) |
+| SQL | Spaltennamen nur aus Whitelists, Werte parametrisiert | in Ordnung |
+| XSS | Ausgaben mit `esc()`, Rich-Text über `bereinigen()` | in Ordnung; bei neuen Seiten beachten |
+| PDF-Zugriff ohne Anmeldung | nur lokal mit zufälligem `INTERN`-Token je Programmstart | in Ordnung |
+| Fehlerhafte Rechteprüfung | Klick-Handler für „Zahlung löschen“ reagierte global auf `data-zdel` (auch im Rapport) | **behoben** (Version -43) |
+| Speicherort | Programm in einem synchronisierten Cloud-Ordner gefährdet die Datenbank | **neu**: Warnung auf der Startseite (`ort_warnung()`), Autostart folgt verschobenem Ordner (`autostart_nachziehen()`) |
+| Abhängigkeiten | nur Python-Standardbibliothek, pypdf, segno (mitgeliefert) | Updates mit Programmversionen |
+
+DSGVO-Funktionen: `kunde_auskunft()` (GET `/api/kunden/{id}/auskunft`, JSON, Protokoll `datenauskunft`), `kunde_anonymisieren()` (GET prüft, POST führt aus; nur Inhaber; Frist je Beleg: Rechnungen `AUFBEWAHRUNG_JAHRE` = 10, sonst 6 Jahre ab Jahresende, E-Mails 6 Jahre; keine offenen Posten; entfernt Stammdaten, Kundendaten-Kopie im Auftrag, Belegkopf/-daten des Kunden, Unterschriften, Archiv-PDFs, Notizen, Korrespondenz mit .eml, Anhänge, Rapport-Namen/Unterschriften; Protokoll `kunde_anonymisiert`). Kunde löschen entfernt auch Korrespondenz und E-Mail-Kopien (`_korrespondenz_loeschen`). Dokumente: `static/hilfe/datenschutz.html` (VVT, TOM, Löschkonzept, Betroffenenrechte, Datenpannen; Felder in Einstellung `datenschutzdoku`), `static/hilfe/installation.html`, Verfahrensdokumentation 1.1.
+
+### Arbeitszeit: Feiertage, arbeitsfreie Tage, Sollstundenpläne
+
+`personal.FEIERTAGE_KATALOG` / `FREI_KATALOG` (Schlüssel, Name, Datumsfunktion, Vorgabe BW, Hinweis); Einstellungen `feiertage_wahl`, `frei_wahl` ({Schlüssel: bool}), `tage_eigene` ([{name, datum TT.MM, art feiertag|frei}]), `sollplaene`. `personal.tage_einstellen(e)` füllt `TAGE_CFG` und leert `_feiertage_cache` und `_VORLAUF`; aufgerufen in `init_db` (auch nach Rücksicherung) und nach `PUT einstellungen` mit diesen Schlüsseln. `feiertag(iso)` = bezahlter Feiertag, `arbeitsfrei(iso)` = unbezahlter Betriebsruhetag; `tage()` setzt Soll 0 bei beiden, `feiertag_std` nur bei bezahlten, Tagesfelder `frei`, `bezahlt_ft`, `feiertag` (Name beider Arten). Kapazität und Kalender berücksichtigen beide. `GET mitarbeiter/arbeitszeit?jahr=` liefert Kataloge mit Datum und die Ergebnisliste.
+
+Sollstundenplan: {id p<n>, name, regelung fix|flexibel, tage[7], max_woche, max_tag, zuschlaege{ueber, sonntag, heiligabend, ft_arbeitstag, ft_frei, ft_sonntag}} (`plaene_pruefen`). Arbeitszeitmodell des Mitarbeiters speichert `plan`; die Tage werden aus dem Plan übernommen, `plaene_uebertragen()` zieht sie bei Planänderung nach. `personal.zuschlaege(con, m, von, bis)` rechnet je ganzer Woche (Mo–So): Feiertag (nach Wochentag: Sonntag / Plan-Arbeitstag / sonst arbeitsfrei) vor Sonntag vor 24.12.; übrige Tage: fix = über Wochensoll, flexibel = über `max_tag` (Tag) und über Wochensoll + (`max_woche` − Plan-Wochenstunden). Ergebnis in `monat_daten()["zuschlaege"]` und im Monatsbeleg („Zuschlagspflichtige Stunden“). Inhaber ohne Zuschläge.
+
+### Eigene Belegarten, § 13b, Gutschrift, Rechnungskorrektur
+
+Neue Grundarten in `BELEGARTEN`: `gutschrift` (G) und `korrektur` (RK), beide `rechnung=True`, gemeinsamer Rechnungsnummernkreis (`RECHNUNGSARTEN` und alle SQL-Listen `art IN (…)` erweitert, auch export.py, projekte.py). `FREI_ARTEN`: Zeilen frei (`daten.frei` [{text, betrag}]), `beleg_snapshot` baut daraus Positionszeilen; Gutschrift mit Vorzeichen −1. `bezug_rechnung()` prüft den Bezug (festgeschriebene Rechnung/Abschlag/Korrektur desselben Auftrags; Pflicht bei Korrektur), `daten.bezug` + Spalte `bezug_id`. `PUT belege/{id}` mit `frei` ändert die Zeilen im Entwurf. Stornieren auch für Gutschrift/Korrektur. E-Rechnung: Gutschrift und Korrektur mit Minusbetrag → 381 mit positiven Beträgen, Korrektur sonst 384, beide mit `InvoiceReferencedDocument`.
+
+Varianten: Einstellung `beleg_varianten` [{key, name, basis, steuer ""|"13b", bemerkung, einleitung, schluss}] (Vorgabe `v13b` = „Rechnung“, § 13b). `beleg_anlegen(d.variante)` nimmt Grundart aus `basis`, friert `daten.variante` ein, Spalte `belege.artname` (Anzeigename; `art_name()` überall statt `BELEGARTEN[...]["name"]`). `steuer=13b`: USt-Satz 0, `daten.steuer="13b"`, im Druck Zeile „Steuerschuldnerschaft des Leistungsempfängers (§ 13b UStG)“ und `HINWEIS_13B` mit USt-IdNr. des Kunden; E-Rechnung Kategorie `AE` mit `ExemptionReason` und `ExemptionReasonCode VATEX-EU-AE` (nach `CategoryCode`), `pruefen()` verlangt die USt-IdNr. des Kunden. Alle drei geprüft mit XSD CII D16B und EN-16931-Schematron 1.3.17.
+
+Frontend: kalk.js `belegArtWahl()`, `belegBasis()`, `freiZeilenHtml()`, `belegartenVorgabe()`, `belegvariablenVorgabe()` (`BELEGVARIABLEN`), Einstellungen › Texte › Eigene Belegarten / Belegvariablen; personal.js `arbeitszeitVorgabe()` (Einstellungen › Arbeitszeit), Planauswahl im Arbeitszeitmodell.
+
+Rechnungskorrektur „Angaben berichtigen“: `d.modus="berichtigen"`, `daten.modus`, `daten.grundart`. `beleg_snapshot` übernimmt `zeilen`, `summen`, `abzuege`, `abschlaege`, `kunde`, `lohn`, `steuer` der Bezugsrechnung; mit `neu_aus_auftrag` (Knopf „Aus Positionen aktualisieren“) Zeilen und Kunde neu aus dem Auftrag, nur wenn `netto_positionen` gleich bleibt, sonst `opts.eigen` (bisherige Zeilen) behalten. DB-Spalten netto/ust/brutto/zahlbetrag = 0 (kein Umsatz, kein OP), `daten.summen` voll für Druck und E-Rechnung (384 mit Bezug). Druck ohne Konditionen und QR, eigene Texte `korrektur_berichtigen` (Beleg- und Mailtext), Storno gesperrt.
+
+Lieferantennummer: `PUT lieferanten/{id}` lehnt eine geänderte `nummer` mit 400 ab (gleiche Nummer wird ignoriert); im Stamm schreibgeschützt angezeigt.
+
+Lieferanten-Anschrift: Spalten `adressen.FELDER` auch in `lieferanten` (NACHRUESTEN, `LIEFERANT_FELDER`), einmalige Zerlegung vorhandener Anschriften in `init_db`, POST/PUT über `adressen.ableiten()` (Anschrift, Briefanrede, Kurzname); POST mit nur `anschrift` (z. B. aus Eingangsrechnung) wird zerlegt. Oberfläche wie beim Kunden (`adressFelder`, Briefanschrift, Briefanrede).
+
+Kundennummer: `PUT kunden/{id}` lehnt eine geänderte `nummer` mit 400 ab (gleiche Nummer wird ignoriert), Anzeige schreibgeschützt; der Kundenimport im Modus „aktualisieren“ ändert die Nummer ohnehin nicht.

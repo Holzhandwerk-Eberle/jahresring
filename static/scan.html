@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3b3530">
+<title>Scan · Jahresring</title>
+<style>
+:root{--dunkel:#3b3530;--akzent:#b8834f;--gruen:#4d7a45;--rot:#b23b2e;--linie:#ddd3c6;--zeile:#f4efe8;--leise:#7b7166}
+*{box-sizing:border-box}
+body{margin:0;font:17px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;background:#efe9e1;color:#222}
+header{background:var(--dunkel);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+header b{font-size:18px}header a{color:#e8d7c3;margin-left:auto;text-decoration:none;font-size:15px}
+main{padding:14px;max-width:640px;margin:0 auto}
+.karte{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+button,.btn{display:block;width:100%;font:inherit;font-weight:600;padding:15px;border-radius:10px;border:0;background:var(--akzent);color:#fff;margin:8px 0;text-align:center;text-decoration:none;cursor:pointer}
+button.leise,.btn.leise{background:#e7dfd4;color:#333}button.gross{font-size:20px;padding:22px}
+input,select{font:inherit;width:100%;padding:12px;border:1px solid var(--linie);border-radius:8px;background:#fff;margin:4px 0}
+label{display:block;font-size:14px;color:var(--leise);margin-top:8px}
+.hinweis{color:var(--leise);font-size:14px}.zahl{font-size:22px;font-weight:700}
+.liste button{background:#fff;color:#222;border:1px solid var(--linie);text-align:left;font-weight:400}
+.liste small{display:block;color:var(--leise)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button{width:auto;flex:1 1 auto;margin:0;background:#fff;color:#222;border:1px solid var(--linie);font-weight:500}
+.chips button.an{background:var(--akzent);color:#fff;border-color:var(--akzent)}
+#toast{position:fixed;left:12px;right:12px;bottom:16px;background:#222;color:#fff;padding:14px;border-radius:10px;display:none;z-index:9}
+#toast.rot{background:var(--rot)}
+</style>
+</head>
+<body>
+<header><b>📷 Scan</b><span class="hinweis" id="wer" style="color:#cfc3b4"></span><a href="/stempel">Stempeluhr</a></header>
+<main id="app"><div class="karte">Lädt …</div></main>
+<div id="toast"></div>
+<input type="file" id="kamera" accept="image/*" capture="environment" hidden>
+<script src="/lib/jsQR.js"></script>
+<script>
+const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const n2 = (x, d = 2) => (+x || 0).toLocaleString("de-DE", {minimumFractionDigits: 0, maximumFractionDigits: d});
+const merk = {lesen(k, s) { try { return JSON.parse(localStorage.getItem("scan_" + k)) ?? s; } catch (e) { return s; } }, schreiben(k, v) { try { localStorage.setItem("scan_" + k, JSON.stringify(v)); } catch (e) {} }};
+let ICH = null, AUFTRAEGE = null, scanZiel = null;
+function toast(t, rot = false) { const e = $("#toast"); e.textContent = t; e.className = rot ? "rot" : ""; e.style.display = "block"; clearTimeout(e._t); e._t = setTimeout(() => e.style.display = "none", 3500); }
+async function api(pfad, opt = {}) {
+  const r = await fetch("/api/" + pfad, {method: opt.method || "GET", headers: {"Content-Type": "application/json"}, body: opt.body ? JSON.stringify(opt.body) : undefined, cache: "no-store"});
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { anmelden(); throw new Error("Bitte anmelden"); }
+  if (!r.ok) throw new Error(j.fehler || r.statusText);
+  return j;
+}
+function anmelden(fehler = "") {
+  $("#app").innerHTML = `<div class="karte"><h2 style="margin-top:0">Anmelden</h2><form id="anm"><label>Benutzername</label><input name="login" autocapitalize="none" value="${esc(merk.lesen("login", ""))}">
+    <label>Passwort</label><input name="passwort" type="password"><button type="submit">Anmelden</button><div class="hinweis" style="color:var(--rot)">${esc(fehler)}</div></form></div>`;
+  $("#anm").onsubmit = async e => {
+    e.preventDefault(); const f = e.target;
+    const r = await fetch("/api/anmeldung/anmelden", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({login: f.login.value, passwort: f.passwort.value})});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return anmelden(j.fehler || "Anmeldung fehlgeschlagen");
+    merk.schreiben("login", f.login.value); start();
+  };
+}
+
+// ---------- QR-Code aus einem Foto lesen (funktioniert auch ohne https) ----------
+function qrAusBild(datei) {
+  return new Promise((ok, fehler) => {
+    const url = URL.createObjectURL(datei), img = new Image();
+    img.onload = () => {
+      let f = Math.min(1, 1400 / Math.max(img.naturalWidth, img.naturalHeight));
+      for (const faktor of [f, f * 0.6, Math.min(1, f * 1.6)]) {
+        const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * faktor); c.height = Math.round(img.naturalHeight * faktor);
+        const g = c.getContext("2d"); g.drawImage(img, 0, 0, c.width, c.height);
+        const d = g.getImageData(0, 0, c.width, c.height);
+        const code = jsQR(d.data, d.width, d.height, {inversionAttempts: "attemptBoth"});
+        if (code && code.data) { URL.revokeObjectURL(url); return ok(code.data); }
+      }
+      URL.revokeObjectURL(url); fehler(new Error("Kein QR-Code erkannt. Bitte näher ran und scharf fotografieren."));
+    };
+    img.onerror = () => fehler(new Error("Foto nicht lesbar"));
+    img.src = url;
+  });
+}
+function scannen(ziel) { scanZiel = ziel; $("#kamera").value = ""; $("#kamera").click(); }
+$("#kamera").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const text = await qrAusBild(f);
+    const m = text.match(/scan#([am])(\d+)/) || text.match(/#\/(mat|auftrag)\/(\d+)/);
+    if (!m) return toast("Dieser QR-Code gehört nicht zum Büro: " + text.slice(0, 60), true);
+    const art = m[1] === "mat" || m[1] === "m" ? "m" : "a";
+    if (scanZiel && scanZiel(art, +m[2]) === true) return;
+    location.hash = art + m[2];
+  } catch (x) { toast(x.message, true); }
+};
+
+// ---------- Ansichten ----------
+async function startseite() {
+  const zuletzt = merk.lesen("zuletzt", []);
+  $("#app").innerHTML = `<button class="gross" id="sc">📷 QR-Code scannen</button>
+    <p class="hinweis" style="text-align:center;margin-top:-2px">Etikett am Lager oder QR-Code auf dem Werkstattauftrag fotografieren. Die normale Handykamera öffnet die Codes auch direkt.</p>
+    <div class="karte"><label style="margin-top:0">Material suchen</label><input id="such" placeholder="Nummer oder Bezeichnung"><div class="liste" id="treffer"></div></div>
+    ${zuletzt.length ? `<div class="karte"><b>Zuletzt</b><div class="liste">${zuletzt.map(z => `<button data-h="${z.h}">${esc(z.t)}<small>${esc(z.u || "")}</small></button>`).join("")}</div></div>` : ""}`;
+  $("#sc").onclick = () => scannen(null);
+  let t; $("#such").oninput = e => { clearTimeout(t); t = setTimeout(async () => {
+    const l = await api("scan/suche?q=" + encodeURIComponent(e.target.value)).catch(() => []);
+    $("#treffer").innerHTML = l.map(m => `<button data-h="m${m.id}">${esc(m.nummer)} ${esc(m.bezeichnung.split("\n")[0])}<small>${m.lager ? "Bestand " + n2(m.bestand) + " " + esc(m.einheit || "") : "kein Lagerartikel"}</small></button>`).join("");
+    $$("[data-h]", $("#treffer")).forEach(b => b.onclick = () => location.hash = b.dataset.h);
+  }, 250); };
+  $$("[data-h]").forEach(b => b.onclick = () => location.hash = b.dataset.h);
+}
+function merken(h, t, u) { const z = merk.lesen("zuletzt", []).filter(x => x.h !== h); z.unshift({h, t, u}); merk.schreiben("zuletzt", z.slice(0, 6)); }
+async function auftragsliste() { if (!AUFTRAEGE) AUFTRAEGE = await api("scan/auftraege"); return AUFTRAEGE; }
+
+async function materialSeite(id) {
+  const m = await api("scan/material/" + id);
+  merken("m" + id, `${m.nummer} ${m.bezeichnung.split("\n")[0]}`, m.lagerort || "");
+  const liste = await auftragsliste();
+  let aid = merk.lesen("auftrag", null); if (!liste.find(a => a.id === aid)) aid = null;
+  const zeichnen = () => {
+    const a = liste.find(x => x.id === aid);
+    $("#app").innerHTML = `<div class="karte"><div class="hinweis">${esc(m.nummer)}${m.lagerort ? " · " + esc(m.lagerort) : ""}</div>
+        <div class="zahl" style="font-size:19px">${esc(m.bezeichnung.split("\n")[0])}</div>
+        ${m.lager ? `<div style="margin-top:6px">Bestand <b>${n2(m.bestand)} ${esc(m.einheit || "")}</b>${m.mindestbestand && m.bestand < m.mindestbestand ? ` <span style="color:var(--rot)">unter Mindestbestand</span>` : ""}</div>` : `<div class="hinweis">kein Lagerartikel – wird nur als Kosten gebucht</div>`}</div>
+      <div class="karte"><b>Auf Auftrag buchen</b>
+        <label>Auftrag</label><select id="auf"><option value="">– Auftrag wählen –</option>${liste.map(x => `<option value="${x.id}" ${x.id === aid ? "selected" : ""}>${esc(x.nummer)} ${esc(x.bezeichnung)} · ${esc(x.kunde)}</option>`).join("")}</select>
+        <button class="leise" id="aufScan">📷 Auftrag scannen</button>
+        ${a && (a.titel || []).length ? `<label>Titel</label><select id="tit"><option value="0">– ohne Titel –</option>${a.titel.map(t => `<option value="${t.nr}">T${String(t.nr).padStart(2, "0")} ${esc(t.name)}</option>`).join("")}</select>` : ""}
+        <label>Menge (${esc(m.einheit || "")})</label><input id="menge" inputmode="decimal" placeholder="z. B. 2">
+        <button id="buchen">Buchen</button></div>
+      <button class="leise" onclick="location.hash=''">‹ Zurück</button>`;
+    $("#auf").onchange = e => { aid = +e.target.value || null; merk.schreiben("auftrag", aid); zeichnen(); };
+    $("#aufScan").onclick = () => scannen((art, nr) => { if (art !== "a") { toast("Bitte den QR-Code eines Auftrags scannen.", true); return true; } aid = nr; merk.schreiben("auftrag", aid); zeichnen(); return true; });
+    $("#buchen").onclick = async () => {
+      const menge = parseFloat(($("#menge").value || "").replace(",", "."));
+      if (!aid) return toast("Bitte einen Auftrag wählen.", true);
+      if (!(menge > 0)) return toast("Bitte eine Menge eingeben.", true);
+      try { const r = await api("scan/buchen", {method: "POST", body: {material_id: id, auftrag_id: aid, menge, titel: $("#tit") ? +$("#tit").value : 0}});
+        toast(`${n2(menge)} ${m.einheit || ""} auf ${liste.find(x => x.id === aid).nummer} gebucht`); if (m.lager) m.bestand = r.bestand; $("#menge").value = ""; zeichnen(); }
+      catch (x) { toast(x.message, true); }
+    };
+  };
+  zeichnen();
+}
+
+async function auftragSeite(id) {
+  const a = await api("scan/auftrag/" + id);
+  merken("a" + id, `${a.nummer} ${a.bezeichnung}`, a.kunde);
+  merk.schreiben("auftrag", id);
+  $("#app").innerHTML = `<div class="karte"><div class="hinweis">${esc(a.nummer)} · ${esc(a.kunde)}</div><div class="zahl" style="font-size:19px">${esc(a.bezeichnung)}</div>
+      <div class="hinweis">${esc(a.status || "")}${a.leitstand ? " · " + esc(a.leitstand) : ""}</div></div>
+    <a class="btn" href="/stempel?auftrag=${id}">⏱ Zeit auf diesen Auftrag stempeln</a>
+    <button id="matScan">📷 Material scannen und buchen</button>
+    <div class="karte"><label style="margin-top:0">oder Material suchen</label><input id="such" placeholder="Nummer oder Bezeichnung"><div class="liste" id="treffer"></div></div>
+    ${a.kosten.length ? `<div class="karte"><b>Zuletzt gebucht</b>${a.kosten.map(k => `<div class="hinweis">${esc(k.datum)} · ${n2(k.menge)} ${esc(k.einheit || "")} ${esc(k.bezeichnung)}</div>`).join("")}</div>` : ""}
+    <a class="btn leise" href="/#/auftrag/${id}/werkstatt">Auftrag im Büro-Programm (Rapport, Bautagebuch, Papiere)</a>
+    <button class="leise" onclick="location.hash=''">‹ Zurück</button>`;
+  $("#matScan").onclick = () => scannen((art, nr) => { if (art !== "m") { toast("Bitte ein Material-Etikett scannen.", true); return true; } location.hash = "m" + nr; return true; });
+  let t; $("#such").oninput = e => { clearTimeout(t); t = setTimeout(async () => {
+    const l = await api("scan/suche?q=" + encodeURIComponent(e.target.value)).catch(() => []);
+    $("#treffer").innerHTML = l.map(m => `<button data-h="m${m.id}">${esc(m.nummer)} ${esc(m.bezeichnung.split("\n")[0])}<small>${m.lager ? "Bestand " + n2(m.bestand) : ""}</small></button>`).join("");
+    $$("[data-h]", $("#treffer")).forEach(b => b.onclick = () => location.hash = b.dataset.h);
+  }, 250); };
+}
+
+async function route() {
+  const h = location.hash.slice(1);
+  try {
+    if (/^m\d+$/.test(h)) await materialSeite(+h.slice(1));
+    else if (/^a\d+$/.test(h)) await auftragSeite(+h.slice(1));
+    else await startseite();
+  } catch (e) { if (!/anmelden/i.test(e.message)) $("#app").innerHTML = `<div class="karte">${esc(e.message)}</div><button class="leise" onclick="location.hash=''">‹ Zurück</button>`; }
+  window.scrollTo(0, 0);
+}
+async function start() {
+  try { const j = await (await fetch("/api/anmeldung", {cache: "no-store"})).json(); if (!j.benutzer) return anmelden(); ICH = j.benutzer; $("#wer").textContent = ICH.name || ICH.login; }
+  catch (e) { $("#app").innerHTML = `<div class="karte">Keine Verbindung zum Büro-PC. Ist das Handy im Werkstatt-WLAN?</div>`; return; }
+  route();
+}
+window.addEventListener("hashchange", route);
+start();
+</script>
+</body>
+</html>

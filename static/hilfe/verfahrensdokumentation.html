@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verfahrensdokumentation GoBD</title>
+<style>
+@page{size:A4;margin:20mm 18mm 18mm 22mm}
+:root{--dunkel:#3b3530;--akzent:#9a6b3f;--linie:#d9d0c4}
+*{box-sizing:border-box}
+body{margin:0;font:10.5pt/1.5 "Segoe UI",system-ui,Arial,sans-serif;color:#1d1d1d;background:#8a8a8a}
+.blatt{background:#fff;max-width:210mm;margin:16px auto;padding:20mm 18mm 20mm 22mm;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+.leiste{position:sticky;top:0;background:var(--dunkel);color:#fff;padding:8px 16px;display:flex;gap:10px;align-items:center;font:14px system-ui;z-index:2}
+.leiste button{font:inherit;padding:4px 12px;border:0;border-radius:5px;background:#b8834f;color:#fff;cursor:pointer}
+h1{font-size:20pt;margin:0 0 4mm;color:var(--dunkel)}
+h2{font-size:13.5pt;margin:9mm 0 2mm;color:var(--dunkel);border-bottom:1.5pt solid var(--akzent);padding-bottom:1mm;break-after:avoid}
+h3{font-size:11pt;margin:5mm 0 1.5mm;color:var(--dunkel);break-after:avoid}
+p{margin:0 0 2.5mm;text-align:justify;hyphens:auto}
+table{border-collapse:collapse;width:100%;margin:2mm 0 4mm;font-size:9.5pt;break-inside:auto}
+th{background:#ece6dd;text-align:left;padding:1.5mm 2mm;border:.5pt solid var(--linie);vertical-align:top}
+td{padding:1.5mm 2mm;border:.5pt solid var(--linie);vertical-align:top}
+tr{break-inside:avoid}
+.ein{background:#fff4c2;padding:0 1mm;border-radius:2px}
+.deckblatt{min-height:230mm;display:flex;flex-direction:column;justify-content:space-between}
+.deckblatt .titel{margin-top:40mm}
+.deckblatt .titel .unter{font-size:13pt;color:#555;margin-top:3mm}
+.klein{font-size:9pt;color:#555}
+.kasten{border:1pt solid var(--akzent);background:#faf6f0;padding:3mm 4mm;margin:3mm 0 4mm;break-inside:avoid}
+.neu{break-before:page}
+.inhalt ol{margin:0;padding-left:6mm}.inhalt li{margin:.6mm 0}
+.unterschrift{display:grid;grid-template-columns:1fr 1fr;gap:12mm;margin-top:14mm}
+.unterschrift div{border-top:.6pt solid #000;padding-top:1mm;font-size:9pt}
+[data-f]{min-width:12mm;display:inline-block}td[data-f]{display:table-cell}
+[contenteditable=true]:focus{outline:2px solid #b8834f;background:#fff}
+.ein.gefuellt{background:#e8f3e6}
+@media print{.ein.gefuellt{background:none;border-bottom:none}}
+@media print{body{background:#fff}.leiste{display:none}.blatt{box-shadow:none;margin:0;padding:0;max-width:none}.ein{background:none;border-bottom:.5pt dotted #999}}
+</style>
+</head>
+<body>
+<div class="leiste"><b>Verfahrensdokumentation nach GoBD</b><span style="flex:1"></span><span id="vdStatus">Gelb markierte Stellen anklicken und ausfüllen – wird automatisch im Programm gespeichert</span><button onclick="window.print()">Drucken / als PDF speichern</button></div>
+<div class="blatt">
+
+<section class="deckblatt">
+<div class="titel">
+<h1>Verfahrensdokumentation<br>nach GoBD</h1>
+<div class="unter">Gesamtdokumentation der Prozesskette von der Kundenanfrage bis zur Buchführung und Archivierung, mit dem Büroprogramm „Jahresring“</div>
+<p style="margin-top:14mm"><b><span data-e="firma">[Firma]</span></b><br>Inhaber <span data-e="firma_inhaber">[Inhaber]</span><br><span data-e="anschrift"></span><br><span data-e="kontakt"></span><br>Steuernummer <span class="ein" data-f="f2">[……]</span> · USt-IdNr. <span class="ein" data-f="f3">[……]</span></p>
+</div>
+<table>
+<tr><th style="width:38%">Dokumentversion</th><td><span class="ein" data-f="v_version">[1.0 (Datum)]</span></td></tr>
+<tr><th>Ersetzt</th><td><span class="ein" data-f="v_ersetzt">[frühere Verfahrensdokumentation, Version und Datum, oder –]</span></td></tr>
+<tr><th>Gültig ab</th><td><span class="ein" data-f="f4">[Datum der Inbetriebnahme im Echtbetrieb]</span></td></tr>
+<tr><th>Bezieht sich auf Programmversion</th><td>Jahresring <span class="ein" data-f="v_progversion">[Version laut Einstellungen › Service › Infos]</span></td></tr>
+<tr><th>Erstellt von / verantwortlich</th><td><span data-e="firma_inhaber">[Inhaber]</span>, Inhaber</td></tr>
+<tr><th>Rechtsgrundlagen</th><td>§§ 145–147 AO, §§ 238 ff. HGB, § 14 und § 14b UStG, GoBD (BMF-Schreiben vom 28.11.2019, zuletzt geändert am 14.07.2025)</td></tr>
+<tr><th>Aufbewahrung dieser Dokumentation</th><td>10 Jahre nach Ende der Gültigkeit (Organisationsunterlage, § 147 Abs. 1 Nr. 1 AO)</td></tr>
+</table>
+</section>
+
+<section class="neu inhalt">
+<h2>Inhalt</h2>
+<ol>
+<li>Zweck und Geltungsbereich</li>
+<li>Allgemeine Beschreibung (Unternehmen, Organisation, IT-Landschaft)</li>
+<li>Anwenderdokumentation: Geschäftsprozesse</li>
+<li>Technische Systemdokumentation</li>
+<li>Betriebsdokumentation: Zugriffsschutz, Datensicherung, Archivierung, Änderungen</li>
+<li>Internes Kontrollsystem (IKS)</li>
+<li>Ordnungsmäßigkeit: Umsetzung der GoBD-Grundsätze</li>
+<li>Aufbewahrung und Datenzugriff der Finanzverwaltung</li>
+<li>Bekannte Grenzen des Systems und ausgleichende Maßnahmen</li>
+<li>Änderungshistorie und Freigabe</li>
+</ol>
+<p class="klein" style="margin-top:4mm">Anlagen: Verzeichnis von Verarbeitungstätigkeiten (Datenschutz-Dokumentation, Abschnitt 3), Benutzerhandbuch Jahresring (im Programm unter „?“), Datenschutz-Dokumentation (hilfe/datenschutz.html), Installations- und Betriebsanleitung (hilfe/installation.html), Technische Dokumentation (Datei docs/Technische_Dokumentation.md im Programmordner), LIESMICH.txt (Versionsverzeichnis des Programms).</p>
+</section>
+
+<h2>1. Zweck und Geltungsbereich</h2>
+<p>Diese Verfahrensdokumentation beschreibt, wie im Betrieb <span data-e="firma">[Firma]</span> steuerlich relevante Daten mit dem Programm „Jahresring“ entstehen, verarbeitet, aufbewahrt und bereitgestellt werden. Sie soll einem sachverständigen Dritten (insbesondere einem Betriebsprüfer der Finanzverwaltung) ermöglichen, die Verfahren in angemessener Zeit nachzuvollziehen (GoBD Rz. 151 ff.). Sie folgt der Gliederung allgemeine Beschreibung, Anwenderdokumentation, technische Systemdokumentation und Betriebsdokumentation.</p>
+<p>Die Dokumentation umfasst die gesamte Prozesskette des Betriebs: Kundenanfrage, Aufmaß, Zeichnung, Kalkulation, Angebot, Auftragsbestätigung, Rechnung, Materialbestellung und Eingangsrechnungen, Zahlungsverkehr, Buchführung und Archivierung. Sie dient der Sicherstellung der Nachvollziehbarkeit, Nachprüfbarkeit und Revisionssicherheit gemäß den GoBD.</p>
+<p>Mit Jahresring geführt werden die Vor- und Nebensysteme der Buchführung: Kunden- und Auftragsverwaltung, Erstellung von Angeboten und Ausgangsrechnungen (einschließlich Abschlags- und Stornorechnungen sowie E-Rechnungen), offene Posten und Mahnwesen, Erfassung von Eingangsrechnungen und Zahlungsaufträgen an Lieferanten, Lager- und Materialbuchungen, Nachkalkulation, Zeiterfassung der Mitarbeiter und Vorbereitung der Lohnzahlungen.</p>
+<p>Außerhalb von Jahresring und hier mit ihren Abläufen beschrieben sind: <span class="ein" data-f="v_aussen">[z. B. die Buchführung (Einnahmen-Überschuss-Rechnung, Umsatzsteuer) mit …, selbst oder durch einen Steuerberater; die Archivierung der Belege und Dokumente in …; das Aufmaß mit …; die Konstruktion mit …]</span>. Kassenführung: <span class="ein" data-f="f7">[Bargeschäfte finden nicht statt / werden im Kassenbuch erfasst]</span>.</p>
+
+<h2>2. Allgemeine Beschreibung</h2>
+<h3>2.1 Unternehmen</h3>
+<p><span data-e="firma">[Firma]</span> ist <span class="ein" data-f="v_betrieb">[Rechtsform, Inhaber, Sitz, Tätigkeitsschwerpunkte und Kundenkreis]</span>. Gewinnermittlung: Einnahmen-Überschuss-Rechnung nach § 4 Abs. 3 EStG. Umsatzbesteuerung: <span class="ein" data-f="f10">[Soll-/Ist-Versteuerung]</span>. Wirtschaftsjahr = Kalenderjahr.</p>
+<h3>2.2 Organisation und Verantwortlichkeiten</h3>
+<p><span class="ein" data-f="v_personen">[Wer welche Tätigkeiten ausführt, ob Mitarbeiter beschäftigt sind und wer die Lohnabrechnung übernimmt]</span> Die Gesamtverantwortung liegt beim Inhaber.</p>
+<table>
+<tr><th style="width:42%">Aufgabe</th><th style="width:22%">Verantwortlich</th><th>System</th></tr>
+<tr><td>Gesamtverantwortung, Pflege und Freigabe dieser Dokumentation</td><td>Inhaber</td><td>–</td></tr>
+<tr><td>Empfang und Versand von E-Mails</td><td>Inhaber</td><td><span class="ein" data-f="v_z1">[E-Mail-Programm]</span>, Jahresring</td></tr>
+<tr><td>Aufmaß, Zeichnungserstellung</td><td>Inhaber</td><td><span class="ein" data-f="v_z2">[Aufmaß-App, CAD-Programm]</span></td></tr>
+<tr><td>Kalkulation, Angebote, Auftragsbestätigungen, Rechnungen, Mahnungen</td><td>Inhaber</td><td>Jahresring</td></tr>
+<tr><td>Materialbestellungen, Erfassung der Eingangsrechnungen, Zahlungsaufträge</td><td>Inhaber</td><td>Jahresring, Onlinebanking</td></tr>
+<tr><td>Archivierung und Indexierung</td><td>Inhaber</td><td><span class="ein" data-f="v_z3">[Archiv / DMS]</span></td></tr>
+<tr><td>Buchführung, Umsatzsteuer, Steuererklärungen</td><td>Inhaber</td><td><span class="ein" data-f="v_z4">[Buchhaltungsprogramm oder Steuerberater]</span></td></tr>
+<tr><td>Datensicherung, Löschungen</td><td>Inhaber</td><td>alle Systeme, siehe 5.3 und 8.1</td></tr>
+<tr><td>Benutzer und Rechte, Programmpflege und -änderungen</td><td>Inhaber</td><td>Jahresring, siehe 5.5</td></tr>
+</table>
+<h3>2.3 IT-Landschaft im Überblick</h3>
+<table>
+<tr><th style="width:27%">System, Version</th><th style="width:27%">Installation, Datenhaltung</th><th>Verwendung, Sicherung</th></tr>
+<tr><td>Jahresring, Version siehe Deckblatt</td><td>lokal auf dem Büro-PC, Programmordner <span class="ein" data-f="f27">[C:\Jahresring]</span>; SQLite-Datenbank und Belegarchiv im Unterordner daten</td><td>Kunden, Aufträge, Kalkulation, Angebote, Rechnungen, offene Posten, Mahnwesen, Eingangsrechnungen, Zahlungen, Lager, (künftig) Zeiterfassung; Beschreibung in diesem Dokument; Sicherung siehe 5.3</td></tr>
+<tr><td><span class="ein" data-f="v_it1a">[Dokumentenmanagement / Archiv, Version]</span></td><td><span class="ein" data-f="v_it1b">[Speicherort]</span></td><td><span class="ein" data-f="v_it1c">[Zweck, Zugriff, Protokollierung, Sicherung]</span></td></tr>
+<tr><td><span class="ein" data-f="v_it2a">[Buchhaltung, Version]</span></td><td><span class="ein" data-f="v_it2b">[Speicherort]</span></td><td><span class="ein" data-f="v_it2c">[wer bucht, Bankumsätze, Datenzugriff Z3, Sicherung]</span></td></tr>
+<tr><td><span class="ein" data-f="v_it3a">[Aufmaß, Version]</span></td><td><span class="ein" data-f="v_it3b">[Gerät]</span></td><td><span class="ein" data-f="v_it3c">[Zweck, Export]</span></td></tr>
+<tr><td><span class="ein" data-f="v_it4a">[CAD, Version]</span></td><td><span class="ein" data-f="v_it4b">[Gerät]</span></td><td><span class="ein" data-f="v_it4c">[Zweck, Export, Sicherung]</span></td></tr>
+<tr><td><span class="ein" data-f="v_it5a">[E-Mail-Programm und Anbieter]</span></td><td><span class="ein" data-f="v_it5b">[Gerät]</span></td><td><span class="ein" data-f="v_it5c">[Zweck; Jahresring nutzt dasselbe Konto für Versand (SMTP) und Abruf (IMAP)]</span></td></tr>
+<tr><td><span class="ein" data-f="v_it6a">[Scanner]</span></td><td><span class="ein" data-f="v_it6b">[Gerät, Ablageordner]</span></td><td><span class="ein" data-f="v_it6c">[Digitalisierung von Papierbelegen (PDF/A, Auflösung)]</span></td></tr>
+<tr><td><span class="ein" data-f="v_it7a">[Büro-PC: Modell, Betriebssystem]</span></td><td><span class="ein" data-f="v_it7b">[Benutzerkonten]</span></td><td><span class="ein" data-f="v_it7c">[Programme, Sicherung]</span></td></tr>
+<tr><td><span class="ein" data-f="v_it8a">[Cloud-Speicher]</span></td><td>Projektordner</td><td>Projektordner der Aufträge (Arbeitskopien von PDFs, Plänen, Fotos, Aufmaßen); von Jahresring je Auftrag angelegt. Programm- und Datenordner von Jahresring liegen <b>nicht</b> im Cloud-Speicher (Gefahr beschädigter Datenbank); das Programm warnt sonst auf der Startseite</td></tr>
+<tr><td>Onlinebanking <span class="ein" data-f="f18">[Bank]</span></td><td>beim Kreditinstitut</td><td>Ausführung der SEPA-Überweisungsdateien aus Jahresring mit TAN; Kontoumsätze werden in die Buchhaltung übernommen</td></tr>
+<tr><td>Website mit Kontaktformular</td><td><span class="ein" data-f="v_it9b">[Anbieter]</span></td><td>Anfragen gehen per E-Mail ein; nicht steuerlich relevant</td></tr>
+<tr><td>Google Kalender</td><td>beim Anbieter</td><td>Jahresring zeigt die Termine über die private iCal-Adresse nur lesend an; keine Übertragung an Google</td></tr>
+</table>
+<p>Alle Systeme sind passwortgeschützt. Cloud-Dienste und E-Mail-Konten sind zusätzlich durch Zwei-Faktor-Authentifizierung gesichert. Zwischen Jahresring und den übrigen Programmen bestehen <span class="ein" data-f="v_schnitt">[keine automatisierten Schnittstellen; Übertragungen erfolgen manuell]</span>.</p>
+
+<h2>3. Anwenderdokumentation: Geschäftsprozesse</h2>
+<p>Die Bedienung von Jahresring ist im Benutzerhandbuch ausführlich beschrieben. Hier werden die Abläufe mit ihren Kontrollen dargestellt. <span class="ein" data-f="v_wer">[Wer die Tätigkeiten durchführt]</span>.</p>
+<h3>3.0 Kundenanfrage, Aufmaß und Zeichnung</h3>
+<p><b>Kundenanfrage.</b> Anfragen erreichen den Betrieb per E-Mail, über das Kontaktformular der Website oder telefonisch. Die Anfrage wird in Jahresring als „Neue Anfrage“ erfasst; dabei wird der Kunde angelegt oder gewählt, der Auftrag erhält seine Nummer und der Projektordner wird angelegt. E-Mails des Kunden ordnet Jahresring automatisch der Korrespondenz zu. Schriftliche Anfragen werden unmittelbar nach Eingang im Archiv archiviert. Telefonische Anfragen werden als Notiz in der Auftragshistorie festgehalten.</p>
+<p><b>Aufmaß.</b> Das Aufmaß wird beim Kunden vor Ort mit der Aufmaß-App auf Smartphone oder Tablet erstellt. Der konkrete Bedarf des Kunden wird als handschriftliche Notiz festgehalten, unmittelbar nach dem Termin eingescannt und als PDF/A im Archiv archiviert; die Papiernotizen werden nach erfolgreicher Archivierung vernichtet. Die digitalen Aufmaßdaten werden als PDF oder DXF exportiert, im Projektordner abgelegt und im Archiv archiviert.</p>
+<p><b>Zeichnung.</b> Auf Grundlage des Aufmaßes entstehen im CAD-Programm die Zeichnungen. Die Projektdateien werden im Format des CAD-Programms gespeichert und zusätzlich als PDF oder Bild exportiert und im Archiv archiviert. Stücklisten werden als CSV in Jahresring eingelesen und dienen der Kalkulation.</p>
+<h3>3.1 Stammdaten</h3>
+<p>Kunden und Lieferanten erhalten fortlaufende Nummern ab einer einstellbaren Startnummer (Kunden ab 100000, Lieferanten ab 700000). Kunden haben eine Kundengruppe (Privatkunde, Geschäftskunde, öffentlicher Auftraggeber), Umsatzsteuersatz, Zahlungsbedingungen und das Rechnungsformat (PDF, ZUGFeRD, XRechnung mit Leitweg-ID). Jeder Auftrag erhält bei Anlage eine Kopie der Kundendaten; jeder Beleg friert Kunden-, Firmen- und Positionsdaten zum Zeitpunkt der Erstellung ein. Spätere Stammdatenänderungen verändern daher bereits erstellte Belege nicht.</p>
+<h3>3.2 Auftrag, Kalkulation, Angebot</h3>
+<p>Aufträge erhalten die Nummer Jahr-laufende Nummer (z. B. 2026-0029). Positionen werden nach dem Zuschlagsverfahren kalkuliert (Material mit Gemeinkosten, Lohn mit Gemeinkostenzuschlag je Kostenstelle, Wagnis und Gewinn). Angebote, Kostenvoranschläge, Auftragsbestätigungen und Lieferscheine sind keine Buchungsbelege; sie erhalten eine Nummer aus Auftragsnummer, Kürzel und laufender Nummer (z. B. 2026-0029-A01), werden als PDF im Projektordner und im Programmarchiv abgelegt und können bis zur Annahme aktualisiert werden. Als empfangene oder versandte Handels- oder Geschäftsbriefe unterliegen versandte Angebote und Auftragsbestätigungen der Aufbewahrungspflicht (Abschnitt 8).</p>
+<h3>3.3 Ausgangsrechnungen</h3>
+<div class="kasten"><b>Kernprozess.</b> Rechnungen (auch Abschlags- und Schlussrechnungen) entstehen zunächst als <b>Entwurf ohne Rechnungsnummer</b>. Mit dem Vorgang <b>„Festschreiben“</b> (Knopf oder automatisch beim E-Mail-Versand) geschieht in einem Schritt: Vergabe der nächsten Rechnungsnummer aus dem lückenlosen Jahres-Nummernkreis, Setzen des Status „fest“, Erzeugen und Ablegen des Archiv-PDFs (bei aktivierter E-Rechnung mit eingebettetem ZUGFeRD-Datensatz nach EN 16931, Profil EN 16931; bei Kunden mit XRechnung zusätzlich die XRechnung-Datei) und Anlage des offenen Postens.</div>
+<p><b>Nummernkreis.</b> Rechnungen, Abschlagsrechnungen und Stornorechnungen teilen sich einen Nummernkreis je Kalenderjahr im Format [Präfix]JJJJ-NNNN (z. B. 2026-0007). Die nächste Nummer ist stets die höchste bereits vergebene Nummer des Jahres plus eins; ein in den Einstellungen hinterlegter Zählerstand kann den Kreis nur nach oben versetzen (z. B. bei Übernahme aus dem Vorgängerprogramm), nie auf eine bereits vergebene Nummer zurück. Da Entwürfe keine Nummer tragen, entstehen durch gelöschte Entwürfe keine Lücken. Eine bewusste Versetzung des Zählers ist in Abschnitt 10 zu dokumentieren.</p>
+<p><b>Unveränderbarkeit.</b> Festgeschriebene und stornierte Rechnungen können im Programm weder geändert noch gelöscht werden; die Programmschnittstelle weist Änderungs- und Löschanfragen ab (Meldung „Festgeschriebene Belege können nicht mehr geändert werden (GoBD)“). Das Archiv-PDF wird nach der Festschreibung nicht mehr neu erzeugt; bei erneutem Speichern in den Projektordner wird eine Kopie des Archiv-PDFs verwendet. Die vollständigen Belegdaten (Positionen, Beträge, Steuersatz, Kunde, Firma) liegen zusätzlich als eingefrorener Datensatz in der Datenbank.</p>
+<p><b>Korrektur.</b> Fehlerhafte festgeschriebene Rechnungen werden durch eine <b>Stornorechnung</b> korrigiert. Sie erhält eine eigene Nummer aus demselben Nummernkreis, verweist auf die Originalrechnung (Nummer und Datum) mit negativen Beträgen und bucht den offenen Posten aus. Anschließend wird eine neue Rechnung erstellt. Eine Abschlagsrechnung kann nicht storniert werden, solange sie in einer festgeschriebenen Schlussrechnung verrechnet ist.</p>
+<p><b>Pflichtangaben.</b> Die Rechnung enthält die Angaben nach § 14 Abs. 4 UStG aus den Firmeneinstellungen und Belegdaten (Name und Anschrift von Leistendem und Empfänger, Steuernummer oder USt-IdNr., Rechnungsdatum, fortlaufende Rechnungsnummer, Menge und Art der Leistung, Leistungsdatum bzw. -zeitraum, Entgelt nach Steuersätzen, Steuersatz und Steuerbetrag) sowie bei Privatkunden den Hinweis auf die Aufbewahrungspflicht nach § 14b Abs. 1 Satz 5 UStG (Wortlaut in den Einstellungen anpassbar). Zusätzlich weist die Rechnung auf Wunsch die enthaltenen Arbeitskosten nach § 35a EStG aus (netto, Umsatzsteuer, brutto); der Betrag wird beim Erstellen aus der Kalkulation ermittelt und mit dem Beleg eingefroren. Vor der Festschreibung prüft das Programm die Vollständigkeit der für die E-Rechnung erforderlichen Angaben und zeigt Fehler an.</p>
+<p><b>Abschlags- und Schlussrechnungen.</b> In der Schlussrechnung werden festgeschriebene Abschlagsrechnungen des Auftrags mit Nummer, Datum, Netto, Umsatzsteuer und Brutto ausgewiesen und abgezogen. Welche Abschläge verrechnet werden, wird per Auswahl festgelegt; ein bereits in einer festgeschriebenen Rechnung verrechneter Abschlag kann nicht ein zweites Mal abgezogen werden.</p>
+<p><b>E-Rechnung.</b> Seit 01.01.2025 müssen inländische Unternehmer E-Rechnungen empfangen können; die Pflicht zur Ausstellung von E-Rechnungen an Unternehmer gilt nach den Übergangsregeln ab 2027 bzw. 2028 <span class="ein" data-f="f21">[für den Betrieb maßgeblicher Zeitpunkt: ……]</span>. Jahresring erzeugt hybride ZUGFeRD-Rechnungen (PDF/A-3 mit eingebettetem XML nach EN 16931) und auf Wunsch XRechnungen. Aufbewahrt werden Archiv-PDF mit eingebettetem Datensatz bzw. die XML-Datei.</p>
+<h3>3.4 Versand</h3>
+<p>Belege werden ausgedruckt und per Post übergeben oder aus dem Programm per E-Mail versandt. Beim E-Mail-Versand speichert das Programm Zeitpunkt und Empfänger am Beleg und legt die E-Mail mit Anhang im Ordner „Gesendet“ des E-Mail-Kontos ab. Relevante E-Mails (insbesondere Kundenanfragen, Angebote, Auftragsbestätigungen und versendete Rechnungen) werden über das Archiv-Anschluss des E-Mail-Programms archiviert; das gilt auch für E-Mails, die aus Jahresring versendet wurden und im Ordner „Gesendet“ liegen. Nicht geschäftsrelevante E-Mails werden nicht abgelegt. Der Inhaber prüft regelmäßig, ob alle für die Geschäftsvorfälle relevanten E-Mails im Archiv archiviert sind.</p>
+<p>Zusätzlich liest das Programm Posteingang und Gesendet des E-Mail-Kontos nur lesend und legt Mails von und an hinterlegte Kunden- und Lieferantenadressen als Kopie (Originaldatei .eml) in der Korrespondenz des Kunden, Lieferanten oder Auftrags ab. Gelesen werden der Posteingang, der Ordner „Gesendet“ und weitere eingestellte Ordner (z. B. „Kundenkontakt“); wird eine Adresse neu bei einem Kunden eingetragen, sucht das Programm deren Mails der letzten 60 Tage nach. E-Mails, die aus dem Programm versandt werden, stehen sofort in der Korrespondenz (bei Versand aus einem Auftrag beim Auftrag, mit der Auftragsnummer im Betreff). Diese Ablage dient dem schnellen Zugriff; sie ist kein revisionssicheres E-Mail-Archiv und ersetzt die oben genannte Aufbewahrung nicht. Lieferscheine, Abnahmeprotokolle und Auftragsbestätigungen, die der Kunde digital auf dem Tablet unterschreibt, werden mit Unterschriftsbild, Name, Ort und Zeitpunkt als PDF im Archiv und im Projektordner abgelegt; der unterschriebene Beleg ist danach gegen Änderungen, Löschen und Entfernen der Unterschrift gesperrt. Rapporte (Stunden- und Materialnachweise der Montage) werden ebenso unterschrieben, danach gesperrt und als PDF abgelegt.</p>
+<h3>3.5 Offene Posten, Zahlungseingänge, Mahnwesen</h3>
+<p>Jede festgeschriebene Rechnung und Abschlagsrechnung erzeugt einen offenen Posten mit Fälligkeit. Zahlungseingänge werden anhand des Kontoauszugs mit Datum, Betrag und Art erfasst; Skonto innerhalb der Frist wird gesondert ausgebucht. Maßgeblich für die Buchführung sind die Bankumsätze, die in der Buchhaltung importiert und gebucht werden; die Erfassung in Jahresring dient der Forderungsüberwachung. Auf Wunsch geht nach dem Buchen eine Zahlungsbestätigung per E-Mail an den Kunden. Mahnungen (Zahlungserinnerung, 1. und 2. Mahnung) werden mit Gebühren, Verzugszinsen nach § 288 BGB und Verzugspauschale berechnet, als PDF archiviert und können nur in umgekehrter Reihenfolge (jeweils die letzte) gelöscht werden.</p>
+<h3>3.6 Eingangsrechnungen und Zahlungsausgang</h3>
+<p><b>Materialbestellungen</b> erfolgen telefonisch, per E-Mail (auch aus Jahresring an den Lieferanten) oder über die Online-Shops der Lieferanten. Bei telefonischen Bestellungen wird kein schriftlicher Auftrag erstellt; Bestellbestätigungen werden nicht archiviert, da die Eingangsrechnung den vollständigen und steuerlich relevanten Nachweis darstellt. <b>Lieferscheine</b> werden nicht gesondert archiviert, weil alle steuerlich relevanten Angaben (Lieferdatum, Leistungsbeschreibung, Mengen, Preise) in den Rechnungen enthalten sind.</p>
+<p>Eingangsrechnungen gehen überwiegend per E-Mail, teils per Post ein. Elektronisch empfangene Rechnungen (PDF, ZUGFeRD/Factur-X, XRechnung) werden über „Rechnung einlesen“ erfasst. Zusätzlich schlägt das Programm Rechnungsanhänge aus dem E-Mail-Postfach vor (Mails von hinterlegten Lieferantenadressen und alle PDF/XML-Anhänge aus dem eingestellten Rechnungsordner); gebucht wird erst nach Prüfung im selben Erfassungsdialog, das Postfach selbst bleibt unverändert. Die strukturierten Daten einer E-Rechnung lassen sich jederzeit über die XML-Ansicht lesbar anzeigen und mit den offiziellen Regelwerken (Schema, EN 16931, bei XRechnung die KoSIT-Regeln) prüfen (Lesbarmachung nach § 147 Abs. 2 AO). Das Programm liest die Kopfdaten und bei E-Rechnungen die Positionen aus dem strukturierten Datensatz, ordnet Lieferant, Auftrag, Material oder Werkzeug zu und legt einen Zahlungsauftrag an. Die <b>empfangene Originaldatei wird unverändert</b> (bitgenau, im Empfangsformat) im Belegordner des Programms gespeichert und mit dem Zahlungsauftrag verknüpft. Zusätzlich wird jede Eingangsrechnung im Archiv importiert und indexiert (Abschnitt 3.10). Papierrechnungen werden unmittelbar nach Eingang mit dem Scanner als PDF/A mit 300 dpi in den Ordner „Scan-Eingang“ gescannt, von dort im Archiv importiert und in Jahresring als Zahlungsauftrag erfasst. Die Papierbelege werden nach erfolgreicher Archivierung für eine Übergangsfrist von <span class="ein" data-f="f24">[……]</span> aufbewahrt und anschließend vernichtet (ersetzendes Scannen; Scan farbig bei farbrelevanten Belegen, Kontrolle der Lesbarkeit vor dem Vernichten).</p>
+<p>Zahlungen an Lieferanten werden als SEPA-Überweisungsdatei (pain.001) erzeugt und im Onlinebanking ausgeführt; danach wird der Zahlungsauftrag als bezahlt markiert. Skonto wird automatisch berücksichtigt, wenn die Frist am Ausführungstag läuft.</p>
+<h3>3.7 Lager, Material und Nachkalkulation</h3>
+<p>Lagerzu- und -abgänge werden als Lagerbewegungen mit Datum, Menge, Preis und Bezug (Auftrag, Rechnung) gespeichert; der Lagerpreis wird als gleitender Durchschnitt geführt. Bewegungen werden nicht gelöscht: Wird eine Auftragsbuchung mit Lagerabgang zurückgenommen, gleicht eine datierte Rückbuchung die Entnahme aus, sodass Bestände zu früheren Stichtagen unverändert bleiben. Auftragskosten und Ist-Stunden dienen der Nachkalkulation. Das gemeinsame Lager für Plattenreste mit dem Zuschnittprogramm protokolliert jede Buchung mit Zeitpunkt. Diese Daten sind Hilfsaufzeichnungen der Betriebssteuerung; eine Bestandsbewertung für steuerliche Zwecke erfolgt nicht (Gewinnermittlung durch Einnahmen-Überschuss-Rechnung).</p>
+<h3>3.8 Zeiterfassung und Lohn</h3>
+<p><span class="ein" data-f="v_ma">[In Gebrauch seit … / derzeit nicht in Gebrauch]</span> Mitarbeiter erfassen ihre Arbeitszeiten mit der Stempeluhr (Browser auf dem Handy) oder werden durch den Inhaber nachgetragen. Jeder Zeitabschnitt speichert Beginn, Ende, Auftrag, Kostenstelle, Tätigkeit, Quelle (Stempeluhr, PC, Rapport) und bei Änderungen Benutzer und Zeitpunkt der letzten Änderung. Stempelvorgänge werden zusätzlich mit eindeutiger Kennung als Ereignis gespeichert, sodass doppelte Übertragungen erkannt werden. Monatsbelege (Stundennachweise) werden je Mitarbeiter und Monat als PDF erzeugt und unterschrieben. Mitarbeiter und Arbeitgeber unterschreiben den Monatsbeleg digital (Tablet bzw. Stempeluhr); gespeichert werden Unterschriftsbild, Name, Zeitpunkt, Benutzer und eine Prüfsumme der Zeiten. Ändern sich die Zeiten danach, weist der Beleg darauf hin; jede Unterschrift steht im Protokoll. Die Lohnabrechnung würde ein Steuerberater erstellen; im Programm werden nur die Zahlbeträge (Netto, Lohnsteuer, Sozialversicherung) erfasst und als Zahlungsaufträge mit SEPA-Datei ausgeführt.</p>
+<h3>3.9 Buchführung</h3>
+<p><span class="ein" data-f="v_buchf">[Wer die Buchführung mit welchem Programm führt; ob Dritte (Steuerberater) beteiligt sind]</span>. Sobald ein Beleg im Archiv archiviert ist, wird er gebucht. Bankumsätze werden automatisch importiert und den Belegen zugeordnet. Zur Vollständigkeitskontrolle erstellt Jahresring unter Einstellungen › Service › Export ein <b>Belegpaket</b> für einen wählbaren Zeitraum: alle festgeschriebenen Ausgangsrechnungen als Archiv-PDF (mit ZUGFeRD-Datensatz) bzw. XRechnung, alle Eingangsrechnungen im Originalformat sowie eine Rechnungsausgangsliste, eine Liste der Eingangsrechnungen und der Zahlungseingänge als CSV. Das Paket prüft auf lückenlose Rechnungsnummern und weist Rechnungen ohne Archivdatei sowie Zahlungsaufträge ohne Originaldatei aus. Der Inhaber gleicht <span class="ein" data-f="f26">[monatlich]</span> die Rechnungsausgangsliste mit dem Archiv und den Buchungen in der Buchhaltung ab. Jede Erstellung eines Belegpakets wird im Protokoll vermerkt.</p>
+<h3>3.10 Archivierung und Indexierung</h3>
+<p>Alle Belege und geschäftsrelevanten Dokumente werden zentral im Archiv archiviert, auch die in Jahresring erzeugten Angebote, Auftragsbestätigungen und Rechnungen (Archiv-PDF aus dem Datenordner bzw. Projektordner, nach dem Versand) und die Eingangsrechnungen (bei E-Rechnungen die Originaldatei mit strukturiertem Datensatz). Jedes Dokument wird beim Import manuell indexiert mit mindestens: Name des Geschäftspartners, Dokumentart (z. B. Eingangsrechnung, Ausgangsrechnung, Angebot, Kalkulation, Aufmaß, Zeichnung, E-Mail), Rechnungs- oder Vorgangsnummer (bei eigenen Belegen die Nummer aus Jahresring, z. B. 2026-0007 oder 2026-0012-A01), Belegdatum und Betrag (bei Rechnungen und Angeboten). Ein Dokument gilt erst als archiviert, wenn alle Pflichtfelder ausgefüllt sind. Nachträgliche Änderungen der Indexdaten protokolliert das Archiv. Jahresring bewahrt seine Belege zusätzlich selbst auf (Abschnitt 4.2).</p>
+
+<h2>4. Technische Systemdokumentation</h2>
+<h3>4.1 Programm</h3>
+<p>Jahresring ist eine für den Betrieb individuell entwickelte Anwendung. Sie besteht aus einem lokalen Webserver in Python 3 (ohne Fremdpakete außer den mitgelieferten Bibliotheken pypdf für PDF-Verarbeitung und segno für QR-Codes) und einer Bedienoberfläche, die im Browser bzw. als Programmfenster von Microsoft Edge/Google Chrome läuft. PDFs werden mit dem auf dem PC installierten Edge/Chrome erzeugt. Der Programmcode liegt im Programmordner <span class="ein" data-f="f72">[C:\Jahresring]</span>, die Daten im Unterordner <b>daten</b>. Aufbau, Datenmodell und Schnittstellen beschreibt die technische Dokumentation (Anlage).</p>
+<h3>4.2 Datenhaltung</h3>
+<table>
+<tr><th style="width:34%">Speicherort (unter daten\)</th><th>Inhalt</th></tr>
+<tr><td>buero.db</td><td>SQLite-Datenbank mit allen strukturierten Daten (Kunden, Aufträge, Positionen, Belege mit eingefrorenen Belegdaten, offene Posten, Zahlungseingänge, Mahnungen, Lieferanten, Zahlungsaufträge, Material, Lager, Zeiten, Benutzer, Einstellungen)</td></tr>
+<tr><td>belege\JJJJ\</td><td>Archiv-PDFs der Belege (Rechnungen mit ZUGFeRD-Daten), XRechnung-Dateien</td></tr>
+<tr><td>eingangsrechnungen\</td><td>empfangene Lieferantenrechnungen im Originalformat (PDF/XML)</td></tr>
+<tr><td>mahnungen\JJJJ\</td><td>Mahnungs-PDFs (Kopie zusätzlich im Projektordner)</td></tr>
+<tr><td>anhaenge\</td><td>Dateien zu Kunden, Aufträgen, Lieferanten</td></tr>
+<tr><td>bilder\, vorlagen\, montage\</td><td>Positionsbilder, Briefbogen/AGB, unterschriebene Rapporte</td></tr>
+<tr><td>backup\</td><td>automatische Tagessicherungen der Datenbank und vollständige Sicherungen (ZIP)</td></tr>
+<tr><td>protokoll.txt</td><td>Programmprotokoll (Start, Fehlermeldungen)</td></tr>
+</table>
+<p>Projektordner im Cloud-Speicher enthalten Arbeitskopien (Angebote, Rechnungen, Pläne). Maßgeblich für die Aufbewahrung sind die Archivdateien im Datenordner und die Datenbank.</p>
+<h3>4.3 Datum, Zeit und Zeitstempel</h3>
+<p>Alle Datensätze tragen Zeitstempel der Anlage und der letzten Änderung (Systemzeit des Büro-PCs, Sekundengenauigkeit). Die Systemzeit wird von Windows automatisch mit einem Zeitserver abgeglichen <span class="ein" data-f="f28">[prüfen: Einstellungen › Zeit › automatisch]</span>.</p>
+<h3>4.4 Schnittstellen</h3>
+<table>
+<tr><th style="width:30%">Schnittstelle</th><th>Richtung und Format</th></tr>
+<tr><td>E-Rechnung Ausgang</td><td>ZUGFeRD 2 (EN 16931) im PDF, XRechnung (CII)</td></tr>
+<tr><td>E-Rechnung Eingang</td><td>ZUGFeRD 1/2, Factur-X, XRechnung CII und UBL, ersatzweise Text-PDF</td></tr>
+<tr><td>Zahlungsverkehr</td><td>SEPA-Überweisungsdatei pain.001.001.09 zum Upload ins Onlinebanking</td></tr>
+<tr><td>E-Mail</td><td>SMTP (Versand, TLS), IMAP (nur lesend: Posteingang, Gesendet, Zusatzordner); das Passwort wird nur lokal gespeichert und unter Windows mit der Windows-Datenschutz-API (DPAPI) an das Benutzerkonto gebunden verschlüsselt</td></tr>
+<tr><td>Kalender</td><td>Import Google Kalender (iCal, nur lesend), Export iCal</td></tr>
+<tr><td>CAD/Zuschnitt</td><td>Stücklisten-CSV, Zuschnitt-JSON aus dem CAD (nicht steuerlich relevant)</td></tr>
+<tr><td>Kunden-/Werkzeugimport</td><td>CSV/Excel/vCard (einmalige Datenübernahme)</td></tr>
+</table>
+
+<h2>5. Betriebsdokumentation</h2>
+<h3>5.1 Zugriffsschutz</h3>
+<p>Der Büro-PC ist durch ein eigenes geschäftliches Windows-Benutzerkonto mit starkem Passwort geschützt <span class="ein" data-f="f29">[Bildschirmsperre nach … Minuten]</span>. <span class="ein" data-f="v_pc">[Private Nutzung des PCs und des Scanners: nein / ja, über ein getrenntes Benutzerkonto ohne Zugriff auf geschäftliche Daten; Ablageort geschäftlicher Scans]</span>. Cloud-Dienste und E-Mail-Konto sind zusätzlich mit Zwei-Faktor-Authentifizierung gesichert.</p>
+<p> Das Programm ist nur am PC selbst und – falls in den Einstellungen eingeschaltet – im eigenen WLAN erreichbar, nicht aus dem Internet. Jeder Benutzer meldet sich mit eigenem Benutzernamen und Passwort an; Passwörter werden nur als gesalzener Hash (PBKDF2-SHA256, 200.000 Iterationen) gespeichert. Sitzungen laufen nach Inaktivität ab. Rechte werden je Bereich (kein Zugriff, nur ansehen, bearbeiten) über Rollen vergeben (Inhaber, Büro, Werkstatt, Mitarbeiter, eigene Rechte). Benutzer ohne Preisrecht sehen keine Preise. Benutzer und Rechte verwaltet ausschließlich der Inhaber. Nach mehreren Fehlversuchen wird die Anmeldung zeitweise gesperrt. Ein vergessenes Passwort lässt sich nur mit einem Code an die hinterlegte E-Mail-Adresse oder mit dem ausgedruckten Notfallschlüssel des Inhabers neu setzen (aufbewahrt <span class="ein" data-f="f73">[getrennt vom Büro-PC an sicherem Ort]</span>); jede Zurücksetzung steht im Protokoll. Das Programm weist ändernde Anfragen fremder Webseiten ab (Prüfung der Herkunft, Sitzungscookie „SameSite=Strict, HttpOnly“) und verbietet das Einbetten in fremde Seiten. Im WLAN-Betrieb läuft die Verbindung unverschlüsselt (HTTP); der Netzwerkzugriff ist deshalb nur im eigenen, mit WPA2/WPA3 geschützten Netz zulässig, nicht in einem Gäste- oder fremden Netz (Datenschutz-Dokumentation, TOM).</p>
+<table>
+<tr><th style="width:28%">Benutzer</th><th style="width:22%">Rolle</th><th>Gültig ab / bis</th></tr>
+<tr><td><span class="ein" data-f="v_ben1">[Name (Benutzername)]</span></td><td>Inhaber</td><td><span class="ein" data-f="f30">[……]</span></td></tr>
+<tr><td><span class="ein" data-f="f31">[……]</span></td><td><span class="ein" data-f="f32">[……]</span></td><td><span class="ein" data-f="f33">[……]</span></td></tr>
+</table>
+<h3>5.1a Unveränderbares Protokoll (Journal)</h3>
+<p>Alle steuerlich relevanten Vorgänge werden automatisch in einem Protokoll festgehalten: Festschreiben und Stornieren von Rechnungen (mit Nummer, Datum, Kunde und Beträgen), Löschen von Belegen (Angebote, Entwürfe), Ändern betragsrelevanter Felder und Löschen von Zahlungsaufträgen (mit vollständigem Datensatz), Löschen von Zahlungseingängen und Mahnungen, Änderungen der Nummernkreise, vollständige Sicherungen, Rücksicherungen (mit Pflichtangabe des Grundes im Echtbetrieb), das Löschen von Testdaten, der Beginn des Echtbetriebs und jeder Wechsel der Programmversion. Außerdem stehen dort Unterschriften unter Monatsbelegen sowie Freigaben von Gefährdungsbeurteilungen und Betriebsanweisungen und abgeschlossene Unterweisungen (jeweils mit Prüfsumme des Inhalts). Jeder Eintrag enthält laufende Nummer, Zeitpunkt, angemeldeten Benutzer, Programmversion, Beschreibung und die betroffenen Daten.</p>
+<p>Das Protokoll wird doppelt geführt: in der Datenbanktabelle <i>protokoll</i>, in der Änderungen und Löschungen durch Datenbank-Trigger abgewiesen werden, und in der Journaldatei <i>daten\protokoll\journal.jsonl</i>, an die nur angehängt wird. Die Einträge sind als Hash-Kette verbunden (SHA-256 über den Inhalt und den Hash des vorigen Eintrags). Jede nachträgliche Änderung, Löschung oder Umsortierung bricht die Kette. Die Prüfung läuft bei jedem Aufruf der Protokollseite (Einstellungen › Service › Protokoll) und im Relationencheck und vergleicht Datenbank und Journaldatei. Die Journaldatei wird von Rücksicherung und Testdatenlöschung nicht verändert; nach einer Rücksicherung trägt das Programm fehlende Einträge aus der Journaldatei in die Datenbank nach. Das Protokoll ist Bestandteil jeder vollständigen Sicherung und kann als CSV ausgegeben werden. Eine absolute Unlöschbarkeit ist auf einem Einzelplatz-PC technisch nicht herstellbar; die Kombination aus Trigger, Hash-Kette, zweitem Speicherort und externen Sicherungen macht Eingriffe jedoch erkennbar.</p>
+<h3>5.1b Echtbetrieb</h3>
+<p>Der Beginn des Echtbetriebs wird einmalig durch den Inhaber im Programm gesetzt (Einstellungen › Service › Testdaten löschen › Echtbetrieb starten, Bestätigung durch Eintippen von ECHTBETRIEB) und im Protokoll mit der zu diesem Zeitpunkt nächsten Rechnungsnummer festgehalten. Ab diesem Zeitpunkt verweigert das Programm die Funktion „Testdaten löschen“ dauerhaft. Weil der Beginn auch in der Journaldatei steht, bleibt die Sperre bestehen, wenn eine Sicherung aus der Zeit vor dem Echtbetrieb zurückgespielt wird. Echtbetrieb seit: <span class="ein" data-f="f70">[Datum laut Protokoll]</span>.</p>
+<h3>5.2 Programmbetrieb</h3>
+<p>Das Programm startet mit Windows (Autostart) bzw. über start.bat und läuft im Hintergrund. Bei jedem Start wird die Datenbankstruktur geprüft und bei Bedarf ergänzt (nur Hinzufügen von Tabellen und Spalten, keine Änderung bestehender Daten) und eine Tagessicherung der Datenbank angelegt.</p>
+<h3>5.3 Datensicherung</h3>
+<table>
+<tr><th style="width:28%">Art</th><th style="width:22%">Häufigkeit</th><th>Umfang, Aufbewahrung, Ort</th></tr>
+<tr><td>Tagessicherung Datenbank (automatisch)</td><td>bei jedem Programmstart, höchstens einmal täglich</td><td>konsistente Kopie von buero.db mit anschließender Integritätsprüfung (PRAGMA integrity_check), die letzten 30 Tage und je Monat die erste Sicherung für 12 Monate im Ordner daten\backup</td></tr>
+<tr><td>Vollständige Sicherung (manuell)</td><td><span class="ein" data-f="f34">[wöchentlich und vor jedem Update]</span></td><td>ZIP mit Datenbank und allen Dateien des Datenordners, Prüfung beim Auflisten; die letzten 15 im Programm, zusätzlich mit dem Sicherungskennwort verschlüsselte Kopie im Sicherungsziel <span class="ein" data-f="f35">[Pfad]</span></td></tr>
+<tr><td>Archiv, Buchhaltung, Projekt- und Kalkulationsdateien</td><td>täglich</td><td>Sicherung auf verschlüsselter externer Festplatte und in verschlüsselter Cloud; der Inhaber prüft einmal pro Woche das Backup-Log auf erfolgreiche Durchführung</td></tr>
+<tr><td>Projektordner (automatisch, wenn eingeschaltet)</td><td>täglich</td><td>Abgleich des Projektordners mit dem externen Sicherungsziel, übertragen wird nur Neues und Geändertes; ersetzte und gelöschte Dateien bleiben als frühere Fassung <span class="ein" data-f="v_pstage">[90 Tage]</span> erhalten; mit Sicherungskennwort verschlüsselt; Läufe im Protokoll</td></tr>
+<tr><td>Sicherung vor Rücksicherung / vor Testdatenlöschung (automatisch)</td><td>bei jedem solchen Vorgang</td><td>vollständige Sicherung</td></tr>
+<tr><td>Langzeitarchiv</td><td><span class="ein" data-f="f36">[jährlich nach Jahresabschluss]</span></td><td><span class="ein" data-f="f37">[vollständige Sicherung auf zwei getrennten Medien, aufbewahrt bis Ablauf der Fristen]</span></td></tr>
+</table>
+<p>Die Wiederherstellung (Rücksicherung) ist nur dem Inhaber erlaubt. Vor jeder Rücksicherung sichert das Programm automatisch den aktuellen Stand. Rücksicherungen sind in Abschnitt 10 zu vermerken. Die Wiederherstellung wird mindestens <span class="ein" data-f="f38">[einmal jährlich]</span> durch eine Probe-Rücksicherung getestet.</p>
+<h3>5.4 Archivierung und Lesbarkeit</h3>
+<p>Belege werden in den genormten Formaten PDF (PDF/A-3 bei E-Rechnungen) und XML gespeichert, die Datenbank im offen dokumentierten SQLite-Format. Beide sind ohne Jahresring mit Standardwerkzeugen lesbar und maschinell auswertbar. Bei Ablösung des Programms werden Datenbank und Belegarchiv bis zum Ablauf der Aufbewahrungsfristen unverändert aufbewahrt und lesbar gehalten <span class="ein" data-f="f39">[ggf. mit einer lauffähigen Kopie des Programms auf einem Archivsystem]</span>.</p>
+<h3>5.5 Programmänderungen</h3>
+<p>Das Programm wird im Auftrag des Inhabers weiterentwickelt. Jede ausgelieferte Version hat eine Versionsnummer (Datum und laufende Nummer); alle Änderungen sind in der Datei LIESMICH.txt im Programmordner chronologisch beschrieben, die damit als Änderungsprotokoll dient. Die jeweils eingesetzte Version wird in der Datenbank vermerkt und unter Einstellungen › Service › Infos angezeigt. Vor jedem Update wird eine vollständige Sicherung erstellt. Updates ersetzen nur den Programmcode; der Datenordner bleibt unberührt. Ausgelieferte Versionen (Setup-Dateien) werden <span class="ein" data-f="f40">[im Ordner … ]</span> aufbewahrt, damit der Programmstand zu jedem Zeitpunkt nachvollziehbar ist. Änderungen, die steuerlich relevante Abläufe betreffen (Nummernkreis, Festschreibung, Rechnungsinhalt, E-Rechnung, Archivierung), werden zusätzlich in Abschnitt 10 dieser Dokumentation eingetragen. Gleiches gilt für Änderungen an anderen Softwareversionen, Installationsarten oder Prozessen. Jede neue Fassung dieser Dokumentation erhält eine neue Versionsnummer und wird im Archiv archiviert; frühere Fassungen bleiben erhalten.</p>
+<h3>5.6 Störungen und Notfall</h3>
+<p>Für den Notfall werden die Installationsdateien der eingesetzten Programme (für Jahresring die Setup-Datei der eingesetzten Version) auf einem gesicherten Datenträger aufbewahrt. Bei Ausfall des Büro-PCs werden die Systeme auf einem neuen Gerät wiederhergestellt: für Jahresring die Setup-Datei ausführen und die letzte vollständige Sicherung vom externen Sicherungsziel zurückspielen (Sicherungskennwort erforderlich), für Archiv und Buchhaltung jeweils deren Sicherung. Zugangsdaten (z. B. für E-Mail und Cloud) und der Notfallschlüssel für Jahresring sind sicher dokumentiert. Fehlermeldungen stehen im Programmprotokoll. Der Relationencheck (Einstellungen › Service) prüft Datenbankintegrität und Verknüpfungen und wird nach jeder Störung sowie <span class="ein" data-f="f41">[monatlich]</span> ausgeführt.</p>
+
+<h2>6. Internes Kontrollsystem (IKS)</h2>
+<table>
+<tr><th style="width:32%">Risiko</th><th style="width:38%">Kontrolle</th><th>Art</th></tr>
+<tr><td>Rechnung wird nachträglich verändert oder gelöscht</td><td>Festschreibung; Programm verweigert Änderung und Löschung; Korrektur nur per Stornorechnung</td><td>programmiert</td></tr>
+<tr><td>Doppelte oder fehlende Rechnungsnummern</td><td>automatische fortlaufende Vergabe beim Festschreiben, Zählerstand nur nach oben versetzbar; monatliche Sichtprüfung der Nummernfolge beim Abgleich mit Archiv und Buchhaltung</td><td>programmiert / manuell</td></tr>
+<tr><td>Rechnung ohne Pflichtangaben</td><td>Pflichtangaben aus Stammdaten; Prüfung der E-Rechnung vor Festschreibung</td><td>programmiert</td></tr>
+<tr><td>Rechnung nicht archiviert oder nicht gebucht</td><td>Belegpaket je Zeitraum mit Rechnungsausgangsliste und automatischer Prüfung auf Nummernlücken; Abgleich mit Archiv und Buchhaltung (Abschnitt 3.9)</td><td>programmiert / manuell, monatlich</td></tr>
+<tr><td>Eingangsrechnung doppelt erfasst</td><td>Hinweis bei gleicher Rechnungsnummer des Lieferanten; Originaldatei am Zahlungsauftrag</td><td>programmiert / manuell</td></tr>
+<tr><td>Fehlerhafte Zahlung</td><td>SEPA-Datei aus geprüften Zahlungsaufträgen, Freigabe im Onlinebanking (TAN) durch den Inhaber</td><td>manuell</td></tr>
+<tr><td>Unberechtigter Zugriff</td><td>Benutzer mit Passwort, Rollen und Rechte, kein Internetzugriff, Windows-Anmeldung</td><td>programmiert / organisatorisch</td></tr>
+<tr><td>Manipulierte Arbeitszeiten</td><td>Stempelung durch den Mitarbeiter, Änderungen mit Benutzer und Zeitpunkt, Monatsbeleg zur Unterschrift</td><td>programmiert / manuell</td></tr>
+<tr><td>Datenverlust</td><td>tägliche automatische und regelmäßige vollständige Sicherungen mit externem Ziel, Probe-Rücksicherung</td><td>programmiert / organisatorisch</td></tr>
+<tr><td>Unbemerkte Programmänderung</td><td>Versionsnummer, LIESMICH.txt, automatischer Protokolleintrag bei jedem Versionswechsel</td><td>programmiert / organisatorisch</td></tr>
+<tr><td>Nachträgliche Änderung festgeschriebener Rechnungen oder ihrer Archiv-PDFs außerhalb des Programms</td><td>Belegprüfung bei jedem Programmstart: Vergleich jeder festgeschriebenen Rechnung mit dem Protokoll (Nummer, Datum, Beträge, Inhalts-Fingerabdruck SHA-256) und jedes Archiv-PDFs mit dem protokollierten Datei-Hash; Hinweis auf der Startseite</td></tr>
+<tr><td>Doppelte Rechnungsnummern nach einer Rücksicherung</td><td>die Nummernvergabe berücksichtigt die im Protokoll festgehaltenen Nummern; fehlende Rechnungen werden von der Belegprüfung benannt</td></tr>
+<tr><td>Unbefugtes Lesen von Sicherungen auf externen Datenträgern oder in Cloud-Ordnern</td><td>optionales Sicherungskennwort: Kopien auf dem externen Sicherungsziel und heruntergeladene Sicherungen werden verschlüsselt (Schlüsselableitung scrypt, Stromchiffre SHAKE-256, Unverfälschtheit HMAC-SHA-256)</td></tr>
+<tr><td>Mitlesen von Anmeldung und Daten im WLAN</td><td>optionale Verschlüsselung der Verbindung (https, TLS ab Version 1.2) mit eigenem, auf das lokale Netz beschränktem Zertifikat</td></tr>
+<tr><td>Nachträgliche Änderung bezahlter Eingangsrechnungen (Zahlungsaufträge)</td><td>mit „bezahlt“ gesperrt (Betrag, Rechnungsdaten, Bankverbindung, Zahldatum; kein Löschen); Zurücknehmen nur durch den Inhaber, jeweils mit Protokolleintrag; Inventurbuchungen und gelöschte Lagerbuchungen im Protokoll</td></tr>
+<tr><td>Schadsoftware, die Dateien verschlüsselt oder löscht</td><td>Sicherung des Projektordners mit früheren Fassungen (ersetzte und gelöschte Dateien bleiben für die eingestellte Frist erhalten, kein Aufräumen bei auffällig vielen Änderungen); Sicherungsmedium nicht dauerhaft angeschlossen bzw. Ziel mit eigenen Schnappschüssen</td></tr>
+<tr><td>Beschädigte Datenbank (Datenträgerfehler)</td><td>stündliche geprüfte Zwischensicherung zusätzlich zur Tagessicherung; beim Start Aufbewahrung der beschädigten Datei und Wiederherstellung auf Nachfrage, protokolliert</td></tr>
+<tr><td>Unbemerkte Löschung oder Änderung GoBD-relevanter Daten</td><td>unveränderbares Protokoll mit Hash-Kette in Datenbank und Journaldatei; Prüfung bei jedem Aufruf und im Relationencheck, Kontrolle durch den Inhaber <span class="ein" data-f="f71">[monatlich]</span></td><td>programmiert / manuell</td></tr>
+<tr><td>Löschen von Rechnungen nach Produktivsetzung</td><td>Echtbetrieb-Sperre der Testdatenlöschung, auch über Rücksicherungen hinweg</td><td>programmiert</td></tr>
+<tr><td>Dokument unvollständig archiviert</td><td>Pflichtfelder der Indexierung im Archiv; Dokument gilt erst mit allen Pflichtangaben als archiviert</td><td>organisatorisch</td></tr>
+<tr><td>E-Mail nicht archiviert</td><td>regelmäßige Prüfung der geschäftsrelevanten E-Mails gegen das Archiv</td><td>manuell</td></tr>
+<tr><td>Beschädigte Daten</td><td>Relationencheck mit Integritätsprüfung</td><td>programmiert, periodisch</td></tr>
+</table>
+
+<h2>7. Umsetzung der GoBD-Grundsätze</h2>
+<table>
+<tr><th style="width:24%">Grundsatz</th><th>Umsetzung</th></tr>
+<tr><td>Nachvollziehbarkeit und Nachprüfbarkeit</td><td>Jeder Beleg ist über Auftrag, Kunde, offene Posten und Zahlungseingänge verknüpft; Stornorechnungen verweisen auf das Original; Zahlungsaufträge verweisen auf die Originalrechnung; Lagerbewegungen und Auftragskosten verweisen auf Auftrag bzw. Beleg.</td></tr>
+<tr><td>Vollständigkeit</td><td>Lückenloser Rechnungsnummernkreis; jede festgeschriebene Rechnung erzeugt zwingend einen offenen Posten; Eingangsrechnungen werden als Originaldatei gespeichert.</td></tr>
+<tr><td>Richtigkeit</td><td>Beträge werden aus den Positionen berechnet, Umsatzsteuer je Beleg; Prüfung der E-Rechnungsdaten.</td></tr>
+<tr><td>Zeitgerechte Buchungen und Aufzeichnungen</td><td>Rechnungen werden mit Leistungserbringung erstellt und festgeschrieben; Zahlungseingänge <span class="ein" data-f="f42">[wöchentlich]</span> erfasst; Buchung zeitnah nach Archivierung im Archiv, Abgleich <span class="ein" data-f="f43">[monatlich]</span>.</td></tr>
+<tr><td>Ordnung</td><td>Ablage nach Jahr (Belegarchiv), Auftrag (Projektordner) und Lieferant; Suchfunktion; Filter nach Status und Zeitraum; Indexierung im Archiv.</td></tr>
+<tr><td>Unveränderbarkeit</td><td>Festschreibung der Rechnungen mit eingefrorenen Belegdaten und Archiv-PDF; Storno statt Änderung; Originalformate der Eingangsrechnungen; Zeitstempel; unveränderbares Protokoll aller Festschreibungen, Stornierungen, Löschungen und Systemeingriffe mit Hash-Kette (Abschnitt 5.1a); Echtbetrieb-Sperre. Grenzen siehe Abschnitt 9.</td></tr>
+</table>
+
+<h2>8. Aufbewahrung und Datenzugriff</h2>
+<h3>8.1 Aufbewahrungsfristen</h3>
+<table>
+<tr><th style="width:44%">Unterlage</th><th style="width:16%">Frist</th><th>Rechtsgrundlage, Ablage</th></tr>
+<tr><td>Ausgangsrechnungen, Abschlags- und Stornorechnungen (Buchungsbelege)</td><td>8 Jahre</td><td>§ 147 Abs. 1 Nr. 4, Abs. 3 AO, § 14b UStG (seit 01.01.2025 verkürzt); Archiv-PDF/XML und Datenbank</td></tr>
+<tr><td>Eingangsrechnungen, Kontoauszüge (Buchungsbelege)</td><td>8 Jahre</td><td>wie oben; Originaldatei im Datenordner von Jahresring und im Archiv</td></tr>
+<tr><td>Aufzeichnungen, Datenbank als Nebenbuch, Verfahrensdokumentation und Organisationsunterlagen</td><td>10 Jahre</td><td>§ 147 Abs. 1 Nr. 1, Abs. 3 AO</td></tr>
+<tr><td>Angebote, Auftragsbestätigungen, Mahnungen, geschäftliche E-Mails (Handels- und Geschäftsbriefe)</td><td>6 Jahre</td><td>§ 147 Abs. 1 Nr. 2, 3 AO, § 257 HGB</td></tr>
+<tr><td>Arbeitszeitaufzeichnungen, Monatsbelege</td><td>mindestens 2 Jahre (MiLoG), als Lohnunterlagen bis 6 Jahre </td><td>§ 17 MiLoG, § 41 EStG</td></tr>
+</table>
+<p>Die Frist beginnt mit dem Schluss des Kalenderjahres, in dem die Unterlage entstanden ist. Daten werden vor Ablauf der längsten für sie geltenden Frist nicht gelöscht; das Programm enthält keine automatische Löschung von Belegen. Nach Ablauf der Fristen entfernt der Inhaber den Personenbezug eines Kunden auf Anforderung oder im Rahmen der jährlichen Löschprüfung mit „Anonymisieren“ (Kunde › Stammdaten). Das Programm lässt dies erst zu, wenn seit dem Ende des Jahres des letzten Belegs des Kunden 10 Jahre vergangen sind und keine offenen Posten bestehen; Beträge, Positionen und Stunden bleiben erhalten, jede Anonymisierung steht im unveränderbaren Protokoll. Zwischen Datenschutz (Löschpflicht) und Aufbewahrungspflicht gilt damit: Aufbewahrung geht vor, danach wird gelöscht (Art. 17 Abs. 3 b DSGVO).</p>
+<p><b>Löschkonzept.</b> Der Inhaber prüft <span class="ein" data-f="f74">[jährlich im Januar]</span>, welche Fristen abgelaufen sind und ob Gründe für eine verlängerte Aufbewahrung bestehen. Danach werden die Dokumente im Archiv gelöscht und Kunden in Jahresring anonymisiert. Die Löschvorgänge werden im Archiv und Jahresring automatisch protokolliert; zusätzlich wird ein manuelles Löschprotokoll geführt und nach Abschluss im Archiv archiviert. Ursprungsdaten aus allen Systemen werden nach der Ablage über das Archiv verwaltet.</p>
+<h3>8.2 Datenzugriff der Finanzverwaltung (§ 147 Abs. 6 AO)</h3>
+<p><b>Unmittelbarer Zugriff (Z1):</b> Für den Prüfer kann ein eigener Benutzer mit Rolle „Eigene Rechte“ angelegt werden, der alle Bereiche nur ansehen darf. Er kann Listen filtern, sortieren und Belege einsehen. <b>Mittelbarer Zugriff (Z2):</b> Auswertungen nach Vorgabe des Prüfers werden mit den im Programm vorhandenen Auswertungen (Listen, Statistik, Soll/Ist, offene Posten, Zahlungsstatistik) durch den Inhaber erstellt. <b>Datenträgerüberlassung (Z3):</b> Das Programm erzeugt unter Einstellungen › Service › Export › „Datenträger erstellen“ für den angeforderten Zeitraum einen Datenträger nach dem Beschreibungsstandard für die Datenträgerüberlassung (Beschreibungsdatei index.xml mit der DTD gdpdu-01-09-2004.dtd, Tabellen als CSV in UTF-8 ohne Kopfzeile). Er enthält Ausgangsrechnungen, Rechnungspositionen, die Verrechnung von Abschlagsrechnungen, offene Posten, Zahlungseingänge, Mahnungen, Eingangsrechnungen, die im Zeitraum vorkommenden Kunden und Lieferanten sowie das Protokoll, dazu die Belegdateien (Archiv-PDF/XML der Ausgangsrechnungen, Originale der Eingangsrechnungen). Übergeben werden nur die steuerlich relevanten Daten des angeforderten Zeitraums; Kalkulations-, Lager- und Personaldaten gehören nicht dazu. Bei Bedarf kann zusätzlich eine Kopie der Datenbank (SQLite) bereitgestellt werden. Die Daten der Buchführung stellt der Inhaber mit dem Z3-Export des Buchhaltungsprogramms bereit (Abschnitt 2.3); archivierte Dokumente können aus dem Archiv bereitgestellt werden.</p>
+
+<h2>9. Bekannte Grenzen des Systems und ausgleichende Maßnahmen</h2>
+<p>Jahresring ist ein Vorsystem für Auftragsabwicklung und Faktura, kein Finanzbuchhaltungssystem. Die folgenden Punkte sind bekannt und werden durch die genannten Maßnahmen ausgeglichen:</p>
+<table>
+<tr><th style="width:42%">Grenze</th><th>Maßnahme</th></tr>
+<tr><td>Änderungen an Stammdaten (Kunden, Lieferanten, Material, Einstellungen) werden nur mit Zeitpunkt der letzten Änderung, nicht mit vollständiger Historie protokolliert.</td><td>Stammdaten sind nicht buchungsrelevant; Belege enthalten eine eingefrorene Kopie aller relevanten Daten. Die täglichen Datenbanksicherungen (30 Tage) und die vollständigen Sicherungen dokumentieren frühere Stände.</td></tr>
+<tr><td>Zahlungsaufträge (erfasste Eingangsrechnungen) und Zahlungseingänge können im Programm geändert und gelöscht werden.</td><td>Sie sind Hilfsaufzeichnungen. Maßgeblich sind die unverändert gespeicherte Originalrechnung, der Kontoauszug, das Archiv im Archiv und die Buchführung. Löschen ist nur bei Fehlerfassung zulässig; die Originaldatei bleibt im Datenordner erhalten. Jede Löschung und jede Änderung betragsrelevanter Felder wird mit dem vollständigen alten Datensatz im unveränderbaren Protokoll festgehalten.</td></tr>
+<tr><td>Archiv-PDFs liegen als Dateien im Dateisystem und sind technisch nicht schreibgeschützt.</td><td>Zugriff nur über das geschützte Windows-Konto; die Belegdaten liegen zusätzlich eingefroren in der Datenbank; regelmäßige vollständige Sicherungen auf externen Medien ermöglichen den Nachweis des ursprünglichen Inhalts.</td></tr>
+<tr><td>Die Datenbankdatei könnte mit SQLite-Werkzeugen außerhalb des Programms bearbeitet werden.</td><td>Organisatorische Anweisung: keine Bearbeitung außerhalb des Programms. Zugriff auf den Datenordner nur durch den Inhaber.</td></tr>
+<tr><td>Die Funktion „Testdaten löschen“ kann vor dem Echtbetrieb auch festgeschriebene Rechnungen löschen.</td><td>Nur vor dem Echtbetrieb möglich; Rolle Inhaber, Bestätigung, vorherige vollständige Sicherung und Protokolleintrag mit gelöschten Mengen und Nummernständen. Mit Beginn des Echtbetriebs sperrt das Programm die Funktion dauerhaft (Abschnitt 5.1b).</td></tr>
+<tr><td>Eine Rücksicherung setzt den Datenbestand auf einen früheren Stand zurück.</td><td>Nur durch den Inhaber, mit automatischer Sicherung des aktuellen Stands; Beginn, Grund und Abschluss jeder Rücksicherung stehen im unveränderbaren Protokoll, das selbst nicht zurückgesetzt wird. Rechnungen, die nach dem Sicherungszeitpunkt festgeschrieben wurden, werden anhand der versandten PDFs und der Nummernfolge nachgeprüft.</td></tr>
+<tr><td>Datum und Uhrzeit stammen von der Systemuhr des PCs.</td><td>Automatische Zeitsynchronisation von Windows.</td></tr>
+<tr><td>Die Kopie der E-Mails in der Korrespondenz ist kein revisionssicheres Archiv.</td><td>Maßgeblich ist die Archivierung im Archiv (Abschnitt 3.4); Postfächer werden nicht vor Ablauf von 6 Jahren geleert.</td></tr>
+</table>
+
+<h2 class="neu">10. Änderungshistorie und Freigabe</h2>
+<h3>10.1 Änderungen dieser Dokumentation und relevanter Programmfunktionen</h3>
+<table>
+<tr><th style="width:15%">Datum</th><th style="width:14%">Version</th><th>Änderung</th><th style="width:16%">Kürzel</th></tr>
+<tr><td><span class="ein" data-f="f46">[……]</span></td><td class="ein" data-f="f51"></td><td>Beginn des Echtbetriebs; Testdaten gelöscht am <span class="ein" data-f="f47">[……]</span>; Rechnungsnummernkreis beginnt mit <span class="ein" data-f="f48">[……]</span></td><td class="ein" data-f="f52"></td></tr>
+<tr><td class="ein" data-f="f53"></td><td class="ein" data-f="f54"></td><td class="ein" data-f="f55"></td><td class="ein" data-f="f56"></td></tr>
+<tr><td class="ein" data-f="f57"></td><td class="ein" data-f="f58"></td><td class="ein" data-f="f59"></td><td class="ein" data-f="f60"></td></tr>
+</table>
+<h3>10.2 Besondere Ereignisse (Rücksicherungen, Zählerversetzungen, Systemwechsel)</h3>
+<p class="klein">Diese Ereignisse protokolliert das Programm automatisch (Einstellungen › Service › Protokoll). Hier werden ergänzend Erläuterungen und Ereignisse außerhalb des Programms festgehalten.</p>
+<table>
+<tr><th style="width:15%">Datum</th><th>Ereignis und Grund</th><th style="width:16%">Kürzel</th></tr>
+<tr><td class="ein" data-f="f61"></td><td class="ein" data-f="f62"></td><td class="ein" data-f="f63"></td></tr><tr><td class="ein" data-f="f64"></td><td class="ein" data-f="f65"></td><td class="ein" data-f="f66"></td></tr><tr><td class="ein" data-f="f67"></td><td class="ein" data-f="f68"></td><td class="ein" data-f="f69"></td></tr>
+</table>
+<h3>10.3 Freigabe</h3>
+<p>Ich habe diese Verfahrensdokumentation geprüft. Sie beschreibt die im Betrieb eingesetzten Verfahren zutreffend. Sie wird bei Änderungen der Verfahren oder des Programms fortgeschrieben.</p>
+<div class="unterschrift"><div>Ort, Datum</div><div><span data-e="firma_inhaber">[Inhaber]</span>, Inhaber</div></div>
+<p class="klein" style="margin-top:12mm">Hinweis: Diese Dokumentation wurde auf Grundlage des Programmstands erstellt. Die gelb markierten Angaben sind betriebsindividuell und vom Inhaber zu ergänzen. Sie ersetzt keine steuerliche Beratung.</p>
+</div>
+<script>
+// Platzhalter ausfüllen: Eingaben werden in den Einstellungen des Programms gespeichert (nur Inhaber/Einstellungsrecht)
+(async () => {
+  const st = document.getElementById("vdStatus");
+  const felder = [...document.querySelectorAll("[data-f]")];
+  const vorgabe = new Map(felder.map(el => [el.dataset.f, el.innerHTML]));
+  let werte = {};
+  try {
+    const r = await fetch("/api/einstellungen", {credentials: "same-origin"});
+    if (!r.ok) throw new Error("nicht angemeldet");
+    const j = await r.json();
+    werte = j.verfahrensdoku || {};
+    // Firmenangaben aus den Einstellungen (Einstellungen › Firma)
+    const an = String(j.firma_anschrift || "").split("\n").map(x => x.trim()).filter(Boolean).join(", ");
+    const ko = [j.firma_telefon && "Tel. " + j.firma_telefon, j.firma_email, j.firma_web].filter(Boolean).join(" · ");
+    const fw = {firma: j.firma, firma_inhaber: j.firma_inhaber, anschrift: an, kontakt: ko};
+    document.querySelectorAll("[data-e]").forEach(el => { if (fw[el.dataset.e]) el.textContent = fw[el.dataset.e]; });
+    if (j.firma) document.title += " · " + j.firma;
+  } catch (e) { st.textContent = "Zum Ausfüllen bitte zuerst im Programm anmelden"; return; }
+  const zeigen = el => { const v = werte[el.dataset.f]; if (v) { el.textContent = v; el.classList.add("gefuellt"); } };
+  felder.forEach(el => { zeigen(el); el.contentEditable = "true"; el.spellcheck = true;
+    el.addEventListener("focus", () => { if (!werte[el.dataset.f]) { el.textContent = ""; } });
+    el.addEventListener("blur", async () => {
+      const t = el.textContent.trim();
+      if (t === (werte[el.dataset.f] || "")) { if (!t) el.innerHTML = vorgabe.get(el.dataset.f); return; }
+      werte[el.dataset.f] = t; if (!t) { delete werte[el.dataset.f]; el.innerHTML = vorgabe.get(el.dataset.f); el.classList.remove("gefuellt"); } else el.classList.add("gefuellt");
+      try {
+        const r = await fetch("/api/einstellungen", {method: "PUT", credentials: "same-origin", headers: {"Content-Type": "application/json"}, body: JSON.stringify({verfahrensdoku: werte})});
+        if (!r.ok) throw new Error((await r.json()).fehler || r.status);
+        st.textContent = "gespeichert ✓ " + new Date().toLocaleTimeString("de-DE", {hour: "2-digit", minute: "2-digit"});
+      } catch (e) { st.textContent = "Nicht gespeichert: " + e.message; }
+    });
+    el.addEventListener("keydown", e => { if (e.key === "Enter" && el.tagName === "SPAN") { e.preventDefault(); el.blur(); } });
+  });
+})();
+</script>
+</body>
+</html>

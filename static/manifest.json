@@ -1,0 +1,20 @@
+{
+ "name": "Jahresring",
+ "short_name": "Jahresring",
+ "start_url": "/",
+ "display": "standalone",
+ "background_color": "#e8e2da",
+ "theme_color": "#3b3530",
+ "icons": [
+  {
+   "src": "jahresring-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "jahresring-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  }
+ ]
+}

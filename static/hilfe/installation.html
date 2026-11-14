@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Installation · Jahresring</title>
+<style>
+@page{size:A4;margin:20mm 18mm 18mm 22mm}
+:root{--dunkel:#3b3530;--akzent:#9a6b3f;--linie:#d9d0c4}
+*{box-sizing:border-box}
+body{margin:0;font:10.5pt/1.5 "Segoe UI",system-ui,Arial,sans-serif;color:#1d1d1d;background:#8a8a8a}
+.blatt{background:#fff;max-width:210mm;margin:16px auto;padding:20mm 18mm 20mm 22mm;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+.leiste{position:sticky;top:0;background:var(--dunkel);color:#fff;padding:8px 16px;display:flex;gap:10px;align-items:center;font:14px system-ui;z-index:2}
+.leiste button{font:inherit;padding:4px 12px;border:0;border-radius:5px;background:#b8834f;color:#fff;cursor:pointer}
+h1{font-size:20pt;margin:0 0 4mm;color:var(--dunkel)}
+h2{font-size:13.5pt;margin:9mm 0 2mm;color:var(--dunkel);border-bottom:1.5pt solid var(--akzent);padding-bottom:1mm;break-after:avoid}
+h3{font-size:11pt;margin:5mm 0 1.5mm;color:var(--dunkel);break-after:avoid}
+p{margin:0 0 2.5mm;text-align:justify;hyphens:auto}
+table{border-collapse:collapse;width:100%;margin:2mm 0 4mm;font-size:9.5pt;break-inside:auto}
+th{background:#ece6dd;text-align:left;padding:1.5mm 2mm;border:.5pt solid var(--linie);vertical-align:top}
+td{padding:1.5mm 2mm;border:.5pt solid var(--linie);vertical-align:top}
+tr{break-inside:avoid}
+.ein{background:#fff4c2;padding:0 1mm;border-radius:2px}
+.deckblatt{min-height:230mm;display:flex;flex-direction:column;justify-content:space-between}
+.deckblatt .titel{margin-top:40mm}
+.deckblatt .titel .unter{font-size:13pt;color:#555;margin-top:3mm}
+.klein{font-size:9pt;color:#555}
+.kasten{border:1pt solid var(--akzent);background:#faf6f0;padding:3mm 4mm;margin:3mm 0 4mm;break-inside:avoid}
+.neu{break-before:page}
+.inhalt ol{margin:0;padding-left:6mm}.inhalt li{margin:.6mm 0}
+.unterschrift{display:grid;grid-template-columns:1fr 1fr;gap:12mm;margin-top:14mm}
+.unterschrift div{border-top:.6pt solid #000;padding-top:1mm;font-size:9pt}
+[data-f]{min-width:12mm;display:inline-block}td[data-f]{display:table-cell}
+[contenteditable=true]:focus{outline:2px solid #b8834f;background:#fff}
+.ein.gefuellt{background:#e8f3e6}
+@media print{.ein.gefuellt{background:none;border-bottom:none}}
+@media print{body{background:#fff}.leiste{display:none}.blatt{box-shadow:none;margin:0;padding:0;max-width:none}.ein{background:none;border-bottom:.5pt dotted #999}}
+ol.schritte{margin:0 0 3mm;padding-left:6mm}ol.schritte li{margin:1.2mm 0}
+</style>
+</head>
+<body>
+<div class="leiste"><b>Installations- und Betriebsanleitung</b><span style="flex:1"></span><button onclick="window.print()">Drucken / als PDF speichern</button></div>
+<div class="blatt">
+<section>
+<h1>Installations- und Betriebsanleitung</h1>
+<p class="klein">Jahresring · gilt für die installierte Programmversion (Anzeige unter Einstellungen › Service › Infos)</p>
+
+<h2>1. Voraussetzungen</h2>
+<table>
+<tr><th style="width:30%">Bestandteil</th><th>Anforderung</th></tr>
+<tr><td>Betriebssystem</td><td>Windows 10 oder 11 (64 Bit), aktuelle Updates, Windows-Konto mit Kennwort</td></tr>
+<tr><td>Browser</td><td>Microsoft Edge (in Windows enthalten) oder Google Chrome; wird auch zum Erzeugen der PDFs verwendet</td></tr>
+<tr><td>Python</td><td>Python 3.10 oder neuer. Fehlt Python, richtet das Programm es beim ersten Start selbst ein (Internetverbindung nötig). Weitere Pakete sind nicht nötig.</td></tr>
+<tr><td>Speicherplatz</td><td>ca. 50 MB für das Programm, dazu Daten und Sicherungen (je nach Belegen und Fotos einige GB)</td></tr>
+<tr><td>Empfohlen</td><td>BitLocker für das Laufwerk C:, externes Sicherungsziel (USB-Platte oder NAS), feste IP-Adresse des PCs im Router (bei Nutzung mit Handys und Tablets)</td></tr>
+</table>
+
+<h2>2. Der richtige Speicherort</h2>
+<div class="kasten"><b>Empfehlung: C:\Jahresring</b> (dorthin installiert das Setup).<br>
+<b>Nicht</b> auf den Desktop, in „Dokumente“ oder einen anderen Ordner, den ein Cloud-Dienst laufend synchronisiert: die Synchronisierung kann die Datenbank beschädigen, während das Programm läuft. Das Programm zeigt auf der Startseite eine rote Warnung, wenn es in einem solchen Ordner liegt.<br>
+<b>Nicht</b> unter <i>C:\Programme</i>: dort darf ein normales Benutzerkonto nicht schreiben, das Programm braucht aber Schreibrechte für seinen Datenordner.</div>
+
+<h2>3. Neuinstallation</h2>
+<ol class="schritte">
+<li><b>Jahresring-Setup.exe</b> doppelklicken. Zeigt Windows „Der Computer wurde durch Windows geschützt“, einmalig „Weitere Informationen › Trotzdem ausführen“ wählen (die Datei ist nicht signiert).</li>
+<li>Das Setup installiert nach <i>C:\Jahresring</i> und legt die Verknüpfung <b>„Jahresring“</b> auf dem Desktop und im Startmenü an. Administratorrechte sind dafür nicht nötig.</li>
+<li>Auf Wunsch gibt das Setup die Windows-Firewall für Tablets, Handys und weitere PCs frei (Ports 8765 bis 8767, nur private Netzwerke). Nur dafür fragt Windows nach Administratorrechten. Führt Windows das Netzwerk als „Öffentlich“, weist das Setup darauf hin; es ist dann unter Einstellungen › Netzwerk und Internet auf „Privates Netzwerk“ umzustellen.</li>
+<li>Bei einem Umzug bietet das Setup an, den Ordner <i>daten</i> vom bisherigen PC zu übernehmen (siehe Abschnitt 7).</li>
+<li>Das Programm startet. Beim ersten Mal wird ggf. Python eingerichtet (ein bis zwei Minuten, das Fenster dabei offen lassen). Es öffnet sich als eigenes Fenster bzw. im Browser unter <i>http://localhost:8765</i>.</li>
+<li>Den <b>Inhaber-Zugang</b> anlegen (Name, Benutzername, Passwort mit mindestens 6, besser 12 Zeichen).</li>
+<li><b>Einstellungen › Firma</b>: Firmendaten, Steuernummer, USt-IdNr., Bankverbindung, Logo. <b>Belege &amp; Briefbogen</b>: Briefbogen und AGB als PDF, Unterschrift. <b>Kunden &amp; Aufträge</b>: Pfad zu den Projektordnern, Angaben für die Datenauskunft.</li>
+<li><b>Einstellungen › E-Mail</b>: SMTP- und IMAP-Server des Anbieters, Adresse, Passwort; „Testmail senden“. Das Passwort wird verschlüsselt an das Windows-Konto gebunden gespeichert.</li>
+<li><b>Einstellungen › Service › Datensicherung</b>: externes Sicherungsziel eintragen, Sicherungskennwort setzen und notieren, erste vollständige Sicherung erstellen.</li>
+<li><b>Einstellungen › Programm</b>: Autostart einschalten, damit das Programm mit Windows startet (es läuft dann im Hintergrund; Symbol unten rechts in der Taskleiste).</li>
+<li>Für den Echtbetrieb: Testdaten löschen und Echtbetrieb starten (Einstellungen › Service), Verfahrensdokumentation und Datenschutz-Dokumentation ausfüllen und unterschreiben.</li>
+</ol>
+<p>Ohne Setup: Die Datei <b>Jahresring.zip</b> nach <i>C:\</i> entpacken, im Ordner <b>einrichten.bat</b> doppelklicken (legt die Verknüpfungen an) und über die Verknüpfung starten.</p>
+
+<h2>4. Handys, Tablets und weitere PCs im Netzwerk (optional)</h2>
+<ol class="schritte">
+<li>Einstellungen › Benutzer &amp; Netzwerk › „Im Netzwerk“ einschalten und bei „Verschlüsselung (https)“ zunächst „https zusätzlich“ wählen, Programm neu starten.</li>
+<li>Firewall: Hat das Setup sie nicht freigegeben, im Programmordner <b>Handy-Freigabe.bat</b> doppelklicken. Sie gibt die Ports frei, zeigt das Netzwerkprofil (muss „Privat“ sein) und die Adressen.</li>
+<li>Am Büro-PC fragt Windows beim ersten Start mit https, ob das Zertifikat eingetragen werden soll: mit „Ja“ bestätigen und den Browser neu öffnen.</li>
+<li>Am Gerät <i>http://PC-Adresse:8765/zertifikat</i> öffnen und das Zertifikat nach der Anleitung für Android, iPhone/iPad oder Windows einmalig einrichten. Der dort gezeigte Fingerabdruck stimmt mit dem in den Einstellungen überein.</li>
+<li>Danach die verschlüsselten Adressen verwenden: das Büro unter <i>https://PC-Adresse:8766</i>, die Stempeluhr unter <i>https://PC-Adresse:8767/stempel</i>. Beide lassen sich über das Browsermenü als App installieren, auch nebeneinander auf einem Gerät.</li>
+<li>Sind alle Geräte eingerichtet, auf „nur https“ umstellen: Andere Geräte werden dann auf die verschlüsselte Adresse umgeleitet.</li>
+<li>Sicherheit: Nur im eigenen, mit WPA2/WPA3 geschützten WLAN nutzen, Besucher ins Gästenetz, <b>keine</b> Portfreigabe im Router einrichten. Für jeden Mitarbeiter einen eigenen Benutzer anlegen, Geräte mit Bildschirmsperre. Der PC bekommt im Router eine feste IP-Adresse, damit die Adressen gleich bleiben.</li>
+</ol>
+
+<h3>Offizielle Prüfung von E-Rechnungen (optional)</h3>
+<p>Für die offizielle Prüfung von E-Rechnungen in der XML-Ansicht braucht Python zwei Zusatzpakete: <b>saxonche</b> (Saxon-HE) und <b>lxml</b>, zusammen etwa 45 MB. Beim ersten Öffnen der XML-Ansicht installiert „Jetzt einrichten“ sie für das angemeldete Windows-Konto (Internetverbindung nötig). Die Prüfregeln selbst liegen im Programmordner unter <i>pruefregeln</i> und werden mit Programm-Updates erneuert.</p>
+
+<h2>5. Update auf eine neue Version</h2>
+<ol class="schritte">
+<li>Vollständige Sicherung erstellen (Einstellungen › Service › Datensicherung).</li>
+<li>Die neue <b>Jahresring-Setup.exe</b> doppelklicken. Sie findet die vorhandene Installation, bittet darum, das laufende Programm zu beenden (Symbol unten rechts › Beenden), ersetzt die Programmdateien und startet das Programm. Der Ordner <b>daten</b> wird nie verändert.</li>
+<li>Die Datenbank wird beim Start automatisch ergänzt; der Versionswechsel steht im Protokoll.</li>
+<li>Die Setup-Datei der Version aufbewahren (Nachweis des Programmstands, Verfahrensdokumentation 5.5).</li>
+</ol>
+<p>Ohne Setup: Programm beenden, den Inhalt des Ordners <i>Jahresring</i> aus der Zip-Datei über den Programmordner kopieren („Dateien ersetzen“) und das Programm starten.</p>
+
+<h2>6. Programmordner verschieben</h2>
+<ol class="schritte">
+<li>Vollständige Sicherung erstellen, dann das Programm <b>beenden</b> (nicht verschieben, während es läuft).</li>
+<li>Den <b>ganzen</b> Programmordner mit dem Unterordner <i>daten</i> an den neuen Ort verschieben, z. B. nach <i>C:\Jahresring</i>.</li>
+<li>Im neuen Ordner <b>einrichten.bat</b> doppelklicken. Die Verknüpfungen auf Desktop und Startmenü werden dabei neu angelegt.</li>
+<li>Programm starten. Ein eingeschalteter Autostart wird beim Start automatisch auf den neuen Ort umgestellt. Externes Sicherungsziel und Projektpfad bleiben erhalten.</li>
+<li>Kontrolle: Einstellungen › Service › Infos zeigt den neuen Datenpfad.</li>
+</ol>
+
+<h2>7. Umzug auf einen neuen PC oder Wiederherstellung nach Ausfall</h2>
+<ol class="schritte">
+<li><b>Umzug:</b> Am alten PC das Programm beenden und den Ordner <i>daten</i> aus dem Programmordner auf einen USB-Stick kopieren. Am neuen PC <b>Jahresring-Setup.exe</b> starten und bei der Frage nach den Daten diesen Ordner auswählen.</li>
+<li><b>Nach Ausfall des alten PCs:</b> Am neuen PC installieren und den Inhaber-Zugang anlegen, das externe Sicherungsziel eintragen und unter Einstellungen › Service › Rücksicherung die letzte Sicherung von dort einspielen. Für verschlüsselte Sicherungen wird das Sicherungskennwort verlangt. Das unveränderbare Protokoll wird aus der Sicherung übernommen.</li>
+<li>Neu einzugeben sind das E-Mail-Passwort und das Sicherungskennwort; beide sind an das Windows-Konto des bisherigen PCs gebunden. Solange das Sicherungskennwort nicht neu gesetzt ist, legt das Programm keine Kopien auf dem externen Ziel ab und weist darauf hin.</li>
+<li>Der neue PC hat eine andere Netzwerkadresse und stellt ein neues https-Zertifikat aus. Auf Tablets und Handys das Zertifikat erneut einrichten (Abschnitt 4) und die Apps unter der neuen Adresse installieren. Autostart am neuen PC einschalten.</li>
+<li>Die Belegprüfung unter Einstellungen › Service › Protokoll nennt Rechnungen, die seit dem übernommenen Stand festgeschrieben wurden und nachzutragen sind. Die Rücksicherung in der Verfahrensdokumentation (Abschnitt 10.2) vermerken.</li>
+</ol>
+
+<h2>8. Datensicherung im Betrieb</h2>
+<table>
+<tr><th style="width:30%">Was</th><th>Wie oft / wie</th></tr>
+<tr><td>Zwischensicherung der Datenbank</td><td>automatisch jede Stunde, solange das Programm läuft (eine Datei, wird ersetzt)</td></tr>
+<tr><td>Tagessicherung der Datenbank</td><td>automatisch einmal täglich mit Integritätsprüfung (die letzten 30 Tage plus je Monat eine für 12 Monate), Kopie ins externe Ziel</td></tr>
+<tr><td>Vollständige Sicherung</td><td>mindestens wöchentlich und vor jedem Update (Einstellungen › Service), Kopie automatisch ins externe Ziel</td></tr>
+<tr><td>Externes Ziel</td><td>USB-Platte im Wechsel mit einer zweiten, die außer Haus liegt, NAS oder Cloud-Ordner. Mit Sicherungskennwort sind die Kopien dort verschlüsselt; ohne Kennwort enthalten sie alle Kunden- und Mitarbeiterdaten lesbar.</td></tr>
+<tr><td>Projektordner</td><td>Einstellungen › Service › Projektordner sichern: „täglich sichern“ einschalten. Übertragen wird nur Geändertes; ersetzte und gelöschte Dateien bleiben 90 Tage als frühere Fassung erhalten. Wird die externe Platte nur zeitweise angesteckt, „Warnen nach“ passend setzen (z. B. 8 Tage) und der Platte einen festen Laufwerksbuchstaben geben; die Sicherung beginnt nach dem Anstecken von selbst.</td></tr>
+<tr><td>Sicherungskennwort</td><td>aufgeschrieben und getrennt vom PC und vom Sicherungsmedium aufbewahrt; ohne Kennwort ist eine verschlüsselte Sicherung nicht wiederherstellbar</td></tr>
+<tr><td>Probe</td><td>halbjährlich eine Sicherung auf einem Test-PC zurückspielen</td></tr>
+</table>
+
+<h2>9. Sicherheits-Checkliste</h2>
+<table>
+<tr><th style="width:6%">✓</th><th>Punkt</th></tr>
+<tr><td>☐</td><td>Windows-Konto mit Kennwort, Bildschirmsperre nach wenigen Minuten, Windows-Updates und Virenschutz aktiv</td></tr>
+<tr><td>☐</td><td>BitLocker auf Laufwerk C: eingeschaltet, Wiederherstellungsschlüssel sicher verwahrt</td></tr>
+<tr><td>☐</td><td>Programm unter C:\Jahresring, nicht in einem synchronisierten Cloud-Ordner</td></tr>
+<tr><td>☐</td><td>jeder Mitarbeiter eigener Benutzer mit passenden Rechten; ausgeschiedene Mitarbeiter deaktivieren</td></tr>
+<tr><td>☐</td><td>Zugriff im Netzwerk nur über https („nur https“), WLAN mit WPA2/WPA3, Gästenetz für Besucher, keine Portfreigabe für das Programm</td></tr>
+<tr><td>☐</td><td>geschäftliches E-Mail-Konto mit Auftragsverarbeitungsvertrag, Zwei-Faktor-Anmeldung beim Anbieter</td></tr>
+<tr><td>☐</td><td>externes Sicherungsziel eingetragen, Sicherungskennwort gesetzt und notiert, wöchentliche vollständige Sicherung, halbjährliche Probe-Rücksicherung</td></tr>
+<tr><td>☐</td><td>Belegprüfung und Protokollprüfung unter Einstellungen › Service › Protokoll ohne Abweichung</td></tr>
+<tr><td>☐</td><td>Datenbank nie mit anderen Werkzeugen bearbeiten (GoBD)</td></tr>
+</table>
+
+<h2>10. Deinstallation</h2>
+<p>Erst prüfen, ob die Aufbewahrungsfristen abgelaufen sind (Rechnungen 8–10 Jahre). Dann Autostart ausschalten, Programm beenden, Verknüpfungen und den Programmordner löschen. Bei Ablösung durch ein anderes Programm den Ordner <i>daten</i> und die Sicherungen samt Sicherungskennwort bis zum Ablauf der Fristen lesbar aufbewahren (Verfahrensdokumentation 5.4).</p>
+
+<h2>11. Hilfe bei Problemen</h2>
+<table>
+<tr><th style="width:34%">Problem</th><th>Lösung</th></tr>
+<tr><td>Programm startet nicht</td><td>daten\protokoll.txt ansehen; start.bat direkt doppelklicken und die Meldung im Fenster lesen</td></tr>
+<tr><td>Meldung „Datenbank ist beschädigt“ beim Start</td><td>Die beschädigte Datei bleibt unter daten\beschaedigt erhalten. Mit „Ja“ wird die jüngste geprüfte Sicherung eingespielt; danach die Belegprüfung ansehen.</td></tr>
+<tr><td>Hinweis auf ein anderes laufendes Jahresring</td><td>Das dort genannte Programm beenden (Symbol unten rechts) und neu starten; es darf nur eine Installation laufen</td></tr>
+<tr><td>Handy oder Tablet erreicht das Programm nicht</td><td>Netzwerk eingeschaltet, Handy-Freigabe.bat ausführen, Netzwerkprofil „Privat“, PC und Gerät im selben WLAN; Android: Chrome-Berechtigung „Geräte in der Nähe“, iPhone: „Lokales Netzwerk“ erlauben</td></tr>
+<tr><td>Zertifikatswarnung am Gerät</td><td>Zertifikat unter http://PC-Adresse:8765/zertifikat einrichten; nach einem PC-Wechsel erneut</td></tr>
+<tr><td>Externe Sicherung wird nicht abgelegt</td><td>Ziel erreichbar? Steht beim Sicherungskennwort „nicht lesbar“, das Kennwort neu setzen</td></tr>
+<tr><td>Keine PDFs</td><td>Edge bzw. Chrome installieren/aktualisieren</td></tr>
+<tr><td>Mails werden nicht zugeordnet</td><td>IMAP-Server in Einstellungen › E-Mail, Adresse beim Kunden hinterlegt, Korrespondenz › „Posteingang“ klicken</td></tr>
+</table>
+</section>
+
+</div>
+</body>
+</html>

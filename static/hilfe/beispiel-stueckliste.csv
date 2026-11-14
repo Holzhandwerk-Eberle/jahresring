@@ -1,0 +1,8 @@
+;Unterschrank Spüle;1;870;600;560
+SP19W;Seite links;1;720;560;;;ABS23;;L;;;;;;;;;;1;1;8
+SP19W;Seite rechts;1;720;560;;;ABS23;;L;;;;;;;;;;1;1;8
+SP19W;Boden;1;564;560;;;ABS23;;;;;;;Bohrungen Sockelfüße;;;;;1;;4
+MDF19;Front;1;716;596;;;;;;;;LACK;LACK;Griffmulde oben;;;;;;;;1
+EI40;Arbeitsplatte;1;900;600;G;;;;;;;OEL;OEL;Ausschnitt Spüle;1;;;;;;;1x560x490
+TB110;Topfband 110°;2
+SF100;Sockelfuß;4

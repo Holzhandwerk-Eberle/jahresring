@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Jahresring</title>
+<style>body{font:15px system-ui,sans-serif;background:#efe9e1;color:#3b3530;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.k{background:#fff;padding:24px 30px;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.12);max-width:460px}a{color:#8a5a2b}</style></head>
+<body><div class="k"><b>Jahresring wird geöffnet …</b><p id="t">Einstellungen werden auf die Adresse localhost übertragen.</p></div>
+<script>
+// Einmaliger Umzug des PC-Fensters von der Netzwerkadresse auf localhost (Bluetooth für den Zebra ohne Chrome-Freigabe).
+// Schritt 1 (alte Adresse): Browserdaten einsammeln und mit der Anmeldung an den Server geben.
+// Schritt 2 (localhost): Daten übernehmen (vorhandene Werte bleiben), Anmeldung setzt der Server, dann ins Programm.
+(async () => {
+  const p = new URLSearchParams(location.search), ziel = p.get("ziel") || "/";
+  const weiter = port => location.replace(`http://localhost:${port || location.port}${ziel.startsWith("/") ? ziel : "/"}`);
+  try {
+    if (location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+      const speicher = {};
+      try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); speicher[k] = localStorage.getItem(k); } } catch (e) {}
+      const r = await fetch("/api/umzug", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({speicher})});
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.fehler || r.status);
+      location.replace(`http://localhost:${j.port}/umzug.html?t=${encodeURIComponent(j.t)}&ziel=${encodeURIComponent(ziel)}`);
+      return;
+    }
+    const t = p.get("t");
+    if (t) {
+      const r = await fetch("/api/umzug/" + encodeURIComponent(t));
+      const j = await r.json();
+      if (r.ok) {
+        for (const [k, v] of Object.entries(j.speicher || {})) {
+          try { if (localStorage.getItem(k) === null) localStorage.setItem(k, v); } catch (e) {}
+        }
+      }
+    }
+    await fetch("/api/umzug/fertig", {method: "POST"});
+    weiter();
+  } catch (e) {
+    document.getElementById("t").innerHTML = "Die Übertragung hat nicht geklappt (" + String(e.message || e).replace(/[<&]/g, "") + "). " +
+      `<a href="http://localhost:${location.port}/">Jahresring trotzdem öffnen</a> – ggf. einmal neu anmelden.`;
+  }
+})();
+</script></body></html>

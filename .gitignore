@@ -1,0 +1,10 @@
+# Geschäftsdaten, Sicherungen und Kennwörter gehören nie ins Repository
+daten/
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+*.pyc
+# Bauergebnisse
+*.zip
+*.exe

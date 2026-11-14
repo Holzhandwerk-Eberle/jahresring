@@ -1,0 +1,12 @@
+const { chromium } = require('playwright'); const U='http://127.0.0.1:8799';
+(async () => { const b = await chromium.launch(); const c = await b.newContext({viewport:{width:390,height:800}, deviceScaleFactor: 2}); const p = await c.newPage(); const f = [];
+  p.on('pageerror', e => f.push(e.message)); p.on('console', m => { if (m.type()==='error') f.push(m.text()); });
+  await p.goto(U+'/stempel'); await p.waitForTimeout(800);
+  await p.fill('[name=login]', 'max'); await p.fill('[name=passwort]', 'passwort123'); await p.click('button[type=submit]'); await p.waitForTimeout(1500);
+  await p.click('#mSig'); await p.waitForTimeout(1000); await p.click('[data-uw]'); await p.waitForTimeout(1200);
+  await p.click('a[data-tafel]'); await p.waitForTimeout(2500);
+  console.log('canvas', await p.$$eval('.tafel canvas', cs => cs.map(c => c.style.width)));
+  await (await p.$('.tafel')).screenshot({path: '/tmp/claude-0/t/gp/st_tafel.png'});
+  await p.click('a[data-tafel]'); await p.waitForTimeout(300);
+  console.log('zu', await p.$$eval('.tafel canvas', cs => cs.length), 'fehler', f);
+  await b.close(); })();

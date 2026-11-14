@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kalkulationslogik · Jahresring</title>
+<style>
+@page{size:A4;margin:20mm 18mm 18mm 22mm}
+:root{--dunkel:#3b3530;--akzent:#9a6b3f;--linie:#d9d0c4}
+*{box-sizing:border-box}
+body{margin:0;font:10.5pt/1.5 "Segoe UI",system-ui,Arial,sans-serif;color:#1d1d1d;background:#8a8a8a}
+.blatt{background:#fff;max-width:210mm;margin:16px auto;padding:20mm 18mm 20mm 22mm;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+.leiste{position:sticky;top:0;background:var(--dunkel);color:#fff;padding:8px 16px;display:flex;gap:10px;align-items:center;font:14px system-ui;z-index:2}
+.leiste button{font:inherit;padding:4px 12px;border:0;border-radius:5px;background:#b8834f;color:#fff;cursor:pointer}
+h1{font-size:20pt;margin:0 0 4mm;color:var(--dunkel)}
+h2{font-size:13.5pt;margin:9mm 0 2mm;color:var(--dunkel);border-bottom:1.5pt solid var(--akzent);padding-bottom:1mm;break-after:avoid}
+h3{font-size:11pt;margin:5mm 0 1.5mm;color:var(--dunkel);break-after:avoid}
+p{margin:0 0 2.5mm;text-align:justify;hyphens:auto}
+table{border-collapse:collapse;width:100%;margin:2mm 0 4mm;font-size:9.5pt;break-inside:auto}
+th{background:#ece6dd;text-align:left;padding:1.5mm 2mm;border:.5pt solid var(--linie);vertical-align:top}
+td{padding:1.5mm 2mm;border:.5pt solid var(--linie);vertical-align:top}
+tr{break-inside:avoid}
+.ein{background:#fff4c2;padding:0 1mm;border-radius:2px}
+.deckblatt{min-height:230mm;display:flex;flex-direction:column;justify-content:space-between}
+.deckblatt .titel{margin-top:40mm}
+.deckblatt .titel .unter{font-size:13pt;color:#555;margin-top:3mm}
+.klein{font-size:9pt;color:#555}
+.kasten{border:1pt solid var(--akzent);background:#faf6f0;padding:3mm 4mm;margin:3mm 0 4mm;break-inside:avoid}
+.neu{break-before:page}
+.inhalt ol{margin:0;padding-left:6mm}.inhalt li{margin:.6mm 0}
+.unterschrift{display:grid;grid-template-columns:1fr 1fr;gap:12mm;margin-top:14mm}
+.unterschrift div{border-top:.6pt solid #000;padding-top:1mm;font-size:9pt}
+[data-f]{min-width:12mm;display:inline-block}td[data-f]{display:table-cell}
+[contenteditable=true]:focus{outline:2px solid #b8834f;background:#fff}
+.ein.gefuellt{background:#e8f3e6}
+@media print{.ein.gefuellt{background:none;border-bottom:none}}
+@media print{body{background:#fff}.leiste{display:none}.blatt{box-shadow:none;margin:0;padding:0;max-width:none}.ein{background:none;border-bottom:.5pt dotted #999}}
+ol.schritte{margin:0 0 3mm;padding-left:6mm}ol.schritte li{margin:1.2mm 0}
+</style>
+<style>.f{font-family:Consolas,Menlo,monospace;font-size:9pt;background:#f6f2ec;padding:0 1mm}.hoch{color:#a33;font-weight:700}.mittel{color:#b8860b;font-weight:700}.gering{color:#4d7a45;font-weight:700}td.r,th.r{text-align:right}</style>
+</head>
+<body>
+<div class="leiste"><b>Kalkulationslogik</b><span style="flex:1"></span><button onclick="window.print()">Drucken / als PDF speichern</button></div>
+<div class="blatt">
+<section>
+<h1>Kalkulationslogik von Jahresring</h1>
+<p class="klein">Dokumentation, Prüfplan und Prüfergebnis</p>
+<div class="kasten">Diese Unterlage beschreibt, wie Jahresring Preise, Stunden, Zuschläge und Belegsummen rechnet (Quelle: kalkulation.py und die Belegfunktionen in app.py). Abschnitt 11 enthält einen Plan, mit dem sich jede Stufe von Hand nachrechnen lässt; Abschnitt 12 nennt Knackpunkte, die man kennen sollte.</div>
+<div class="inhalt"><ol>
+<li>Grundbegriffe</li><li>Auftragswerte (Werkstoffe, Beschläge, Löhne, Zuschläge)</li><li>Stückliste: Kosten und Bezugsgrößen je Teil</li><li>Beschläge</li><li>Materialkosten und Zuschläge</li><li>Zeiten und Lohnkosten</li><li>Selbstkosten, Wagnis und Gewinn, Preis</li><li>Unterpositionen</li><li>Auftragssumme und Belege</li><li>Arbeitskosten § 35a, Soll/Ist</li><li>Prüfplan zum Nachrechnen</li><li>Knackpunkte</li><li>Rechenbeispiel</li></ol></div>
+</section>
+
+<h2>1. Grundbegriffe</h2>
+<p>Alle Werte einer Position werden <b>je Anzahl</b> gerechnet, also für ein Stück der Position (Menge 1). Erst der Gesamtpreis multipliziert mit der Menge. Stunden je Anzahl × Menge ergeben die Stunden der Position; Rüstzeiten fallen je Position nur einmal an und werden deshalb durch die Menge geteilt.</p>
+<p>Jeder Auftrag hat eine eigene Kopie der Kalkulationswerte (<b>Auftragswerte</b>: Werkstoffe, Beschläge, Löhne, Kostenstellen mit Gemeinkostenzuschlägen, Material-Zuschläge, Wagnis und Gewinn). Sie entsteht beim Anlegen aus den Vorgaben der Einstellungen. Spätere Änderungen in den Einstellungen oder im Materialstamm wirken nicht auf bestehende Aufträge, außer der Wert wird im Auftrag übernommen. Festgeschriebene Belege frieren zusätzlich Positionen und Summen ein.</p>
+<table><tr><th style="width:30%">Begriff</th><th>Bedeutung</th></tr>
+<tr><td>Mittellohn I</td><td>Stundenlohn der Lohngruppe ohne Lohnnebenkosten. <b>Mit ihm wird gerechnet.</b></td></tr>
+<tr><td>Lohnnebenkosten (LNK)</td><td>werden angezeigt (Mittellohn II), aber <b>nicht</b> eigens verrechnet; sie müssen im Gemeinkostenzuschlag der Kostenstellen stecken.</td></tr>
+<tr><td>Lohnbasis</td><td>Lohngruppe für Zeiten ohne eigene Lohngruppe (Vorgabe „Durchschnitt“).</td></tr>
+<tr><td>Kostenstelle</td><td>Arbeitsbereich (Zuschnitt, Kantenmaschine, Bankraum, Oberfläche, Montage …) mit eigenem Gemeinkostenzuschlag auf den Lohn.</td></tr>
+<tr><td>Bezugsgröße</td><td>Menge aus der Stückliste (m² Platte, lfm Kante, Anzahl Teile …), mit der die Minuten einer Tätigkeit multipliziert werden.</td></tr></table>
+
+<h2>2. Auftragswerte</h2>
+<table><tr><th style="width:30%">Wert</th><th>Rechnung</th></tr>
+<tr><td>Werkstoff (P, M, K, F, O, S)</td><td>Preis je Einheit und Verschnitt in %. Kosten je Einheit = <span class="f">Preis × (1 + Verschnitt/100)</span>. Der Preis kommt beim Auswählen aus dem Materialstamm (Kalkulationspreis nach Lagerpreis-Methode, sonst EK) und bleibt im Auftrag stehen.</td></tr>
+<tr><td>Beschlag</td><td>Preis je Einheit, <b>ohne</b> Verschnitt.</td></tr>
+<tr><td>Löhne</td><td>Mittellohn I je Lohngruppe (Vorgabe: Inhaber und Durchschnitt 27 €/h, alle anderen Gruppen 0 €/h). Eine Gruppe ohne Lohn wird mit dem Lohn der Lohnbasis gerechnet; die Position zeigt dann einen Hinweis ⚠.</td></tr>
+<tr><td>Kostenstellen</td><td>Gemeinkostenzuschlag in % auf den Lohn (Vorgabe z. B. Zuschnitt 140 %, Kantenmaschine 180 %, Montage 130 %, Helfer 110 %).</td></tr>
+<tr><td>Zuschläge</td><td>Kleinmaterial 15 % (auf Werkstoffe, Beschläge, Oberfläche), Gemeinkosten Material 30 % (auf das gesamte Material), Wagnis und Gewinn 15 % (auf die Selbstkosten).</td></tr></table>
+
+<h2>3. Stückliste: Kosten und Bezugsgrößen je Teil</h2>
+<p>L und B in Metern (Eingabe in mm / 1000), D = Dicke in mm. Fläche A = L × B. Alle Werte gelten für ein Teil und werden mit der Stückzahl des Teils multipliziert; eine leere Stückzahl zählt als 1.</p>
+<table><tr><th style="width:30%">Bestandteil</th><th>Formel</th></tr>
+<tr><td>Plattenwerkstoff (Einheit m²)</td><td><span class="f">A × Kosten je m²</span></td></tr>
+<tr><td>Massivholz (Einheit m³ oder leer)</td><td>Volumen <span class="f">V = A × Rohdicke/1000</span>; Kosten <span class="f">V × Kosten je m³</span>. Gerechnet wird mit dem Fertigmaß L × B und der <b>Rohdicke</b>; Zugaben in Länge und Breite stecken nur im Verschnitt-%.</td></tr>
+<tr><td>Werkstoff je lfm / je Stück</td><td><span class="f">L × Kosten je lfm</span> bzw. <span class="f">Kosten je Stück</span></td></tr>
+<tr><td>Kanten</td><td>oben/unten laufen über die Länge, links/rechts über die Breite: <span class="f">Σ Kantenlänge × Kosten je lfm der Kante</span> (ohne Überstand, der steckt im Verschnitt).</td></tr>
+<tr><td>Furnier</td><td>je belegter Seite <span class="f">A × Kosten je m²</span></td></tr>
+<tr><td>Oberfläche</td><td>m² = <span class="f">A × Anzahl Seiten + 2 × (L + B) × Fertigdicke/1000</span>: Ist mindestens eine Seite behandelt, werden alle vier Schmalflächen mitgerechnet, ob bekantet oder nicht. Kosten mit dem Oberflächenwerkstoff der jeweiligen Seite, Schmalflächen mit dem der ersten Seite.</td></tr>
+<tr><td>Fertigdicke</td><td>Fertigdicke des Werkstoffs, sonst Dicke am Teil, sonst Werkstoffdicke.</td></tr></table>
+<h3>Bezugsgrößen je Teil</h3>
+<table><tr><th style="width:30%">Bezugsgröße</th><th>Wert je Teil</th></tr>
+<tr><td>Platte St. / lfm / m² / m² 2x</td><td>1 / L / A / 2A – nur Teile aus Plattenwerkstoff</td></tr>
+<tr><td>Platte lfm Kanten</td><td>Summe der bekanteten Seiten</td></tr>
+<tr><td>Massiv St. / lfm / lfm 2x / m² / m² 2x</td><td>1 / L / 2L / A / 2A – nur Massivholzteile</td></tr>
+<tr><td>Massiv lfm Kanten</td><td>bekantete Seiten, sonst gefräste Seiten, sonst Umfang 2(L+B)</td></tr>
+<tr><td>Kante St. / Kante lfm</td><td>Anzahl bekanteter Seiten / deren Länge</td></tr>
+<tr><td>Furnier St. / m²</td><td>Anzahl belegter Seiten / deren Fläche</td></tr>
+<tr><td>Oberfläche St. / m²</td><td>1, wenn behandelt / m² wie oben (mit Schmalflächen)</td></tr>
+<tr><td>Schnittkanten lfm (zuschnitt)</td><td>Umfang 2(L+B)</td></tr>
+<tr><td>Fräsen lfm, Verbinden, Bohren, Gehrung</td><td>gefräste Seitenlängen, eingetragene Anzahlen</td></tr><tr><td>Tasche/Ausschnitt St. / lfm / m²</td><td>Anzahl / Anzahl × 2(L+B) der Tasche / Anzahl × L × B der Tasche</td></tr>
+<tr><td>Teile St.</td><td>1</td></tr>
+<tr><td>Beschläge St.</td><td>Summe der Beschlagmengen der Position</td></tr>
+<tr><td>eigene Bezugsgrößen</td><td>Eingabe je Teil (× Stückzahl) oder je Position</td></tr></table>
+
+<h2>4. Beschläge</h2>
+<p><span class="f">Beschläge = Σ Menge × Preis je Einheit</span> (je Anzahl der Position, kein Verschnitt).</p>
+
+<h2>5. Materialkosten und Zuschläge</h2>
+<table><tr><th style="width:30%">Zeile</th><th>Formel</th></tr>
+<tr><td>Werkstoffe</td><td>Σ Teile (Werkstoff + Kanten + Furnier) × Stückzahl</td></tr>
+<tr><td>Oberfläche</td><td>Σ Teile Oberflächenkosten × Stückzahl</td></tr>
+<tr><td>Kleinmaterial</td><td><span class="f">(Werkstoffe + Beschläge + Oberfläche) × Kleinmaterial-%</span> (Position oder Auftragswert)</td></tr>
+<tr><td>Kostenliste</td><td>freie Zeilen der Position: <span class="f">Menge × Preis je Einheit</span>, je nach Kostenart zu Werkstoffe, Fremdleistungen, Zukauf, Sonderkosten Fertigung oder Sonderkosten Vertrieb</td></tr>
+<tr><td>Fremdleistungen</td><td>Summe der Kostenlisten-Zeilen „Fremdleistung“ (je Anzahl)</td></tr>
+<tr><td>Zukauf</td><td>Summe der Kostenlisten-Zeilen „Zukauf“ (fertig zugekaufte Teile, Handelsware)</td></tr>
+<tr><td>Material</td><td>Werkstoffe (Stückliste + Kostenliste) + Beschläge + Oberfläche + Kleinmaterial + Fremdleistungen + Zukauf</td></tr>
+<tr><td>GK Material</td><td><span class="f">Material × GK-Material-%</span> (auch auf Fremdleistungen und Zukauf)</td></tr></table>
+
+<h2>6. Zeiten und Lohnkosten</h2>
+<h3>Modus „Tätigkeiten“</h3>
+<table><tr><th style="width:30%">Größe</th><th>Formel je Anzahl</th></tr>
+<tr><td>Bearbeitung (min)</td><td><span class="f">Minuten × Bezugsgröße</span> (ohne Bezugsgröße: Minuten × 1)</td></tr>
+<tr><td>Rüsten (min)</td><td><span class="f">Rüstminuten / Menge</span> (einmal je Position; je Zeile abschaltbar)</td></tr>
+<tr><td>Helfer (min)</td><td><span class="f">(Bearbeitung + Rüsten) × Helferanteil</span> (1,0 = ein Helfer die ganze Zeit), gebucht auf Kostenstelle „HELFER“ und Lohngruppe „Hilfskraft“; fehlt eine davon in den Auftragswerten, auf die Kostenstelle der Zeile bzw. die Lohnbasis</td></tr>
+<tr><td>Stunden</td><td>je Kostenstelle und Lohngruppe summiert, <b>ungerundet</b> weitergerechnet (gerundet wird nur die Anzeige)</td></tr>
+<tr><td>Lohn</td><td><span class="f">Σ Stunden × Mittellohn I der Lohngruppe</span> (Gruppe ohne Lohn: Lohnbasis, mit Hinweis)</td></tr><tr><td>Bezugsgröße fehlt</td><td>Gibt es die Bezugsgröße einer Zeile nicht mehr, rechnet sie 0 Minuten; die Zeile wird rot markiert und die Position zeigt einen Hinweis.</td></tr>
+<tr><td>GK Lohn</td><td><span class="f">Σ Lohn je Kostenstelle × GK-% der Kostenstelle</span></td></tr></table>
+<h3>Modus „Stunden“</h3>
+<p>Stunden werden direkt je Kostenstelle eingetragen, und zwar <b>je Anzahl</b> (bei Menge 4 und 2 h stehen 8 h in der Position). Lohn und GK wie oben.</p>
+
+<h2>7. Selbstkosten, Wagnis und Gewinn, Preis</h2>
+<table><tr><th style="width:30%">Zeile</th><th>Formel</th></tr>
+<tr><td>Selbstkosten</td><td><span class="f">Material + GK Material + Lohn + GK Lohn + Sonderkosten Fertigung</span></td></tr>
+<tr><td>Wagnis und Gewinn</td><td><span class="f">Selbstkosten × W&amp;G-%</span> (Position oder Auftragswert)</td></tr>
+<tr><td>Einzelpreis</td><td><span class="f">runden(Selbstkosten + W&amp;G + Sonderkosten Vertrieb; 2)</span> – Sonderkosten Vertrieb ohne W&amp;G</td></tr>
+<tr><td>Preis von Hand</td><td>Ist der Preis manuell gesetzt (oder gibt es keine Kalkulation), gilt er; W&amp;G = Preis − Selbstkosten − Sonderkosten Vertrieb, W&amp;G-% daraus.</td></tr>
+<tr><td>EP gesamt</td><td><span class="f">runden(Einzelpreis + Σ Unterpositionen (Menge × EP gesamt); 2)</span></td></tr>
+<tr><td>Gesamtpreis</td><td><span class="f">runden(EP gesamt × Menge; 2)</span></td></tr></table>
+
+<h2>8. Unterpositionen</h2>
+<p>Unterpositionen werden wie Positionen gerechnet. Ihr EP gesamt × ihre Menge geht in den EP der Hauptposition ein (je Anzahl der Hauptposition). Im Soll werden ihre Kosten und Stunden mit Menge der Unterposition × Menge der Hauptposition gezählt. <b>Gesperrte Unterpositionen</b> zählen weder im Preis noch im Soll und werden nicht gedruckt.</p>
+
+<h2>9. Auftragssumme und Belege</h2>
+<table><tr><th style="width:30%">Schritt</th><th>Rechnung</th></tr>
+<tr><td>Zählt zur Summe</td><td>Hauptpositionen, die nicht gesperrt, nicht Alternative, deren Gesamtpreis angezeigt wird (sonst Bedarfsposition) und deren Titel nicht gesperrt ist.</td></tr>
+<tr><td>Netto Positionen</td><td>Σ Gesamtpreise</td></tr>
+<tr><td>Rabatt</td><td><span class="f">runden(Netto × Kundenrabatt-%; 2)</span>, Netto = Netto Positionen − Rabatt (nicht bei Abschlagsrechnungen)</td></tr>
+<tr><td>USt / Brutto</td><td><span class="f">USt = runden(Netto × USt-Satz; 2)</span>, Brutto = Netto + USt</td></tr>
+<tr><td>Brutto-Anzeige (Privatkunden)</td><td>EP und GP werden je Zeile mit (1 + USt-Satz) multipliziert und gerundet angezeigt; die Summen kommen aus dem Netto (siehe Knackpunkt K5).</td></tr>
+<tr><td>Abschlagsrechnung</td><td>Betrag netto von Hand oder <span class="f">runden(Auftragsnetto nach Kundenrabatt × %; 2)</span>, darauf USt</td></tr>
+<tr><td>Schlussrechnung</td><td>volle Auftragssumme mit Rabatt und USt; die angehakten Abschläge werden brutto abgezogen: <span class="f">Zahlbetrag = Brutto − Σ Abschläge brutto</span></td></tr></table>
+
+<h2>10. Arbeitskosten § 35a und Soll/Ist</h2>
+<p><b>Arbeitskosten:</b> Je zählender Position <span class="f">Anteil = Gesamtpreis × (Lohn + GK Lohn) × (1 + W&amp;G-%) / EP gesamt</span> (mit Unterpositionen; ohne W&amp;G, wenn die Einstellung aus ist). Reine Arbeitspositionen zählen voll. Die Summe wird mit dem Rabatt anteilig gekürzt und erhält die USt.</p>
+<p><b>Soll</b> ist die Kalkulation des Auftrags (Summen aller zählenden Positionen). <b>Ist</b>: Material = Zahlungsaufträge mit diesem Auftrag (netto, nach Lieferantengruppe) + gebuchte Auftragskosten (Lager, Eingangsrechnungen „Auf Auftrag“); GK Material mit demselben %; Lohn = gebuchte Stunden × Mittellohn I der Lohngruppe der Buchung, GK mit der Kostenstelle der Buchung (Stunden ohne Kostenstelle mit dem durchschnittlichen GK-Satz des Auftrags, gewichtet nach Soll-Stunden; Soll/Ist zeigt dazu einen Hinweis); Ist-Nettopreis = Summe der festgeschriebenen Rechnungen (netto, nach Rabatt), solange es keine gibt die Kalkulationssumme abzüglich Kundenrabatt; Ist-W&amp;G = Nettopreis − Selbstkosten − Sonderkosten Vertrieb.</p>
+<h2 class="neu">11. Prüfplan zum Nachrechnen</h2>
+<p>Am besten in einem eigenen Prüfauftrag (z. B. Kunde „Prüfung Kalkulation“, Auftrag „Prüfsideboard“), dessen Positionen gesperrt bleiben oder der danach auf „Abgesagt“ gesetzt wird. Zu jeder Stufe das Programm-Ergebnis mit der Handrechnung (Taschenrechner oder Tabelle) vergleichen; die Werte des Rechenbeispiels in Abschnitt 13 dienen als Sollwerte.</p>
+<table><tr><th style="width:6%">Nr.</th><th style="width:44%">Vorgehen</th><th>Erwartung / was prüfen</th><th style="width:8%">✓</th></tr>
+<tr><td>1</td><td>Auftragswerte öffnen: Löhne, Kostenstellen, Zuschläge, Werkstoffe und Beschläge mit den eigenen Sätzen vergleichen.</td><td>Keine Lohngruppe mit 0 €/h, die in Zeiten oder als Helfer vorkommt. GK-Sätze enthalten die Lohnnebenkosten (K1).</td><td></td></tr>
+<tr><td>2</td><td>Werkstoff P01 (12,50 €/m², 20 % Verschnitt) und Kante K01 (0,80 €/lfm, 10 %) anlegen. Eine Position Menge 2 mit der Stückliste aus Abschnitt 13.</td><td>Je Teil: Kosten im Reiter Stückliste wie Tabelle 13.1; Werkstoffe je Anzahl 49,65 €.</td><td></td></tr>
+<tr><td>3</td><td>Beschlag B01 (3,50 €) Menge 4 eintragen.</td><td>Beschläge 14,00 €; Kleinmaterial 15 % von 63,65 € = 9,55 €; Material 73,20 €; GK Material 30 % = 21,96 €.</td><td></td></tr>
+<tr><td>4</td><td>Zeiten wie Tabelle 13.2 eintragen.</td><td>Stunden je Kostenstelle wie 13.2, Summe 2,884 h je Anzahl; Lohn 77,87 €; GK Lohn 113,06 €.</td><td></td></tr>
+<tr><td>5</td><td>Reiter Summen ansehen.</td><td>Selbstkosten 286,09 €; W&amp;G 15 % = 42,91 €; EP 329,00 €; GP 658,00 €.</td><td></td></tr>
+<tr><td>6</td><td>Menge auf 1 und auf 20 ändern.</td><td>Werkstoffe und Beschläge je Anzahl unverändert; Kantenmaschine: Rüstzeit 10 min verteilt sich (Menge 1: 0,645 h; Menge 20: 0,487 h je Anzahl). Die Stunden der Position (je Anzahl × Menge) müssen genau (Bearbeitung × Menge + Rüsten) / 60 ergeben.</td><td></td></tr>
+<tr><td>7</td><td>W&amp;G der Position auf 20 % setzen, dann Preis von Hand 400,00 €.</td><td>EP = Selbstkosten × 1,20; bei Preis von Hand W&amp;G = 400,00 − Selbstkosten.</td><td></td></tr>
+<tr><td>8</td><td>Eine zweite Position als Alternative, eine dritte mit ausgeblendetem Gesamtpreis.</td><td>Beide zählen nicht zur Summe; im Beleg „ALT“ bzw. „Bedarfsposition“.</td><td></td></tr>
+<tr><td>9</td><td>Kunde mit Rabatt 5 % und Preisen brutto, Angebot erstellen.</td><td>Rabatt = 5 % der Positionssumme, USt 19 % auf den rabattierten Betrag; Brutto-Einzelwerte = Netto × 1,19 (Cent-Abweichung der Zeilensumme möglich, K5).</td><td></td></tr>
+<tr><td>10</td><td>Abschlagsrechnung 30 %, festschreiben; danach Schlussrechnung.</td><td>Abschlag = 30 % des Auftragsnetto nach Rabatt + USt; Schlussrechnung zieht den Abschlag brutto ab.</td><td></td></tr>
+<tr><td>11</td><td>Rechnung mit Arbeitskosten § 35a (Privatkunde).</td><td>Arbeitskosten ≈ GP × (Lohn + GK Lohn) × 1,15 / EP; im Beispiel 658,00 × (77,87 + 113,06) × 1,15 / 329,00 = 439,13 € netto (vor Rabatt).</td><td></td></tr>
+<tr><td>12</td><td>Stunden buchen (2 h Bankraum, Lohngruppe Durchschnitt) und eine Lieferantenrechnung „Auf Auftrag“; Soll/Ist öffnen.</td><td>Ist-Lohn 2 × 27 € = 54 €, GK 140 % = 75,60 €; Ist-Material = netto der Rechnung; Abweichungen plausibel.</td><td></td></tr>
+<tr><td>13</td><td>Stichprobe echter Aufträge: je ein Auftrag mit Massivholz, mit Unterpositionen und mit großer Stückzahl nachrechnen.</td><td>Besonders Rundung bei großen Mengen, gesperrte Unterpositionen und Schmalflächen der Oberfläche prüfen.</td><td></td></tr></table>
+<p class="klein">Tipp: Die Zahlen jeder Position stehen im Reiter Summen „je Anzahl“ und „Gesamt“; die Bezugsgrößen der Stückliste zeigt die Summenzeile unter der Stückliste. Für eine Tabelle genügt je Stufe eine Zeile mit Formel aus den Abschnitten 3 bis 7.</p>
+<h2 class="neu">12. Knackpunkte</h2>
+<p>Die folgenden Punkte sind gewollt, sollten aber bekannt sein bzw. mit den eigenen Einstellungen abgestimmt werden.</p>
+<table><tr><th style="width:6%">Nr.</th><th style="width:12%">Gewicht</th><th style="width:40%">Befund</th><th>Beispiel und Empfehlung</th></tr>
+<tr><td>K1</td><td class="gering">Einstellung</td><td>Lohnnebenkosten werden nicht eigens gerechnet (Mittellohn I).</td><td>Die GK-Sätze der Kostenstellen müssen die LNK (Vorgabe 90 %) enthalten. Mit eigenen Zahlen aus der Buchhaltung abgleichen.</td></tr>
+<tr><td>K2</td><td class="gering">Hinweis</td><td>Rüstzeit fällt je Tätigkeitszeile und je Position an.</td><td>Viele kleine Positionen mit derselben Tätigkeit rüsten mehrfach. Gleiche Teile besser in einer Position mit Menge.</td></tr>
+<tr><td>K3</td><td class="gering">Hinweis</td><td>Im Modus „Stunden“ gelten die Stunden je Anzahl.</td><td>Montage 8 h bei Menge 4 = 32 h. Für Pauschalen Menge 1 verwenden.</td></tr>
+<tr><td>K4</td><td class="gering">Hinweis</td><td>Positionen mit ausgeblendetem Gesamtpreis zählen nicht zur Summe (Bedarfsposition).</td><td>GP nur ausblenden, wenn die Position wirklich nicht beauftragt ist.</td></tr>
+<tr><td>K5</td><td class="gering">Hinweis</td><td>Brutto-Anzeige je Zeile gerundet.</td><td>Die Summe der angezeigten Bruttozeilen kann um wenige Cent vom Bruttobetrag abweichen; maßgeblich ist der Bruttobetrag aus Netto + USt.</td></tr>
+<tr><td>K6</td><td class="gering">Hinweis</td><td>Preise im Auftrag sind eingefroren.</td><td>Neue EK-Preise im Materialstamm wirken erst nach Übernahme im Auftrag (Hinweis bei abweichendem Stammpreis).</td></tr>
+<tr><td>K7</td><td class="gering">Einstellung</td><td>Massivholz: Volumen aus Fertigmaß × Rohdicke.</td><td>Längen- und Breitenzugaben sowie Ausschuss nur über den Verschnitt (für Massivholz meist 30–60 %).</td></tr>
+<tr><td>K8</td><td class="gering">Einstellung</td><td>Platten nach Fläche × Verschnitt, nicht nach ganzen Platten.</td><td>Bei Einzelteilen aus teuren Platten Verschnitt höher ansetzen oder Reste-Wert über Sonderkosten.</td></tr>
+<tr><td>K9</td><td class="gering">Hinweis</td><td>GK Material auch auf Fremdleistungen; W&amp;G auch auf Sonderkosten Fertigung; Sonderkosten Vertrieb ohne W&amp;G.</td><td>Mit der eigenen Zuschlagslogik abgleichen.</td></tr>
+<tr><td>K10</td><td class="gering">Hinweis</td><td>Ist-Material: Doppelzählung möglich, wenn ein Zahlungsauftrag einem Auftrag zugeordnet ist und dieselbe Rechnung als Auftragskosten gebucht wurde. Zeilen „Nur Kosten“ beim Einlesen erreichen Soll/Ist nicht.</td><td>Eingangsrechnungen für Aufträge mit „Auf Auftrag“ buchen, Zahlungsauftrag nicht zusätzlich zuordnen.</td></tr>
+<tr><td>K11</td><td class="gering">Hinweis</td><td>Preis von Hand plus Unterpositionen.</td><td>Der manuelle Preis gilt für die Hauptposition allein; Unterpositionen kommen dazu.</td></tr></table>
+<h2 class="neu">13. Rechenbeispiel</h2>
+<p>Sideboard, Menge 2. Werkstoff P01 Spanplatte 12,50 €/m², Verschnitt 20 % (15,00 €/m²); Kante K01 0,80 €/lfm, Verschnitt 10 % (0,88 €/lfm); Beschlag B01 Topfband 3,50 €. Vorgaben: Durchschnitt 27 €/h, Kleinmaterial 15 %, GK Material 30 %, W&amp;G 15 %.</p>
+<h3>13.1 Stückliste (je Teil)</h3>
+<table><tr><th>Teil</th><th class="r">St.</th><th class="r">Fläche m²</th><th class="r">Platte €</th><th class="r">Kante lfm</th><th class="r">Kante €</th><th class="r">Teil €</th><th class="r">× St.</th></tr>
+<tr><td>Seite 800 × 450, Vorderkante</td><td class="r">2</td><td class="r">0,3600</td><td class="r">5,40</td><td class="r">0,800</td><td class="r">0,70</td><td class="r">6,10</td><td class="r">12,21</td></tr>
+<tr><td>Boden/Deckel 1200 × 450, Vorderkante</td><td class="r">2</td><td class="r">0,5400</td><td class="r">8,10</td><td class="r">1,200</td><td class="r">1,06</td><td class="r">9,16</td><td class="r">18,31</td></tr>
+<tr><td>Tür 796 × 596, rundum</td><td class="r">2</td><td class="r">0,4744</td><td class="r">7,12</td><td class="r">2,784</td><td class="r">2,45</td><td class="r">9,57</td><td class="r">19,13</td></tr>
+<tr><th colspan="7">Werkstoffe je Anzahl</th><th class="r">49,65</th></tr></table>
+<h3>13.2 Zeiten (je Anzahl)</h3><table><tr><th>Tätigkeit</th><th>Kostenstelle</th><th class="r">Bezug</th><th class="r">min</th><th class="r">Rüsten</th><th class="r">h je Anz.</th><th class="r">GK %</th><th class="r">Lohn €</th><th class="r">GK €</th></tr>
+<tr><td>Formatsägen 2 min/lfm</td><td>ZUSCHNIT</td><td class="r">Schnittkanten 17,17 lfm</td><td class="r">34,34</td><td class="r">0</td><td class="r">0,5723</td><td class="r">140</td><td class="r">15,45</td><td class="r">21,63</td></tr>
+<tr><td>Kante anleimen 3 min/lfm</td><td>KANTENMA</td><td class="r">Kante 9,57 lfm</td><td class="r">28,70</td><td class="r">10 min / 2</td><td class="r">0,5617</td><td class="r">180</td><td class="r">15,17</td><td class="r">27,30</td></tr>
+<tr><td>Montage Werkstatt</td><td>BANKRAUM</td><td class="r">–</td><td class="r">60,00</td><td class="r">0</td><td class="r">1,0000</td><td class="r">140</td><td class="r">27,00</td><td class="r">37,80</td></tr>
+<tr><td>Montage beim Kunden</td><td>MONTAGE</td><td class="r">–</td><td class="r">45,00</td><td class="r">0</td><td class="r">0,7500</td><td class="r">130</td><td class="r">20,25</td><td class="r">26,32</td></tr>
+<tr><th colspan="5">Summe</th><th class="r">2,8840</th><th></th><th class="r">77,87</th><th class="r">113,06</th></tr></table>
+<h3>13.3 Summen (je Anzahl)</h3><table><tr><th>Zeile</th><th class="r">€</th></tr><tr><td>Werkstoffe</td><td class="r">49,65</td></tr><tr><td>Beschläge (4 × 3,50)</td><td class="r">14,00</td></tr><tr><td>Kleinmaterial 15 % von 63,65</td><td class="r">9,55</td></tr><tr><td>Material</td><td class="r">73,20</td></tr><tr><td>GK Material 30 %</td><td class="r">21,96</td></tr><tr><td>Lohn</td><td class="r">77,87</td></tr><tr><td>GK Lohn</td><td class="r">113,06</td></tr><tr><td>Selbstkosten</td><td class="r"><b>286,09</td></tr><tr><td>Wagnis und Gewinn 15 %</td><td class="r">42,91</td></tr><tr><td>Einzelpreis (gerundet)</td><td class="r"><b>329,00</td></tr><tr><td>Gesamtpreis × 2</td><td class="r"><b>658,00</td></tr></table>
+<p class="klein">Kontrollrechnung Lohn: Formatsägen 34,336 min = 0,5723 h; Kantenmaschine 28,704 min + 10 min Rüsten / 2 = 33,704 min = 0,5617 h; Bankraum 1,0 h; Montage 0,75 h; zusammen 2,8840 h × 27 € = 77,87 €.</p>
+</div>
+</body>
+</html>

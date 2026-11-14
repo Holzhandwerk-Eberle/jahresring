@@ -1,0 +1,40 @@
+import json, os, time, glob, shutil, sqlite3, sys
+exec(open("/tmp/claude-0/t/sec/sec.py").read().split("inh = cl()")[0])
+T = "/tmp/claude-0/t/v25"; D = T + "/eberle-buero/daten"; Z = T + "/extern"; shutil.rmtree(Z, ignore_errors=True); J = json.loads
+sys.path.insert(0, T + "/eberle-buero"); import tresor
+# Baustein-Test
+open("/tmp/claude-0/t/sec/gross.bin", "wb").write(os.urandom(60 * 1024 * 1024 + 12345)); k = tresor.ableiten("Ein langes Kennwort 1", b"s" * 16)
+t0 = time.time(); tresor.verschluesseln("/tmp/claude-0/t/sec/gross.bin", "/tmp/claude-0/t/sec/gross.jrs", k, b"s" * 16); t1 = time.time(); tresor.entschluesseln("/tmp/claude-0/t/sec/gross.jrs", "/tmp/claude-0/t/sec/gross.out", k); t2 = time.time()
+a, b, c = (open("/tmp/claude-0/t/sec/gross." + x, "rb").read() for x in ("bin", "out", "jrs"))
+print(f"60 MB: verschlüsseln {t1-t0:.2f} s, entschlüsseln {t2-t1:.2f} s, gleich: {a == b}, Chiffrat enthält Klartext: {a[:64] in c}, Größe +{len(c)-len(a)} Byte")
+d = bytearray(c); d[5000000] ^= 1; open("/tmp/claude-0/t/sec/gross.jrs", "wb").write(d)
+try: tresor.entschluesseln("/tmp/claude-0/t/sec/gross.jrs", "/tmp/claude-0/t/sec/x", k); print("FEHLER: Manipulation nicht erkannt")
+except tresor.Fehler as f: print("1 Bit geändert →", f)
+try: tresor.entschluesseln("/tmp/claude-0/t/sec/gross.jrs", "/tmp/claude-0/t/sec/x", tresor.ableiten("falsch falsch", b"s" * 16)); print("FEHLER")
+except tresor.Fehler as f: print("falsches Kennwort →", f)
+for x in ("bin", "out", "jrs"): os.remove("/tmp/claude-0/t/sec/gross." + x)
+# Ablauf im Programm
+inh = cl(); rq(inh, "POST", "/api/anmeldung/anmelden", {"login": "jonas", "passwort": "geheim123"})
+rq(inh, "PUT", "/api/einstellungen", {"sicherung_ziel": Z}); time.sleep(4)
+print("extern ohne Kennwort:", sorted(os.listdir(Z + "/Jahresring-Datenbank")))
+print("zu kurz:", rq(inh, "POST", "/api/service/kennwort", {"kennwort": "kurz", "kennwort2": "kurz"})[1][:70])
+print("setzen:", rq(inh, "POST", "/api/service/kennwort", {"kennwort": "Eiche Buche Ahorn 7", "kennwort2": "Eiche Buche Ahorn 7"})[1])
+print("ändern ohne altes:", rq(inh, "POST", "/api/service/kennwort", {"kennwort": "x" * 12, "kennwort2": "x" * 12})[1][:70])
+print("prüfen:", rq(inh, "POST", "/api/service/kennwort", {"pruefen": True, "kennwort": "Eiche Buche Ahorn 7"})[1], rq(inh, "POST", "/api/service/kennwort", {"pruefen": True, "kennwort": "falsch"})[1])
+s, b, _ = rq(inh, "POST", "/api/service/sicherung", {}); print("Vollsicherung:", b[:200]); name = J(b)["name"]
+print("extern:", sorted(f for f in os.listdir(Z) if f.startswith("Sich")))
+roh = open(Z + "/" + name + ".jrs", "rb").read(); print("extern beginnt mit:", roh[:8], "| ZIP-Kennung enthalten:", b"PK\x03\x04" in roh[:100], "| SQLite-Kennung:", b"SQLite format" in roh)
+e = J(rq(inh, "GET", "/api/einstellungen")[1]); print("Schlüssel in Einstellungen:", [k for k in e if "schluessel" in k.lower() or "kennwort" in k.lower()])
+import zipfile; print("Schlüsseldatei in Sicherung:", [n for n in zipfile.ZipFile(D + "/backup/" + name).namelist() if "schluessel" in n])
+s, b, h = rq(inh, "GET", "/api/service/datei/" + name, roh=True); print("Download:", s, h.get("Content-Disposition"), b[:8])
+n0 = len(J(rq(inh, "GET", "/api/kunden")[1])); rq(inh, "POST", "/api/kunden", {"kurzname": "Nach Sicherung"})
+li = J(rq(inh, "GET", "/api/service/sicherungen?extern=1")[1]); print("Liste extern:", [(x["name"][-12:], x["ort"], x["verschluesselt"], x["kennwort"]) for x in li["extern"]], li["kennwort"])
+s, b, _ = rq(inh, "POST", "/api/service/ruecksichern", {"name": name + ".jrs", "ort": "extern", "grund": "Test verschlüsselte Rücksicherung"}); print("Rücksicherung von extern (gleicher PC):", s, b[:120])
+inh = cl(); rq(inh, "POST", "/api/anmeldung/anmelden", {"login": "jonas", "passwort": "geheim123"}); print("Kunden vorher/nachher:", n0, len(J(rq(inh, "GET", "/api/kunden")[1])))
+# „anderer PC“: Schlüsseldatei weg
+os.rename(D + "/sicherung.schluessel", D + "/sicherung.schluessel.weg")
+print("ohne Schlüssel, ohne Kennwort:", rq(inh, "POST", "/api/service/ruecksichern", {"name": name + ".jrs", "ort": "extern", "grund": "Test anderer PC ohne Kennwort"})[:2])
+print("falsches Kennwort:", rq(inh, "POST", "/api/service/ruecksichern", {"name": name + ".jrs", "ort": "extern", "grund": "Test anderer PC falsches Kennwort", "kennwort": "Eiche Buche Ahorn 8"})[:2])
+s, b, _ = rq(inh, "POST", "/api/service/ruecksichern", {"name": name + ".jrs", "ort": "extern", "grund": "Test anderer PC mit Kennwort", "kennwort": "Eiche Buche Ahorn 7"}); print("richtiges Kennwort:", s, b[:90])
+os.rename(D + "/sicherung.schluessel.weg", D + "/sicherung.schluessel")
+print("Traversal:", rq(inh, "POST", "/api/service/ruecksichern", {"name": "../buero.db", "grund": "Test Pfad Pfad Pfad"})[1][:60], rq(inh, "POST", "/api/service/ruecksichern", {"name": "stunde_aktuell.db", "grund": "Test Pfad Pfad Pfad"})[1][:60])

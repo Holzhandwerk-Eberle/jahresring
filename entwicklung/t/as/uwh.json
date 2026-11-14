@@ -1,0 +1,546 @@
+{
+ "UWH-018": {
+  "nr": "UWH-018",
+  "titel": "Sicheres Arbeiten",
+  "abschnitte": [
+   {
+    "titel": "Allgemeines",
+    "punkte": [
+     "Zum Werkzeugwechsel, vor dem Beseitigen von Störungen und vor Reinigungsarbeiten Maschine von der Energiezufuh trennen.",
+     "Beschäftigungsbeschränkungen beachten.",
+     "Eng anliegende Kleidung tragen",
+     "Sicherheitsschuhe, Gehörschutz Maschinen grundsätzlich mit und ggf. Schutzbrille benutzen. beiden Händen führen",
+     "Maschinen nur so verwenden, und r wie es der Hersteller in der Bedienungs anleitung vorsieht. n Im Zweifel an den Hersteller Werkstücke gegen Verschieben wenden. sichern, zum Beispiel durch das . Spannen."
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/13ebeed7-UWH-018-Unterweisung_Handmaschinen_Web.pdf"
+ },
+ "UWH-015": {
+  "nr": "UWH-015",
+  "titel": "Sicheres Arbeiten mit",
+  "abschnitte": [
+   {
+    "titel": "Einsatzbedingungen",
+    "punkte": [
+     "Vorschubart",
+     "Name oder Zeichen des Her­ stellers",
+     "zulässiger Drehzahlbereich",
+     "Abmessung des Werkzeugs",
+     "Der auf dem Fräswerkzeug angegebene Drehzahlbereich muss eingehalten werden.",
+     "Vor jedem Einsatz nochmals Messerbefestigung überprüfen. Mechanischer Vorschub = z. B. Arbeiten mit Mehrseiten-Hobel- und Fräsmaschine"
+    ]
+   },
+   {
+    "titel": "Wartung und Pflege",
+    "punkte": [
+     "Spannschrauben nur mit den vorgegebenen Werkzeugen lösen und festziehen. Kennzeichnung eines Fräswerkzeugs für Mechanischen Vorschub"
+    ]
+   },
+   {
+    "titel": "Hinweise",
+    "punkte": [
+     "Spannflächen am Körper Leichtmetallwerkzeuge nur mit und an den Messern sowie speziellen Lösemitteln entharzen r­ Befestigungselemente sauber (Konzentration des Reinigungs­ halten. bades und Reinigungszeit nach",
+     "Als Ersatzteile nur Original­ Gebrauchs anleitung beachten). teile oder ihnen entsprechende Ersatzteile und Ersatzmesser verwenden. Bestell­Nr. UHW­015/10.2019"
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/14100068-UWH-015-Unterweisung_Fraeswerkzeuge_Web.pdf"
+ },
+ "UWH-026": {
+  "nr": "UWH-026",
+  "titel": "Sicheres Arbeiten in",
+  "abschnitte": [
+   {
+    "titel": "Vertikalsägegatter",
+    "punkte": [
+     "Beim Abnehmen der Seitenware und Hauptware nicht an den Umfang angetriebener Walzen greifen (siehe Bild 2).",
+     "Bei Störungen an Seitenwaren-Auszugswalzen entweder Griff benutzen oder Walzenantrieb abschalten (siehe Bild 2).",
+     "Nicht zwischen Schnittholz und Spaltkeil greifen oder stellen, ggf. Gattervorschub abschalten (siehe Bild 2) oder Hilfsmittel benutzen.",
+     "Beim Sägeblattwechsel vor Beginn der Arbeiten obere Druckwalzen (siehe Bild 3) und Sägerahmen formschlüssig (siehe Bild 4) gegen Absinken sichern. – Zu verwendende Werkzeuge auf Beschädigungen prüfen und ggf. austauschen. – Handschuhe tragen."
+    ]
+   },
+   {
+    "titel": "Vorkappsägen",
+    "punkte": [
+     "Die automatischen Vorkappsägen auf der Gatter-Ausschubseite durch trennende Schutzeinrichtungen mit Verriegelungseinrichtung absichern. (Siehe Bild 1) Mehrblattkreissäge (Doppelsäumer)",
+     "Rückschlagsicherung leichtgängig und scharfkantig halten.",
+     "Abstand zwischen Gliedern und Werkstückführungsfläche darf nicht größer als 1 mm sein.",
+     "Lederschürze mit Drahtgewebeverstärkung tragen (siehe Bild 6)."
+    ]
+   },
+   {
+    "titel": "Fördereinrichtungen",
+    "punkte": [
+     "Beim Entstören vor Einsteigen die Fördereinrichtungen abschalten.",
+     "Vorgesehene Zugänge/Übergänge benutzen (siehe Bild 8). Bild 1, 3, 5 und 8 Kiefern Bohm GmbH & Co KG Bild 2 Sägewerk Erich Reichert Bild 4 Simon Möhringer Anlagenbau GmbH Bild 6 BGHM Bild 7 BGHM"
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/158ed96b-UWH-026-Unterweisung_Gattersaegewerke_Web.pdf"
+ },
+ "UWH-017": {
+  "nr": "UWH-017",
+  "titel": "Sicheres Arbeiten",
+  "abschnitte": [
+   {
+    "titel": "Allgemeines",
+    "punkte": [
+     "Zum Sägekettenwechsel, vor dem Beseitigen von Störungen und vor Reinigungs arbeiten Maschine von der Energiezufuhr trennen bzw. ausschalten.",
+     "Beschäftigungsbeschränkung beachten (Mindestalter 18 Jahre, bei Auszubildenden 15 Jahre)."
+    ]
+   },
+   {
+    "titel": "Werkzeug",
+    "punkte": [
+     "Möglichst rückschlagarme Sägeketten, z. B. Hobelzahnketten mit Spandickenbegrenzung, sowie rückschlagarme Sägeschiene verwenden."
+    ]
+   },
+   {
+    "titel": "Betreiben",
+    "punkte": [
+     "Sägekette nach Bedienungsanleitung des Herstellers schärfen und spannen.",
+     "Beim Transport der Maschine Kettenschutz aufstecken.",
+     "Unter Spannung stehendes Rundholz zurecht rücken oder unterkeilen, um eine plötzliche Lageänderung des Holzes bzw. Einklemmen der Sägeschiene zu vermeiden. Bei Arbeiten über Kopf ist grundsätzlich zu prüfen, ob eine Säbelsäge eingesetzt werden kann."
+    ]
+   },
+   {
+    "titel": "Schutzkleidung",
+    "punkte": [
+     "Beim Ablängen von Brettware mind. Gehörschutz, Augenschutz, Arbeitshandschuhe und Sicherheitsschuhe tragen. Bei Arbeiten mit der Ketten sägemaschine ist unbedingt die Bedienungsanleitung des Herstellers einzuhalten."
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/1b391ebd-UWH-017-Unterweisung_Kettensaegemaschine_Web_1.pdf"
+ },
+ "UWH-022": {
+  "nr": "UWH-022",
+  "titel": "Sicherer Betrieb bei besonderen",
+  "abschnitte": [
+   {
+    "titel": "Einsatz mit Arbeitsbühne",
+    "punkte": [
+     "Zum Auf- und Abwärtsfahren von Personen mit der Hubeinrichtung von Flurförderzeugen nur dafür zugelassene Arbeitsbühnen verwenden. Keine Paletten, Gitterboxpaletten o. Ä. benutzen.",
+     "Der Einsatz mit Arbeitsbühne ist mit folgenden Flurförderzeugen zulässig:",
+     "Bei Frontgabelstaplern darf das Gesamtgewicht aus Person(en), Arbeitsbühne und Zuladung höchstens ⅕ der Nenntragfähigkeit betragen.",
+     "Vor dem Hochfahren der Arbeitsbühne darauf achten, dass die Umwehrung ordnungs gemäß geschlossen ist.",
+     "Standplatz in der Arbeitsbühne nicht mit Hilfsmitteln (Leitern, Kisten, Tritten, etc.) erhöhen.",
+     "Gabelstapler mit besetzter Arbeitsbühne nicht verfahren, außer zum Feinpositionieren (wenige cm) am Einsatzort. Stapeln von Schnittholz, Platten und Paletten;"
+    ]
+   },
+   {
+    "titel": "Verfahren von Rundholz",
+    "punkte": [
+     "Auf standsicheren Stapelunterbau achten.",
+     "Zulässige Stapelhöhen nicht überschreiten.",
+     "Beim Anheben der Last darauf achten, dass die Gabelspitzen oder die Last nicht an benachbartem Stapelgut hängen bleiben.",
+     "Beim Transport von größeren Schnittholzpaketen mit Frontgabelstaplern, die die Sicht auf den Fahrweg einschränken, darf wegen der seitlich herausstehenden Last nicht rückwärts gefahren werden. Lassen Sie sich stattdessen einweisen.",
+     "Beim Transport von Rundholz mit Frontgabelstaplern möglichst Zangengreifer verwenden. Sonst Rundholz mit Gabeln in niedrigster Stellung langsam verfahren. Bilder 1 bis 5: BGHM Bild 6: Dorn-Tec GmbH und Co. KG"
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/20d1b1a6-UWH-022-Unterweisung_Einsaetze_Flurfoerderzeuge_Web.pdf"
+ },
+ "UWH-012": {
+  "nr": "UWH-012",
+  "titel": "Sicheres Arbeiten an",
+  "abschnitte": [
+   {
+    "titel": "Allgemeines",
+    "punkte": [
+     "Vor Reinigungs- und Wartungsarbeiten Maschine abschalten und gegen unbeabsichtigtes Ein schalten sichern.",
+     "Beschäftigungsbeschränkung beachten.",
+     "Eng anliegende Kleidung tragen",
+     "Sicherheitsschuhe und Gehörschutz benutzen.",
+     "Beim Verlassen des Arbeitsplatzes Maschine ausschalten."
+    ]
+   },
+   {
+    "titel": "Werkzeuge",
+    "punkte": [
+     "Nur Fräswerkzeuge mit der Kenn zeichnung MAN, BG-TEST oder Handvorschub verwenden. Dies gilt auch dann, wenn Arbeiten Einsetzfräsen kleiner Werkstücke mit Spannlade und Rückschlagsicherung mit Vorschubapparat oder Schiebeschlitten durchgeführt werden. n-"
+    ]
+   },
+   {
+    "titel": "Einstellen",
+    "punkte": [
+     "Fräswerkzeuge, Fräsdorn-Mutte und Zwischenringe nicht direkt . auf den Maschinentisch ablegen.",
+     "Tischöffnung durch Einlegeringe so weit wie möglich schließen.",
+     "Drehzahl nach Werkzeugangabe einstellen. Beim Aufspannen Fräserdorn-Mutter voll ausnutnzen.",
+     "Mit Einstellvorrichtung Fräshöhe und Frästiefe einstellen. Fräsen von geschweiften Werkstücken mit Anlaufring und Bogenfräshaube",
+     "Werkzeugverdeckungen und Druck- und Schutzvorrichtungen anbringen.",
+     "Für große Werkzeuge Tischvergrößerungen anbringen.",
+     "Für Einsetzarbeiten Rückschlagr sicherung anbringen. Möglichst Vorschubapparat verwenden, auch beim Probefräsen. e"
+    ]
+   },
+   {
+    "titel": "Betreiben",
+    "punkte": [
+     "Zum Nachschieben Schiebeholz verwenden.",
+     "Splitter und Späne nicht mit der Hand entfernen.",
+     "Maschine nur mit Absaugung betreiben.",
+     "Maschine nur so verwenden, wie es der Hersteller in der Bedienungsanleitung vorsieht. Im Zweifel an den Hersteller wenden."
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/348fc115-UWH-012-Unterweisung_Tischfraesmaschinen_Web.pdf"
+ },
+ "UWH-019": {
+  "nr": "UWH-019",
+  "titel": "Sicheres Arbeiten an",
+  "abschnitte": [
+   {
+    "titel": "Hinweise",
+    "punkte": [
+     "mit zunehmendem Schneidenüberstand auch die Rückschlaggefahr steigt,",
+     "es beim Hochfahren mit Werkstücken auf dem Ma­ schi nen tisch zum sogenannten „Einsatzfräsen“ und damit zum Werkstückrückschlag kommt. 2b max. 1,1 mm Formschlüssige Messerbefestigung ern in der Bedienungsanleitung 4 Hobeln mit Schablone. Bei nicht parallelen Flächen geeignete Schablonen verwenden. 6 Bei Maschinen mit Gliederdruckbalken dürfen mehrere Werkstücke gleichzeitig bearbeitet werden."
+    ]
+   },
+   {
+    "titel": "Allgemeines",
+    "punkte": [
+     "Vor Reinigungs- und Wartungsarbeiten Maschine abschalten und gegen unbeabsichtigtes Einschalten sichern.",
+     "Beschäftigungsbeschränkung beachten.",
+     "Eng anliegende Kleidung tragen.",
+     "Sicherheitsschuhe und Gehörschutz benutzen.",
+     "Beim Verlassen des Arbeitsplatzes Maschine ausschalten."
+    ]
+   },
+   {
+    "titel": "Werkzeuge",
+    "punkte": [
+     "Vor jedem Messerwechsel ggf. Maschine gegen unbefugtes Einschalten sichern.",
+     "Nur Hobelmesser mit gleichen Abmessungen und gleichem Gewicht einsetzen.",
+     "Vor dem Einsetzen Spannflächen säubern und Messer entfetten.",
+     "Messerüberstand mit Lehre einstellen (max. 1,1 mm).",
+     "Befestigungsschrauben nur mit zugehörigem Werkzeug lösen und spannen.",
+     "Befestigungsschrauben nach Herstellerangaben anziehen."
+    ]
+   },
+   {
+    "titel": "Einstellen",
+    "punkte": [
+     "Hobeldicke = Ausgangsdicke abzüglich Span abnahme.",
+     "Dabei nicht die maximal mögliche Spanabnahme ausnutzen (hohe Belastung der Maschine), sondern durch mehrere Hobelvorgänge das Endmaß herstellen."
+    ]
+   },
+   {
+    "titel": "Betreiben",
+    "punkte": [
+     "Kurze Werkstücke müssen sicher zwischen Ein- und Auszugswalzen geführt werden, sonst Vorrichtung verwenden.",
+     "Beim Bearbeiten von langen Werkstücken dürfen im Ausschubbereich keine Quetschund Scherstellen entstehen.",
+     "Splitter und Späne nicht mit der Hand entfernen.",
+     "Maschine nur mit Absaugung betreiben.",
+     "Maschine nur so verwenden, wie es der Hersteller in der Bedienungsanleitung vorsieht. Im Zweifel an den Hersteller wenden."
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/3ca8b729-UWH-019-Unterweisung_Dickenhobelmaschinen_Web.pdf"
+ },
+ "UWH-016": {
+  "nr": "UWH-016",
+  "titel": "Sicheres Arbeiten mit",
+  "abschnitte": [
+   {
+    "titel": "Umgang und Pflege",
+    "punkte": [
+     "Immer in der Originalverpackung transpor­ tieren.",
+     "Nie mit den Schneiden gegen Metallober­ flächen stoßen.",
+     "Beim Ein­ und Ausbauen die Hände mit Handschuhen oder einem Lappen schützen.",
+     "Mit Originalschlüssel die Befestigungs­ schrauben anziehen. Nur mit Originalschlüs­ sel kann das vom Werkzeughersteller vorge­ sehene Anzugsmoment eingestellt werden. Vorsichtsmaßnahmen Bei der Kollision einer Schneide mit Werkstück­ anschlag, Werkstückspannelement, Absaug­ haube oder bei ungewöhnlichen Geräuschen Maschine sofort abschalten und",
+     "alle Schneiden ausbauen und auf Haarrisse prüfen (HM­Schneide zerfällt beim Ausbau),",
+     "beschädigte Spannelemente gegen Original­ teile tauschen,",
+     "beschädigte oder fehlende Schrauben durch Originalschrauben ersetzen,",
+     "Tragkörper mit gestauchtem oder deformier­ tem Plattensitz sofort verschrotten."
+    ]
+   },
+   {
+    "titel": "Schneidenwechsel",
+    "punkte": [
+     "Betriebsanleitung des Werkzeugherstellers beachten,",
+     "alle Schneiden austauschen (Vermeiden von Unwucht),",
+     "Schraubenköpfe ausblasen, um beim Lösen der Schraube einen festen Sitz des Original­ werkzeugs herzustellen,",
+     "Wendeplatten, Plattensitz und Spannkeil von Ablagerungen säubern,",
+     "beim Einsetzen der Schneide auf pass­ genauen Plattensitz achten,",
+     "ALU­Tragkörper nie im Alkali­Bad reinigen,",
+     "das Schärfen der Schneiden darf nur von Fachleuten durchgeführt werden. Bestell­Nr. UWH­016/10.2019"
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/532df185-UWH-016-Unterweisung_Fraeswerkzeuge_Hartmetall_Web.pdf"
+ },
+ "UWH-021": {
+  "nr": "UWH-021",
+  "titel": "Sicherer Betrieb von",
+  "abschnitte": [
+   {
+    "titel": "Allgemeines",
+    "punkte": [
+     "Flurförderzeuge dürfen nur von Personen ge­ fahren werden, die damit schriftlich beauf­ tragt, ausgebildet und unterwiesen worden sind.",
+     "Der Fahrer oder die Fahrerin trägt die alleinige Verantwortung für eine sichere Fahrweise und die Ladung.",
+     "Sicherheitsschuhe tragen.",
+     "Personen dürfen nur auf besonders dafür ausgerüsteten Flurförderzeugen mitgenom­ men werden."
+    ]
+   },
+   {
+    "titel": "Verkehrsregelung",
+    "punkte": [
+     "Soweit nicht gesondert geregelt, gilt die Ver­ kehrsregel „rechts vor links“.",
+     "Nur freigegebene Verkehrswege benutzen."
+    ]
+   },
+   {
+    "titel": "Fahrweise",
+    "punkte": [
+     "Fahrgeschwindigkeit stets so einrichten, dass beim Auftauchen einer unvermuteten Gefahr oder eines Hindernisses auf mög­ lichst kurzem Weg angehalten werden kann.",
+     "Vor Gefahrstellen wie Türen, Toren und ande­ ren unübersichtlichen Stellen langsam fah­ ren und Warnsignal geben.",
+     "Unebenheiten der Fahrbahn vorsichtig und unter Beobachtung der Last überqueren.",
+     "Elektrische Verteiler, Verkehrswege, Not­ ausgänge, Rettungswege, Feuerlöscher und Brandschutztore nicht durch abgestellte Fahrzeuge oder Lasten verstellen.",
+     "Besondere Vorsicht gegenüber Fußgängerin­ nen und Fußgängern walten lassen, die sich in Fahrzeugnähe aufhalten. Hinweis für Fußgänger und Fußgängerinnen",
+     "Nur an Flurförderzeuge herantreten, nach­ dem Blickkontakt mit der Fahrerin oder dem Fahrer aufgenommen wurde."
+    ]
+   },
+   {
+    "titel": "Besondere Einsatzbedingungen",
+    "punkte": [
+     "Explosionsgefährdete Bereiche dürfen nur mit folgenden Flurförderzeugen befahren werden:"
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/63271999-UWH-021-Unterweisung_Betrieb_Flurfoerderzeuge_Web.pdf"
+ },
+ "UWH-024": {
+  "nr": "UWH-024",
+  "titel": "Sicheres Arbeiten in Silos",
+  "abschnitte": [
+   {
+    "titel": "Vorbereitung",
+    "punkte": [
+     "Weitere Zufuhr von Spänegut in das Silo durch Abschalten der Beschickungseinrichtung (z. B. Transportventilator, Zellenradschleuse, Förde schnecke) verhindern.",
+     "Abreinigen der auf/im Silo befindlichen Filteranlage durch Betätigen des Haupt-Schalters für die gesamte Absauganlage verhindern. (Bemerkung: Da die Abreinigung der Filteranlage nach dem Stillsetzen des Ven tilators automatisch anläuft, genügt das Abschalten des Ventilators alleine nicht!). Anschließend gegen unbe fugtes Wiedereinschalten sichern!",
+     "Abschalten und Entlüften vorhandener Auflockerungseinrichtungen (z. B. Druckluftkanonen).",
+     "Abschalten des Antriebs der Austrag einrichtung (z. B. Austragschnecke, Schubboden) und Sichern gegen Wiedereinschalten.",
+     "Abklären des Füllstands und der Verteilung der Späne innerhalb des Silos (z. B. Füllstandsanzeige, Einführen einer Videokamera, Öffnen von Revisionstüren)."
+    ]
+   },
+   {
+    "titel": "Arbeiten in Silos",
+    "punkte": [
+     "Tätigkeiten im Inneren von Silos nur mit schriftlicher Erlaubnis der Betriebsleitung durchführen (Erlaubnisschein). Die im Erlaubnisschein aufgeführten speziellen Schutzmaß nahmen unbedingt einhalten.",
+     "Außer den im Erlaubnisschein benannten Personen dürfen keine weiteren Personen zu den Arbeiten im Inneren des Silos herangezogen werden. Nur mit schriftlicher Erlaubnis in das Silo einfahren.",
+     "Tätigkeiten im Inneren des Silos nur unter ständiger Aufsicht einer zweiten Person (Sicherungsposten) durchführen. Nie eigenmächtig und alleine in Silos einfahren.",
+     "Hinweisschild am Siloeinstieg",
+     "In nicht vollständig entleerte Silos nur von oben her und nur bis zur Oberkante des Füllguts einfahren.",
+     "Zum Einfahren in das Silo immer Silo einfahreinrichtung mit Siloeinfahrhose verwenden."
+    ]
+   },
+   {
+    "titel": "Einsteigen ohne diese Einrichtungen",
+    "punkte": [
+     "Die eingefahrene Person muss solange mit dem Personenaufnahmemittel r- (Siloeinfahrhose) und der Einfahreinrichtung verbunden bleiben, bis sie wieder ausgefahren ist.",
+     "Nur für Zone 22 zugelassene ortsveränderliche elektrische Betriebsmittel (z. B. Handleuchte) in Schutzart IP 54 oder höher verwenden. n- • Beim Einfahren in nicht entleerte Silos Atemschutz (Vollmaske mit Partikelfilter P2 oder fremdbelüftete e- Vollmasken) tragen. Nach Beendigung der Arbeiten alle Zugänge und Öffnungen wieder schließen."
+    ]
+   },
+   {
+    "titel": "Beseitigen von Stauungen",
+    "punkte": [
+     "Zum Beseitigen Hilfsmittel einsetzen (z. B. Druckluftlanzen, Druckluftbohrer, Stocher-Stangen, etc.). Arbeiten an mechanischen Austrageinrichtungen Beim Öffnen von Zugängen oder Klappen muss die mechanische Austragseinrichtung zwangsläufig abgeschaltet - werden, z. B. über einen Verriegelungsschalter an der Zugangstür. Achtung: Bei geöff neter Zugangstür darf die Austrageinrichtung über die Brennstoffanforderung der Heizung nicht eingeschaltet werden können. Verhalten bei Bränden im Silo Sofort Betriebsleitung oder Feuerwehr verständigen. Ventil für die Wasserzufuhr in die Sprühwasser-Löscheinrichtung öffnen oder Schlauchverbindung zur trockenen Löschleitung herstellen. Türen und Klappen im Brandfall nicht öffnen, weil durch Luftzutritt und Aufwirbelungen zusätzliche Explosionsgefahr besteht."
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/662ac83b-UWH-024-Unterweisung_Silos_Web.pdf"
+ },
+ "UWH-011": {
+  "nr": "UWH-011",
+  "titel": "Sicheres Arbeiten",
+  "abschnitte": [
+   {
+    "titel": "Allgemeines",
+    "punkte": [
+     "Vor Reinigungs- und Wartungsa beiten Maschine abschalten un gegen unbeabsichtigtes Einscha ten sichern.",
+     "Beschäftigungsbeschränkung be achten.",
+     "Eng anliegende Kleidung tragen",
+     "Sicherheitsschuhe und Gehö schutz benutzen.",
+     "Beim Verlassen des Arbeits platze Maschine ausschalten. beim Absetzen von Zapfen"
+    ]
+   },
+   {
+    "titel": "Einstellen",
+    "punkte": [
+     "Spaltkeil ca. 2 mm unter der höchs s ten Sägezahnspitze",
+     "Befestigung des Spaltkeils prüfen",
+     "Beim Einsetzsägen Queranschla oder Niederhalter als Rückschlags cherung verwenden. Danach Spal keil wieder anbringen. beim Einsetzsägen. Sägeblatt wird von unten nach oben durch das Werkstück angehoben."
+    ]
+   },
+   {
+    "titel": "Betreiben",
+    "punkte": [
+     "Beim Werkstückvorschub Händ mit geschlossenen Fingern flach auf das Werkstück legen. e- • Im Gefahrenbereich Schiebestoc oder Schiebeholz verwenden. Die s- gilt auch für das Entfernen vo Splittern, Spänen und Abfällen n. Verschlissenen Schiebestock ode g Schiebeholz ersetzen. i- • Maschine nur mit Absaugung be t- treiben."
+    ]
+   },
+   {
+    "titel": "Hinweise",
+    "punkte": [
+     "Maschinen nur so verwenden, wie h es der Hersteller in der Bedienungsi- anleitung vorsieht. Im Zweifel an den Hersteller wenden. e • Um Stolperstellen zu vermeiden h Sammelbehälter für Mate rial- Abfall stücke benutzen. k s n n. Weitere Informa tionen finden Sie r in „Holzbearbeitungsmaschinen TSM“"
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/679d780b-UWH-011-Unterweisung_Tisch-_und_Formatkreissaegen_Web.pdf"
+ },
+ "UWH-014": {
+  "nr": "UWH-014",
+  "titel": "Sicheres Arbeiten an",
+  "abschnitte": [
+   {
+    "titel": "Allgemeines",
+    "punkte": [
+     "Vor Reinigungs- und Wartungsarbeiten Maschine abschalten und gegen unbeabsichtigtes Ein schalten sichern.",
+     "Beschäftigungsbeschränkung beachten.",
+     "Eng anliegende Kleidung tragen",
+     "Sicherheitsschuhe und Gehörschutz benutzen.",
+     "Beim Verlassen des Arbeitsplatzes Maschine ausschalten."
+    ]
+   },
+   {
+    "titel": "Werkzeuge",
+    "punkte": [
+     "Vor jedem Messerwechsel Maschine gegen unbefugtes n- Einschalten sichern.",
+     "Nur Hobelmesser mit gleichen Abmessungen und gleichem Gewicht einsetzen. . • Vor dem Einsetzen Spannfläche säubern und Messer entfetten.",
+     "Messerüberstand mit Lehre einstellen (max. 1,1 mm).",
+     "Befestigungsschrauben nur mit zugehörigem Werkzeug lösen und spannen.",
+     "Befestigungsschrauben nach Herstellerangaben anziehen."
+    ]
+   },
+   {
+    "titel": "Einstellen",
+    "punkte": [
+     "Spanabnahme einstellen, Tischund Anschlageinstellungen gegen Verstellen sichern.",
+     "Messerwellenverdeckung vor dem Anschlag für den Arbeitsgang einrichten. n"
+    ]
+   },
+   {
+    "titel": "Betreiben",
+    "punkte": [
+     "Beim Werkstückvorschub Hände mit geschlossenen Fingern flach auf das Werkstück legen.",
+     "Bei kurzen Werkstücken Zuführlade oder Schiebeholz verwenden.",
+     "Splitter und Späne nicht mit der Hand entfernen.",
+     "Maschine nur mit Absaugung betreiben.",
+     "Maschine nur so verwenden, wie es der Hersteller in der Bedienungsanleitung vorsieht. Im Zweifel an den Hersteller wenden. e"
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/ab3d795f-UWH-014-Unterweisung_Abrichthobelmaschinen_Web.pdf"
+ },
+ "UWH-013": {
+  "nr": "UWH-013",
+  "titel": "Sicheres Arbeiten an",
+  "abschnitte": [
+   {
+    "titel": "Allgemeines",
+    "punkte": [
+     "Vor Reinigungs- und Wartungsarbeiten Maschine abschalten und gegen unbeabsichtigtes Einschalten sichern.",
+     "Beschäftigungsbeschränkung beachten.",
+     "Eng anliegende Kleidung tragen.",
+     "Sicherheitsschuhe und Gehörschutz benutzen.",
+     "Beim Verlassen des Arbeitsplatzes Maschine ausschalten und ggf. Bandsägeblatt gegen Berühren sichern."
+    ]
+   },
+   {
+    "titel": "Werkzeuge",
+    "punkte": [
+     "Gleichmäßig geschränkte und scharfe Bandsägeblätter verwenden, Dicke etwa 1/1000 des Rollendurchmessers. Schmale Bandsägeblätter nur zum Sägen von geschweiften Werkstücken verwenden."
+    ]
+   },
+   {
+    "titel": "Einstellen",
+    "punkte": [
+     "Bandsägeblattlauf bei zurückgestellten Säge blattführungen mit der Neigungsverstellung der oberen Bandsägerolle einrichten.",
+     "Dabei Bandsägerolle nur von Hand drehen. Sägeblattführungen: Seitenführungen bis knapp an den Zahngrund heranstellen. Rückenrolle so einstellen, dass sie sich nur bei belastetem Bandsägeblatt mitdreht.",
+     "Verkleidungen bzw. Verdeckungen in Schutzstellung bringen.",
+     "Obere Sägeblattführung knapp über Werkstück dicke einstellen.",
+     "Für große Werkstücke Tischvergrößerung anbringen."
+    ]
+   },
+   {
+    "titel": "Betreiben",
+    "punkte": [
+     "Beim Werkstückvorschub Hände mit geschlossenen Fingern flach auf das Werkstück legen.",
+     "Eingreifen in den Schneidbereich des Bandsägeblatts nur mit Hilfsmittel.",
+     "Splitter, Späne und Abfälle nicht mit der Hand entfernen.",
+     "Maschine nur mit Absaugung betreiben.",
+     "Maschinen nur so verwenden, wie es der Hersteller in der Bedienungsanleitung vorsieht. Im Zweifel an den Hersteller wenden.",
+     "Um Stolperstellen zu vermeiden Sammelbehälter für Material-Abfallstücke benutzen."
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/acf68858-UWH-013-Unterweisung_Tischbandsaegemaschinen_Web.pdf"
+ },
+ "UWH-025": {
+  "nr": "UWH-025",
+  "titel": "Sicheres Arbeiten an",
+  "abschnitte": [
+   {
+    "titel": "Betreiben",
+    "punkte": [
+     "Sicherheitsschuhe und Gehörschutz benutzen.",
+     "Eng anliegende Kleidung tragen.",
+     "Positionsschalter mit Sicherheitsfunktion (z. B. an Verkleidungen von Kappaggregaten oder Werkzeugen, Lärms chutzhauben) sowie Schutz­ einrichtungen an der Werkstückaufgabestelle regelmäßig auf Wirksamkeit überprüfen.",
+     "Regelmäßig prüfen, ob die vom Hersteller vorge­ sehenen Einzelverdeckungen für Werkzeuge der Größe der verwendeten Werkzeuge (z. B. Kapp­ sägen, Fräswerkzeuge) entsprechen und ange­ bracht sind. Gegebenenfalls durch passende ersetzen und montieren.",
+     "Beim manuellen Führen von Werkstücken auf Gefahrstellen (z.B. zwischen Werkstück und fes­ ten Maschinenteilen) achten.",
+     "Beim Einlegen der Kanten besonders auf Ein­ zugstellen an Stachelwalze und Druckwerk, auf Gefahr durch Kappschere und heißen Leimbe­ hälter achten.",
+     "Reinigungs­ und Wartungsarbeiten sowie Stö­ rungsbehebung grundsätzlich nur bei Stillstand der Maschine und der Werkzeuge durchführen.",
+     "Bei Maschinen mit ungebremsten Werkzeugen (Baujahr vor 1982) beachten, dass die Werkzeu­ ge sehr lange auslaufen können. Kantenqualität nur außerhalb von Gefahrbereichen von Hand prüfen."
+    ]
+   },
+   {
+    "titel": "Einrichten",
+    "punkte": [
+     "Nach jedem Werkzeugwechsel ist bei gebrems­ ten Werkzeugen die Nachlaufzeit zu prüfen. Mängel sofort melden.",
+     "Dynamische Aggregate (z. B. Kappaggregate) nur bei Stillstand der Maschine einstellen.",
+     "Wenn bei laufender Maschine eingerichtet wer­ den muss, darauf achten, dass die Werkzeuge verdeckt sind.",
+     "Nach dem Einrichten die Maschine erst dann in Betrieb nehmen, wenn die Schutzeinrichtungen in Funktion sind."
+    ]
+   },
+   {
+    "titel": "Werkzeuge",
+    "punkte": [
+     "Bewegte Werkzeuge müssen immer verdeckt sein.",
+     "An Maschinen ab Baujahr 1982 prüfen, ob die Werkzeuge innerhalb von 10 s still stehen und die Zuhaltung für die Werk zeugverkleidung wirksam ist."
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/d33ebbd4-UWH-025-Unterweisung_Kantenanleimmaschinen_Web.pdf"
+ },
+ "UWH-023": {
+  "nr": "UWH-023",
+  "titel": "Sicheres Arbeiten",
+  "abschnitte": [
+   {
+    "titel": "Hinweise",
+    "punkte": [
+     "Zum Erreichen hochgelegener Stellen keines­ falls auf Tische, Stühle, Hocker, Kisten oder Regale steigen.",
+     "Leitern vor jeder Benutzung auf ordnungs­ gemäßen Zustand prüfen.",
+     "Schadhafte Leitern nicht benutzen und Vorgesetzte informieren.",
+     "Anlegeleitern gegen Abrutschen und Kippen sichern.",
+     "Leitern rechtzeitig umsetzen, um ein seitli­ ches Hinausbeugen zu vermeiden.",
+     "Stehleitern nicht als Anlegeleitern benutzen.",
+     "Von Stehleitern nicht auf andere hoch­ gelegene Arbeitsplätze oder Bühnen steigen.",
+     "Tragbare Leitern als hochgelegener Arbeits­ platz dürfen nur verwendet werden, wenn die Person mit beiden Füßen auf einer Stufe oder Plattform steht. Besondere Regelungen für die Benutzung von Anlegeleitern Es darf",
+     "kein höherer Standplatz als 5,0 m eingenom­ men werden,",
+     "der Umfang der auszuführenden Arbeiten 2 Stunden nicht überschreiten,",
+     "das Gewicht des mitzuführenden Werkzeugs und Materials 10 kg nicht überschreiten,",
+     "die Windangriffsfläche von mitgeführten Gegenständen nicht mehr als 1,0 m² betragen,",
+     "von mitgeführten Stoffen keine zusätzliche Gefahr, z. B. durch Verätzen oder Verbren­ nen, ausgehen.",
+     "Anlegeleitern dürfen als Verkehrsweg bei Bauarbeiten nur kurzzeitig eingesetzt werden. Dabei darf der zu überbrückende Höhenunterschied nicht mehr als 5,0 m betragen."
+    ]
+   }
+  ],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/da2b8e96-UWH-023-Unterweisung_Leitern.pdf"
+ },
+ "UWH-020": {
+  "nr": "UWH-020",
+  "titel": "Sicheres Arbeiten mit Gehörschutz",
+  "abschnitte": [],
+  "datei": "/mnt/user-data/attachments/ec87b02e-c197-5135-8518-1f390bf90317/ee39e587-UWH-020-Unterweisung_Laermbereiche_Web.pdf"
+ }
+}

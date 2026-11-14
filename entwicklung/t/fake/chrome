@@ -1,0 +1,6 @@
+#!/bin/bash
+ziel=""; url=""
+for a in "$@"; do case "$a" in --print-to-pdf=*) ziel="${a#--print-to-pdf=}";; http*) url="$a";; esac; done
+cd /tmp/claude-0/t/fake && NODE_PATH=$(npm root -g) node -e '
+const { chromium } = require("playwright");
+(async () => { const b = await chromium.launch(); const p = await b.newPage(); await p.goto(process.argv[1]); await p.pdf({path: process.argv[2], preferCSSPageSize: true}); await b.close(); })();' "$url" "$ziel"

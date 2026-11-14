@@ -1,0 +1,852 @@
+
+
+######## Absturzsicherung.docx
+--- word/document.xml
+Thema:
+| Absturzsicherung, allgemein
+| Firma
+| Abteilung
+| Vorgesetzte(r)
+| Mitarbeiterin/Mitarbeiter
+| Unterschrift
+| Mitarbeiterin/Mitarbeiter
+| Unterschrift
+| Mitarbeiterin/Mitarbeiter
+| Unterschrift
+| Mitarbeiterin/Mitarbeiter
+| Unterschrift
+| Mitarbeiterin/Mitarbeiter
+| Unterschrift
+Begehen von Dächern:
+| Festgelegte Aufstiege benutzen
+Ausreichende Tragfähigkeit der Dachfläche sowie von Einbauteilen (z.B. Lichtkuppeln, Lichtbänder) prüfen
+Ausreichend Abstand (mindestens 2 m) zu absturzgefährdeten Stellen einhalten, feste Absperrung (Kette, Seil …) erforderlich.
+Gekennzeichnete Verkehrswege benutzen
+| Gerüste:
+| Nur gekennzeichnete und freigegebene Gerüste betreten
+Lose aufgelegte oder kippelnde Gerüstbeläge nicht betreten
+Gerüstebenen nur betreten, wenn der Seitenschutz (Handlauf, Knieleiste und Bordbrett) vollständig aufgebaut ist
+Durchstiegsklappen nach Durchstieg schließen
+| Laufstege/Gitterroste:
+| Nur befestigte Gitterroste betreten
+Bei lose verlegten Gitterrosten Information an Vorgesetzte(n)
+Bei Rutschgefahr (z.B. Vereisung) Laufstege nicht betreten
+| Persönliche Schutzausrüstungen gegen Absturz:
+| Benutzung nur nach Unterweisung mit praktischen Übungen
+Vorgegebene Anschlageinrichtungen benutzen
+Keine Veränderungen an der PSA gegen Absturz vornehmen
+PSA gegen Absturz nur zur Sicherung von Personen benutzen
+Vor Benutzung über Rettungskonzept informieren
+| Verlegen von Trapezblechen:
+| Ausführung der Arbeiten nur bei vorhandenen Schutzmaßnahmen (z.B. Schutznetz, Dachrandsicherung)
+Heruntergefallenes Material aus Schutznetzen entfernen
+Datum:
+Unterschrift des/der Unterweisenden
+--- word/footer1.xml
+0496553Stand 03/2021
+00Stand 03/2021
+-4889533168500
+--- word/header1.xml
+-45085152400UnterweisungsnachweisAbsturzsicherung
+00UnterweisungsnachweisAbsturzsicherung
+
+
+######## Bildschirmarbeit.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:                     Bildschirmarbeitsplätze
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+Bildschirmarbeitsplätze:
+| den Arbeitsplatz so einrichten, dass die Sehentfernung zum Bildschirm ca. 70 cm beträgt
+| zur Vermeidung ständiger Kopfbewegungen Konzepthalter installieren
+| Bürostuhl so einstellen, dass man aufrecht sitzen kann, Arme und Beine einen Winkel von ca. 90 Grad einnehmen und die Füße auf dem Boden stehen (ggf. eine leicht geneigte Fußstütze verwenden)
+| Schreibtischfläche möglichst frei halten, um sich ungehindert bewegen zu können
+| Bildschirm so aufstellen, dass der Lichteinfall hauptsächlich von der Seite her kommt, hierdurch werden Überblendungen oder Spiegelungen vermieden
+| bei zu starkem Lichteinfall (z.B. Sonne) vorhandene Jalousien so einstellen, dass Blendung vermieden wird
+Datum:			....................................................	..................................................
+Unterschrift des Unterweisenden	Unterschrift des Unterwiesenen
+
+
+######## Brandschutz.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:              Brandschutz / Brandbekämpfung
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+vor Beginn feuergefährlicher Arbeiten:
+brennbare Stoffe entfernen
+| Kollegen informieren
+| brennbare Stoffe sicher aufbewahren
+| in brandgefährdeten Bereichen:
+Rauchverbot beachten
+| Zündquellen vermeiden
+| Feuerschutztüren nicht blockieren
+| bei Entstehungsbrand:
+| Handfeuerlöscher einsetzen:
+| Sicherheitssplint ziehen
+| in Windrichtung löschen
+| von vorne nach hinten löschen
+| wenn möglich, mehrere Feuerlöscher gleichzeitig einsetzen
+| Elektrobrand mit CO2 löschen
+| Feuerlöscher freihalten
+| bei größeren Bränden:
+| Feuerwehr alarmieren
+| Fluchtwege freihalten
+| gefährdete Mitarbeiter informieren
+| Aufzüge in keinem Fall benutzen
+| nach Verlassen der Gebäude: Sammelpunkt aufsuchen
+| Feuerwehr einweisen
+Datum:			....................................................	..................................................
+Unterschrift des Unterweisenden	Unterschrift des Unterwiesenen
+
+
+######## Dokumentation_der_Unterweisung.docx
+--- word/document.xml
+Dokumentation der Unterweisung
+Bestätigung der Unterweisung nach § 4 der Unfallverhütungsvorschrift
+„Grundsätze der Prävention“ (DGUV Vorschrift 1)
+Unternehmen:
+----------------------------------------------------------------------------------------------------------------------
+(Name und Anschrift des Unternehmens)
+Betriebsteil, Arbeitsbereich:
+----------------------------------------------------------------------------------------------------------------------
+Durchgeführt von:
+----------------------------------------------------------------------------------------------------------------------
+Durchgeführt am:
+----------------------------------------------------------------------------------------------------------------------
+Unterweisungsinhalte (insbesondere Gefahrquellen, Maßnahmen zur Arbeitssicherheit und zum
+Gesundheitsschutz, Erste Hilfe):
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+Name und Unterschrift der Teilnehmer:
+Mit meiner Unterschrift bestätige ich, dass ich an der Unterweisung teilgenommen und den Inhalt verstanden habe.
+Name, Vorname,                                                                    Name, Vorname,
+Unterschrift                                                                             Unterschrift
+----------------------------------------------------------------------------    -----------------------------------------------------------------------------
+----------------------------------------------------------------------------    -----------------------------------------------------------------------------
+----------------------------------------------------------------------------    -----------------------------------------------------------------------------
+----------------------------------------------------------------------------    -----------------------------------------------------------------------------
+----------------------------------------------------------------------------    -----------------------------------------------------------------------------
+----------------------------------------------------------------------------    -----------------------------------------------------------------------------
+----------------------------------------------------------------------------    -----------------------------------------------------------------------------
+----------------------------------------------------------------------------    -----------------------------------------------------------------------------
+----------------------------------------------------------------------------    -----------------------------------------------------------------------------
+----------------------------------------------------------------------------    -----------------------------------------------------------------------------
+----------------------------------------------------------------------------    -----------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+Bemerkungen:
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------    ------------------------------------------------------------------------------
+Unterschrift des Trainers/Unterweisenden            Leitung z.K.
+
+
+######## Ermittlung_Unterweisungsbedarf.docx
+--- word/document.xml
+Ermittlung des individuellen Unterweisungsbedarfs
+Abteilung / Bereich   FORMTEXT      	Vorgesetzte/r   FORMTEXT
+Für (Name / Vorname)   FORMTEXT
+Funktion / Tätigkeit   FORMTEXT
+Fremdfirma	 FORMCHECKBOX   nein	 FORMCHECKBOX   ja (Firmenname)   FORMTEXT
+Es besteht folgender Schulungs-/Unterweisungsbedarf:
+Schulungsmaßnahme
+| Themen
+|  FORMCHECKBOX 	Unterweisung zum Arbeitsschutz [nach § 12 ArbSchG, § 9(2) BetrSichV und § 4 DGUV Vorschrift 1]
+|  FORMTEXT
+|  FORMCHECKBOX 	Unterweisung bei Tätigkeiten mit Gefahrstoffen(nach § 14 Abs. 2 GefStoffV)
+|  FORMTEXT
+|  FORMCHECKBOX 	Unterweisung zur manuellen Handhabung von Lasten (nach § 4 LasthandhabV)
+|  FORMTEXT
+|  FORMCHECKBOX 	Unterweisung für Beschäftigte in Lärmbereichen(nach § 11 LärmVibrationsArbSchV)
+|  FORMTEXT
+|  FORMCHECKBOX 	Unterweisung aufgrund anderer Gefährdungen / Belastungen (bitte angeben)
+|  FORMTEXT
+|  FORMCHECKBOX 	Unterweisung beim Umgang mit Laserstrahlung(nach § 8 (3) BGV B2))
+|  FORMTEXT
+|  FORMCHECKBOX 	Schulung befähigter Personen(nach § 2 (7) BetrSichV)
+|  FORMTEXT
+|  FORMCHECKBOX 	Schulung beauftragter Personen(nach § 6 (1) GbV)
+|  FORMTEXT
+|  FORMCHECKBOX 	Schulung sonstiger verantwortlicher Personen(nach § 6 (1) GbV)
+|  FORMTEXT
+|  FORMCHECKBOX 	Schulung aufgrund einer anderen Rechtsvorschrift(bitte angeben)
+|  FORMTEXT
+|  FORMCHECKBOX 	Seminar bei der Berufsgenossenschaft(Sicherheitsbeauftragter, Ausbilder, …)
+|  FORMTEXT
+|  FORMCHECKBOX 	SCC-Seminar für operativ tätige Führungskräfte nach Dokument Nr. 017 des SCC-Untersektorkomitees der TGA
+|  FORMTEXT
+|  FORMCHECKBOX 	SCC-Seminar für operativ tätige Mitarbeiter nach Dokument Nr. 018 des SCC-Untersektorkomitees der TGA
+|  FORMTEXT
+|  FORMCHECKBOX 	Erste-Hilfe-Grundausbildung / Erste-Hilfe-Training(nach § 26 DGUV Vorschrift 1)
+|  FORMTEXT
+|  FORMCHECKBOX 	Berufliche Fortbildung
+|  FORMTEXT
+| Schulungs-/Unterweisungsanlass
+| Erläuterungen / Bemerkungen
+|  FORMCHECKBOX 	Unterweisung vor Aufnahme der Tätigkeit(Erstunterweisung)
+|  FORMTEXT
+|  FORMCHECKBOX 	Wiederholungsunterweisung(mindestens einmal jährlich)
+|  FORMTEXT
+|  FORMCHECKBOX 	Unterweisung nach Änderung der Tätigkeit
+|  FORMTEXT
+|  FORMCHECKBOX 	Unterweisung nach Änderung der Funktion
+|  FORMTEXT
+|  FORMCHECKBOX 	Unterweisung bei Änderungen an Maschinen, Anlagen, Verfahren, Arbeitsstoffen, …
+|  FORMTEXT
+|  FORMCHECKBOX 	Unterweisung aus besonderem Anlass(Unfall, Störfall, Beinaheunfall, ...)
+|  FORMTEXT
+|  FORMCHECKBOX 	Unterweisung nach Fehlverhalten des Beschäftigten(Umgehen von Schutzeinrichtungen, Nichtbenutzen der PSA, …)
+|  FORMTEXT
+|  FORMCHECKBOX 	persönliches Interesse des Beschäftigten
+|  FORMTEXT
+|  FORMCHECKBOX 	andere Gründe(bitte angeben)
+|  FORMTEXT
+| Bemerkungen:   FORMTEXT
+Die Maßnahme sollte
+FORMCHECKBOX  kurzfristig	 FORMCHECKBOX  mittelfristig	 FORMCHECKBOX  längerfristig bis zum  FORMTEXT       (Datum)
+durchgeführt werden.
+Datum	Unterschrift Vorgesetzte/r	Unterschrift Beschäftigter
+
+
+######## Erste_Hilfe.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:                                Erste Hilfe
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+kleine Verletzungen:
+| selbst versorgen (z.B. Pflaster)
+| ins Verbandbuch eintragen
+| Vorgesetzten informieren
+| Beispiele:
+| leichte Verbrennungen kühlen (mit Wasser)
+| brennende Kleidung durch Abdecken löschen
+| Fremdkörper im Auge mit Wasser ausspülen (fließend Wasser/Augendusche)
+| mit ätzenden Stoffen benetzte Kleidung ausziehen und benetzte Körperstellen mit Wasser abspülen
+| Verstauchungen kühlen
+| gegebenenfalls anschließend Durchgangsarzt aufsuchen
+| schwere Verletzungen:
+| Erstversorgung durchführen
+| Ersthelfer herbeiholen
+| Rettungsdienst informieren:
+| Wo
+| Was
+| Wie viele Verletzte
+| Welche Verletzungen
+| Warten auf Rückfragen
+| Vorgesetzten informieren
+| Rettungsfahrzeuge einweisen
+| Rettungsarbeiten nicht behindern
+| ins Verbandbuch eintragen
+Datum:			....................................................		..................................................
+Unterschrift des Unterweisenden		Unterschrift des Unterwiesenen
+
+
+######## Hubarbeitsbuehnen.docx
+--- word/document.xml
+Unterweisungsnachweis
+Unterweisungsnachweis
+Thema:  Einsatz von Hubarbeitsbühnen
+| Datum:
+| Unternehmen
+|  |  |  | Unterweisender
+|  | Teilnehmer
+|  |  |  |  | Unterweisungspunkte (besprochene Themen kennzeichnen)
+| Betrieb
+allgemein
+| Betriebsanleitung/Prüfnachweise von regelmäßigen Prüfungen
+|  |  | Kennzeichnung und Hinweise an der Maschine
+|  |  | Einsatzgrenzen  (z.B. Wind, Neigung; Reichweite, zul. Last)
+|  |  | Sicherheitseinrichtungen, Reichweiten
+|  |  | Arbeitstägliche Sicht- und Funktionsprüfung
+|  |  | Lastenverteilungen und Kräfte an der Maschine, Gesamtgewicht
+|  |  | Bestimmungsgemäße Benutzung (z.B. kein Übersteigen, kein Kran), Peitscheneffekt
+| Übernahme und Transport
+| Führerscheinklasse bzgl. der Gewichtsklassen  im Straßenverkehr
+|  | Eignung von Zugfahrzeugen bzw. Transportmittels, Ladungssicherung
+|  | Höchstgeschwindigkeiten, Durchfahrtshöhen und -breiten
+| Aufstellung am Arbeitsort
+| Belastbarkeit von Böden/Bodenabdeckungen
+|  | Belastbarkeit von Decken, Fußböden und Bauteilen in Gebäuden
+|  |  | Aufstellung, Abstützfolge der Stützen im Gefälle
+|  |  | Lastverteilungen, notwendige Fläche der Unterbauung
+|  |  | Gefahr durch Lastübernahme
+|  |  | Gefahren anderer Gewerke, Krananlagen
+|  |  | Verdeckte Gefahren z. B. Kanäle, mangelhafte Abdeckungen
+|  | Sondereinsatz
+| Arbeiten im öffentlichen Verkehrsraum
+|  |  | Baum- und Ausästarbeiten
+|  |  | Arbeiten unter Spannung, Abstände zu Freileitungen
+| Unterschrift Unterweisender
+| Unterschrift Teilnehmer
+
+
+######## Instandhaltung.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:                            Instandhaltung
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+Instandhaltungsarbeiten:
+| gegenseitige Gefährdungen vermeiden
+| mit Instandhaltungsarbeiten erst nach Übergabe der Maschine beginnen
+| vor Kontakt mit hautgefährdenden Stoffen geeigneten Hautschutz verwenden
+| vor Beginn der Arbeiten notwendige Informationen einholen
+| höher gelegene Arbeiten nur von geeigneten Aufstiegen aus durchführen (z.B. Leitern, Tritte)
+| Arbeiten an spannungsführenden Teilen nur von Elektrofachkraft durchführen lassen
+| für Spannungsfreiheit der Maschine sorgen, z.B. Netzstecker ziehen bzw. Hauptschalter in AUS-Position mit Sicherung gegen Wiedereinschalten
+| auf gespeicherte Energien achten, z.B. Druckbehälter, Hydraulikanlagen aber auch möglicherweise herabfallende Teile
+| vor Freigabe Probelauf durchführen, danach Maschine freigeben
+Datum:			....................................................	..................................................
+Unterschrift des Unterweisenden	Unterschrift des Unterwiesenen
+
+
+######## Lackieren.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:         Lackieren und vorbereitende Arbeiten
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+Brandgefahr:
+| Rauchverbot beachten
+| Zündquellen vermeiden
+| zur Verringerung der Brandlast Abdeckpapiere mindestens einmal am Tag aus dem Arbeitsbereich entfernen
+| Gefahrstoffe:
+| bei Freisetzung gefahrstoffhaltiger Dämpfe technische Lüftung in Betrieb nehmen; sollte diese nicht ausreichen, Atemschutz verwenden
+| Schleifstäube an der Schleifmaschine absaugen; falls nicht ausreichend, Feinstaubmaske verwenden
+| Behälter zum Umfüllen von Gefahrstoffen wie Lösemittel, Verdünnung u.a. kennzeichnen (Name, Gefahrenkennzeichnung)
+| Mischraum:
+| Lüftungs- bzw. Absaugeinrichtungen nicht verstellen
+| Feuerschutztüren nicht festsetzen
+| Lackieren:
+| Lackieren nur in den dafür zugelassenen Räumen oder Bereichen unter Verwendung einer wirksamer Absaugung
+| vor dem Lackieren Türen von Lackierkabinen schließen
+| ggf. Atemschutz verwenden
+| Filtermatten regelmäßig reinigen
+Datum:			....................................................	..................................................
+Unterschrift des Unterweisenden	Unterschrift des Unterwiesenen
+
+
+######## Leitern.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:                    Leitern und Kleingerüste
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+Absturz von Leiter droht:
+| bei losem und rutschigem Untergrund
+| bei einseitigem Anlegen
+| wenn Anstellwinkel zu flach oder zu steil
+| richtiger Anstellwinkel zwischen 65°-75°
+| durch defekte Leitern
+| bei schadhaften Leitern Info an Vorgesetzten
+| bei zu schmalem Leiterfuß
+| durch fehlende Haltemöglichkeiten beim Transport sperriger Lasten
+| beim Übersteigen von der Leiter aus
+| Leiterüberstand mindestens 1m. wenn andere Haltemöglichkeiten fehlen
+| bei rutschigen Leitersprossen
+| bei abgetragenen (profillosen) Schuhsohlen
+| Auswahl geeigneter Leitern (und Tritte):
+| bei länger andauernden Arbeiten möglichst Stehleitern mit großformatigen Aufstandsflächen benutzen
+| Zum Aufstieg ungeeignet sind
+Stühle, insbesondere Rollenstühle
+umgedrehte Eimer
+Getränke-Kisten
+| Kleingerüste:
+| vollständig aufbauen nach Gebrauchsanleitung des Herstellers
+| Handlauf, Knieleiste und Bordbrett an allen Absturzkanten anbringen
+| gegen Wegrollen durch Arretieren der Räder sichern
+| nur verfahren, wenn sich keine Personen darauf befinden
+| gegen Einsinken auf losem Untergrund sichern
+| auf Verkehrswegen gegen An-/Umfahren durch Fahrzeuge sichern
+Datum:			....................................................	..................................................
+Unterschrift des Unterweisenden	Unterschrift des Unterwiesenen
+
+
+######## Montagearbeiten.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:              Montagearbeiten auf Baustellen
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+Fahrt zur Baustelle:
+| Transportgut, wie Gasflaschen, Werkzeuge oder Bauteile im Wagen sicher befestigen.
+| Dachlasten, wie z.B. Leitern, sicher befestigen
+| überzeugen Sie sich, dass sich im Fahrerbereich des Wagens eine Warnweste befindet
+| bei Unfall, Panne, o.ä. vor dem Verlassen des Fahrzeugs Warnweste überziehen
+| Montageanweisung:
+| Sicherheitshinweise in Montageanweisungen beachten
+| Persönliche Schutzausrüstungen:
+| auf Baustellen gilt grundsätzlich: Schutzhelm und Schutzschuhe mit durchtrittssicherer Sohle benutzen
+| elektrische Gefährdung:
+| elektrische Maschinen u.a. nur am Baustromverteiler anschließen
+| nur Geräte und Leitungen verwenden, die für den Betrieb auf Baustellen geeignet sind
+| Baustellenkoordinator:
+| Weisungen des Baustellenkoordinators zur Vermeidung gegenseitiger Gefährdungen sind in jedem Fall zu beachten
+| für jeden gilt: keine Arbeiten durchführen, die andere gefährden können
+Datum:			....................................................	..................................................
+Unterschrift des Unterweisenden	Unterschrift des Unterwiesenen
+
+
+######## Nachweis_Gefahrstoffverordnung.docx
+--- word/document.xml
+Unterweisungsnachweis § 14 Gefahrstoffverordnung
+| Firma:
+|  FORMTEXT
+| Abteilung:
+|  FORMTEXT
+| Vorgesetzter (Meister):
+|  FORMTEXT
+| Datum der Unterweisung:
+|  FORMTEXT
+| Unterweisung vor Aufnahme der Tätigkeit
+|  FORMCHECKBOX
+| Wiederholungsunterweisung (mind. jährlich)
+|  FORMCHECKBOX
+| Thema:
+|  FORMTEXT
+Stichworte:  FORMTEXT
+Teilnehmer:
+| Arbeitsplatz:
+| Tätigkeit:
+| Unterschrift:
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+Ort, Datum:  FORMTEXT
+Unterschrift des Unterweisenden
+
+
+######## Nachweis_Jugendarbeitsschutzgesetz.docx
+--- word/document.xml
+Unterweisungsnachweisgem. § 29 Jugendarbeitsschutzgesetz
+| Firma:
+|  FORMTEXT
+| Abteilung:
+|  FORMTEXT
+| Vorgesetzter (Meister):
+|  FORMTEXT
+| Ort u. Datum der Unterweisung:
+|  FORMTEXT
+| Unterweisung vor Beginn der Beschäftigung über Unfall- und Gesundheitsgefahren
+|  FORMCHECKBOX
+| Unterweisung vor der Beschäftigung an Maschinen oder gefährlichen Arbeitsstellen
+|  FORMCHECKBOX
+| Unterweisung vor der Beschäftigung mit gefährlichen Arbeitsstoffen
+|  FORMCHECKBOX
+| Unterweisung über das Verhalten zur Vermeidung bzw. Abwendung der Gefahren
+|  FORMCHECKBOX
+| Wiederholungsunterweisung (mindestens halbjährlich)
+|  FORMCHECKBOX
+| Thema:
+|  FORMTEXT
+Stichworte:  FORMTEXT
+Teilnehmer:
+| Arbeitsplatz:
+| Tätigkeit:
+| Unterschrift:
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+|  FORMTEXT
+Datum:  FORMTEXT
+Unterschrift des Unterweisenden
+
+
+######## Notfall-Rufnummern.docx
+--- word/document.xml
+Unfall melden:  FORMTEXT      		 FORMTEXT
+Ersthelfer:  FORMTEXT      		 FORMTEXT
+Ersthelfer:  FORMTEXT      		 FORMTEXT
+Sanitätsraum:  FORMTEXT      		 FORMTEXT
+Raum/Etage usw.
+Rettungsdienst:  FORMTEXT      		 FORMTEXT
+FORMTEXT      	 FORMTEXT
+Arzt:  FORMTEXT      		 FORMTEXT
+FORMTEXT      	 FORMTEXT
+Durchgangsarzt:  FORMTEXT      		 FORMTEXT
+FORMTEXT      	 FORMTEXT
+Krankenhaus:  FORMTEXT      		 FORMTEXT
+FORMTEXT      	 FORMTEXT
+Giftnotruf:  FORMTEXT      		 FORMTEXT
+zuständigerSicherheitsbeauftragter:  FORMTEXT      		 FORMTEXT
+zuständigeFachkraft f. Arbeitssicherheit:  FORMTEXT      		 FORMTEXT
+zuständigerBetriebsarzt:  FORMTEXT      		 FORMTEXT
+Der für Sie zuständige Präventionsdienst:
+FORMTEXT
+FORMTEXT
+NOTFALL
+Rufnummern
+110 oder 112
+
+
+######## Richtige_Unterweisung.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:                   Die richtige Unterweisung
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+Vorbereitungen:
+| Termin und Ort abstimmen
+| Themen und Inhalte auswählen
+| Störungen vermeiden
+| Allgemeine Unterweisungen:
+| Erläuterung betrieblicher Abläufe
+| Verhalten in Notfällen
+| Verhalten im Brandfall
+| allgemeine Schutzmaßnahmen an Maschinen und betrieblichen Einrichtungen
+| Persönliche Schutzausrüstungen
+| Arbeitsplatzbezogene Unterweisungen:
+Störungen und Gefährdungen vermeiden, auch durch andere Mitarbeiter
+| praxisnahe Themen ansprechen
+| sicherheitsgerechtes Arbeiten demonstrieren
+| mit den Teilnehmern üben
+| Einzelunterweisungen:
+| Unterweisung unter vier Augen
+| persönliches Fehlverhalten besprechen
+| Maßnahmen vereinbaren
+| Erfolg der vereinbarten Maßnahmen kontrollieren
+Datum:			....................................................	..................................................
+Unterschrift des Unterweisenden	Unterschrift des Unterwiesenen
+
+
+######## Schleifen.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:                                Schleifen
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+Schleifen:
+| Augenschutz benutzen
+| brennbare Stoffe aus dem Arbeitsbereich entfernen
+| Gefährdungen von Kollegen durch Funkenflug vermeiden
+| Gehörschutz verwenden
+| Schleifmaschinen sicher halten, ggf. zweiten Griff benutzen
+| Schruppen und Trennen nur mit Schutzhaube
+| Werkstücke sicher befestigen
+| nach Beendigung der Arbeiten Maschine möglichst in geeigneter Halterung ablegen
+| nur elektrisch geprüfte Maschinen einsetzen
+| keine Maschinen mit offensichtlichen Mängeln benutzen
+| geeignete Scheiben verwenden
+| Schleifstäube absaugen, ggf. Atemschutz benutzen
+| Leichtmetallstäube immer absaugen (Explosionsgefahr)
+| bei Verwendung von Ständerschleifmaschinen Werkstückauflage und Schutzhaube entsprechend dem Scheibenverschleiß nachstellen
+| bei Bandschleifern darf die Schleifbandkante nicht überstehen (Schnittgefahr)
+Datum:			....................................................	..................................................
+Unterschrift des Unterweisenden	Unterschrift des Unterwiesenen
+
+
+######## Schweissen.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:                                Schweißen
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+elektrische Gefährdungen:
+| auf Kabelschäden achten
+| fehlende oder beschädigte Isolierkappen ersetzen
+| Schweißstromrückleitung gut leitfähig anbringen
+| vor Ablegen der Schweißzange Elektrodenreste herausnehmen
+| Teile zum Schweißen am Kranhaken isolierend aufhängen (Isolierwirbel, Hanfseile oder Hebebänder)
+| Schutzkleidung:
+| geeignete Schutzhandschuhe und Sicherheitsschuhe tragen, ggf. mit Ledergamaschen
+| Haut möglichst vollständig durch Arbeitskleidung abdecken
+| Kleidungsbrand vermeiden durch Verwendung schwerentflammbarer Arbeitsanzüge (keine Verschmutzung durch Öle, Fette u.a.)
+| bei Arbeiten an heißen Teilen Lederschürze verwenden
+| Gesicht und Hals mit Schweißerschutzcreme gegen UV-Strahlen schützen
+| Augen vor Verblitzen schützen
+| Schweißrauche:
+| Schweißrauche absaugen
+| Absaugeinrichtung wirksam positionieren
+| Brand- u. Explosionsschutz:
+| brennbare Stoffe aus dem Gefahrenbereich entfernen
+| Gefährdungen von Kollegen durch Verblitzen und wegfliegende Schweißperlen vermeiden
+| erhöhte elektrische Gefährdung:
+isolierende Zwischenlagen verwenden
+| nur geeignete Schweißgeräte verwenden (K, S)
+| Schweißen in Behältern:
+| brennerintegrierte Absaugung oder Atemschutzhauben benutzen
+| Schweißbrenner nicht in unten geschlossenen Behältern ablegen (Erstickungsgefahr), Schutzgasventil schließen
+Datum:			....................................................	..................................................
+Unterschrift des Unterweisenden	Unterschrift des Unterwiesenen
+
+
+######## Umform_Trennmaschinen.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:               Umform- und Trennmaschinen
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+Vorbereitende Arbeiten:
+| keine Einrichtmaßnahmen durchführen (z.B. Einrichten von Handschutzmaßnahmen); hierfür ist der Presseneinrichter zuständig
+| Werkstückentnahme und Ablage so gestalten, dass diese möglichst bequem erfolgen kann
+| Persönliche Schutzausrüstung:
+| Gehörschutz benutzen
+Sicherheitsschuhe tragen
+beim Umgang mit scharfkantigen Teilen Schutzhandschuhe tragen
+bei Umgang mit verölten Teilen Hautschutz verwenden
+| Auswahl geeigneter Handschutzmaßnahmen an Pressen durch den Einrichter:
+Lichtvorhangsteuerung zur automatischen Hubauslösung bei gleichförmigem Arbeitstakt
+| Verwendung einer Lichtvorhangabsicherung zur Verhinderung der Hubauslösung bei Unterbrechen des Lichtstrahls
+| Verhindern des Erreichens von Quetschstellen durch feste Verkleidungen
+| Zweihandschaltung: Ortsbindung der Hände bei Hubauslösung außerhalb des Gefahrenbereichs
+| Auswahl geeigneter Handschutzmaßnahmen an Gesenkbiegepressen durch den Einrichter:
+| Fußauslösung  nur zulässig, wenn die freie Hubhöhe maximal 8 mm ist
+| Zweihandschaltung  Ortsbindung der Hände bei Hubauslösung außerhalb des Gefahrenbereichs
+| Kombinationsschaltung aus Zweihand- und Fußauslösung  Handschutz siehe zuvor
+| Verringerung der Schließgeschwindigkeit  hierbei bleibt genügend Zeit, die Hände aus dem Gefahrenbereich zu entfernen
+| Schwenkbiegemaschine:
+| nicht im Schwenkbereich der Maschine aufhalten
+| Quetschgefahr der Finger beim Zusammenfahren der Werkzeuge
+| Tafelschere:
+| Handschutz auf eine freie Höhe von maximal 8 mm einstellen, dadurch wird verhindert, dass Finger durch Niederhalter gequetscht oder abgeschnitten werden
+| darauf achten, dass sich die Hände nicht zwischen Blech und Auflagetisch befinden (Quetschgefahr)
+| auf keinen Fall die Schere von der Rückseite her bedienen (Schnittgefahr durch ungeschützte Messerbalken)
+| Walzenbiegemaschinen:
+| Arbeiten nur ohne Handschuhe (Handschuhe samt Finger können in den Walzenspalt eingezogen werden)
+| Verhalten bei Störungen:
+| Störungen nicht selbst beheben, Vorgesetzten informieren
+| Arbeitsende:
+| Maschine ausschalten und gegen unbefugtes Benutzen sichern
+Datum:			....................................................	..................................................
+Unterschrift des Unterweisenden	Unterschrift des Unterwiesenen
+
+
+######## Unterweisungsnachweis_Erste_Hilfe.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:                                Erste Hilfe
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+kleine Verletzungen:
+| selbst versorgen (z.B. Pflaster)
+| ins Verbandbuch eintragen
+| Vorgesetzten informieren
+| Beispiele:
+| leichte Verbrennungen kühlen (mit Wasser)
+| brennende Kleidung durch Abdecken löschen
+| Fremdkörper im Auge mit Wasser ausspülen (fließend Wasser/Augendusche)
+| mit ätzenden Stoffen benetzte Kleidung ausziehen und benetzte Körperstellen mit Wasser abspülen
+| Verstauchungen kühlen
+| gegebenenfalls anschließend Durchgangsarzt aufsuchen
+| schwere Verletzungen:
+| Erstversorgung durchführen
+| Ersthelfer herbeiholen
+| Rettungsdienst informieren:
+| Wo
+| Was
+| Wie viele Verletzte
+| Welche Verletzungen
+| Warten auf Rückfragen
+| Vorgesetzten informieren
+| Rettungsfahrzeuge einweisen
+| Rettungsarbeiten nicht behindern
+| ins Verbandbuch eintragen
+Datum:			....................................................		..................................................
+Unterschrift des Unterweisenden		Unterschrift des Unterwiesenen
+
+
+######## Zerspanung.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:         Arbeiten mit Zerspanungsmaschinen
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+Zerspanungsmaschinen wie Drehmaschinen, Fräsmaschinen,
+Bohrmaschinen:
+vor Hautkontakt mit Kühlschmierstoffen geeigneten Hautschutz verwenden
+| Schmuck und Armbanduhren ablegen
+| auf enganliegende Kleidung achten
+| geeigneten Spänehaken verwenden
+| Späne mit Handbesen entfernen
+| keine Handschuhe beim Bohren tragen
+| bei wegfliegenden Spänen Schutzbrille benutzen
+| Werkstücke fest einspannen
+| Ausblasen der Werkstücke nur mit lärmarmen Düsen
+| Schutzeinrichtungen verwenden, in keinem Fall manipulieren
+Datum:			....................................................	..................................................
+Unterschrift des Unterweisenden	Unterschrift des Unterwiesenen
+
+
+######## kfz_Werkstaetten.docx
+--- word/document.xml
+Unterweisungsnachweis
+| Thema:             Gefährdungen in Kfz-Werkstätten
+| Firma
+| Abteilung
+| Vorgesetzter
+| Mitarbeiter
+| Mitarbeiter
+| Mitarbeiter
+Persönliche Schutzausrüstung:
+| bei Arbeiten mit möglichen Augenverletzungen (z.B. unter dem Fahrzeug, mit Schleifmaschinen, an der Fahrzeugelektrik) Schutzbrille benutzen
+| bei Gefahr von Hautverletzungen (z.B. durch heiße Teile, scharfe Kanten, hautbelastende Stoffe) Schutzhandschuhe tragen
+| ist bei Arbeiten mit hautbelastenden Stoffen, wie z.B. Ölen und Kraftstoffen, die Benutzung von Schutzhandschuhen nicht möglich, geeigneten Hautschutz benutzen
+| bei Schweißarbeiten vollständige Schweißerschutzausrüstung benutzen und auf saubere Kleidung achten
+| Gefahrstoffe:
+| Umgang mit Gefahrstoffen möglichst vermeiden
+| keine leichtentzündlichen Bremsenreiniger oder Entfettungsmittel verwenden
+| ist der Umgang mit Gefahrstoffen zwingend erforderlich (z.B. Benzol in Vergaserkraftstoffen oder Rußpartikel in Dieselabgasen), sind die erforderlichen Schutzmaßnahmen nach der vorliegenden Betriebsanweisung zu beachten
+| Arbeiten mit laufendem Motor nur unter Verwendung einer Absauganlage
+| Hebebühnen:
+| Fahrzeuge sicher aufnehmen; verschlissene Gummiauflagen ersetzen
+| beim Herunterfahren der Bühne auf Kollegen im Bewegungsbereich achten
+| Brandgefahr:
+| Rauchverbot beachten
+| bei Flüssigkeitsbrand speziell im Motorraum CO2 –Löscher,
+bei Feststoffbrand Pulverlöscher,
+bei Personenbrand sofort einen Feuerlöscher verwenden
+| Batterien nur in Räumen laden, in denen im oberen Bereich Lüftungsöffnungen vorhanden sind  Explosionsgefahr durch Wasserstoff
+| Rollenbremsprüfstände:
+| bei Nichtbenutzung abdecken
+| Hochspannungszündanlagen:
+| vor Beginn der Arbeiten an Hochspannungszündanlagen Zündung ausschalten
+| Arbeiten an Airbags:
+| nur durch geschultes Fachpersonal
+| vor Beginn der Arbeiten Batterie abklemmen
+| Anschlagen von Lasten:
+| geeignete Anschlagmittel verwenden, z.B. Kettengehänge mit Seilkürzern; Ketten nicht durch Knoten oder mittels Schrauben kürzen
+Datum:			....................................................	..................................................
+Unterschrift des Unterweisenden	Unterschrift des Unterwiesenen

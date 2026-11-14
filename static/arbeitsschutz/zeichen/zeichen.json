@@ -1,0 +1,597 @@
+[
+{
+"code": "GHS01",
+"name": "Explodierende Bombe",
+"gruppe": "GHS-Gefahrenpiktogramme"
+},
+{
+"code": "GHS02",
+"name": "Flamme",
+"gruppe": "GHS-Gefahrenpiktogramme"
+},
+{
+"code": "GHS03",
+"name": "Flamme über einem Kreis",
+"gruppe": "GHS-Gefahrenpiktogramme"
+},
+{
+"code": "GHS04",
+"name": "Gasflasche",
+"gruppe": "GHS-Gefahrenpiktogramme"
+},
+{
+"code": "GHS05",
+"name": "Ätzwirkung",
+"gruppe": "GHS-Gefahrenpiktogramme"
+},
+{
+"code": "GHS06",
+"name": "Totenkopf mit gekreuzten Knochen",
+"gruppe": "GHS-Gefahrenpiktogramme"
+},
+{
+"code": "GHS07",
+"name": "Ausrufezeichen",
+"gruppe": "GHS-Gefahrenpiktogramme"
+},
+{
+"code": "GHS08",
+"name": "Gesundheitsgefahr",
+"gruppe": "GHS-Gefahrenpiktogramme"
+},
+{
+"code": "GHS09",
+"name": "Umwelt",
+"gruppe": "GHS-Gefahrenpiktogramme"
+},
+{
+"code": "PI001",
+"name": "Maximale Belastung",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI002",
+"name": "Nur eine Person",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI003",
+"name": "Nicht hinauslehnen",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI004",
+"name": "Ebener und tragfähiger Untergrund",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI005",
+"name": "Witterungsbedingungen",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI006",
+"name": "Anlegewinkel beachten",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI007",
+"name": "Nur an sichere Flächen anlegen",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI008",
+"name": "Die obersten 3 Sprossen nicht besteigen",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI009",
+"name": "Die obersten 4 Sprossen nicht besteigen",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI010",
+"name": "Mindestens 1 m Überstand",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI011",
+"name": "Stahlspitzen auf nachgiebigem Untergrund",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI012",
+"name": "Nicht übertreten",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI013",
+"name": "Gespannte Spreizvorrichtung",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI014",
+"name": "Nicht als Anlegeleiter nutzen",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI015",
+"name": "Nicht übersteigen",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "PI016",
+"name": "Spreizsicherung einlegen",
+"gruppe": "Leiter-Piktogramme"
+},
+{
+"code": "D-W021",
+"name": "Warnung vor explosionsfähiger Atmosphäre",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W001",
+"name": "Allgemeines Warnzeichen",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W002",
+"name": "Warnung vor explosionsgefährlichen Stoffen",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W003",
+"name": "Warnung vor radioaktiven Stoffen oder ionisierender Strahlung",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W004",
+"name": "Warnung vor Laserstrahl",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W005",
+"name": "Warnung vor nicht ionisierender Strahlung",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W006",
+"name": "Warnung vor magnetischem Feld",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W007",
+"name": "Warnung vor Hindernissen am Boden",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W008",
+"name": "Warnung vor Absturzgefahr",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W009",
+"name": "Warnung vor Biogefährdung",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W010",
+"name": "Warnung vor niedriger Temperatur/Frost",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W011",
+"name": "Warnung vor Rutschgefahr",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W012",
+"name": "Warnung vor elektrischer Spannung",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W014",
+"name": "Warnung vor Flurförderzeugen",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W015",
+"name": "Warnung vor schwebender Last",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W016",
+"name": "Warnung vor giftigen Stoffen",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W017",
+"name": "Warnung vor heißer Oberfläche",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W018",
+"name": "Warnung vor automatischem Anlauf",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W019",
+"name": "Warnung vor Quetschgefahr",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W021",
+"name": "Warnung vor feuergefährlichen Stoffen",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W023",
+"name": "Warnung vor ätzenden Stoffen",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W024",
+"name": "Warnung vor Handverletzungen",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W025",
+"name": "Warnung vor gegenläufigen Rollen",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W026",
+"name": "Warnung vor Gefahren durch das Aufladen von Batterien",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W027",
+"name": "Warnung vor optischer Strahlung",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W028",
+"name": "Warnung vor brandfördernden Stoffen",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W029",
+"name": "Warnung vor Gasflaschen",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "W041",
+"name": "Warnung vor Erstickungsgefahr",
+"gruppe": "Warnzeichen"
+},
+{
+"code": "D-E019",
+"name": "Notausstieg",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "E001",
+"name": "Rettungsweg/Notausgang links",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "E002",
+"name": "Rettungsweg/Notausgang rechts",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "E003",
+"name": "Erste Hilfe",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "E004",
+"name": "Notruftelefon",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "E007",
+"name": "Sammelstelle",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "E009",
+"name": "Arzt",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "E010",
+"name": "Automatisierter Externer Defibrillator AED",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "E011",
+"name": "Augenspüleinrichtung",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "E012",
+"name": "Notdusche",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "E013",
+"name": "Krankentrage",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "E016",
+"name": "Notausstieg mit Fluchtleiter",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "E017",
+"name": "Rettungsausstieg",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "WSE001",
+"name": "Öffentliche Rettungsausrüstung",
+"gruppe": "Rettungszeichen"
+},
+{
+"code": "M001",
+"name": "Allgemeines Gebotszeichen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M003",
+"name": "Gehörschutz benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M004",
+"name": "Augenschutz benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M008",
+"name": "Fußschutz benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M009",
+"name": "Handschutz benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M010",
+"name": "Schutzkleidung benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M011",
+"name": "Hände waschen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M012",
+"name": "Handlauf benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M013",
+"name": "Gesichtsschutz benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M014",
+"name": "Kopfschutz benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M015",
+"name": "Warnweste benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M017",
+"name": "Atemschutz benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M018",
+"name": "Auffanggurt benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M020",
+"name": "Rückhaltesystem benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M021",
+"name": "Vor Wartung oder Reparatur freischalten",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M022",
+"name": "Hautschutzmittel benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M023",
+"name": "Übergang benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M024",
+"name": "Fußgängerweg benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "M026",
+"name": "Schutzschürze benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "WSM001",
+"name": "Rettungsweste benutzen",
+"gruppe": "Gebotszeichen"
+},
+{
+"code": "D-P006",
+"name": "Zutritt für Unbefugte verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "D-P022",
+"name": "Besteigen für Unbefugte verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P001",
+"name": "Allgemeines Verbotszeichen",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P002",
+"name": "Rauchen verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P003",
+"name": "Keine offene Flamme",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P004",
+"name": "Für Fußgänger verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P005",
+"name": "Kein Trinkwasser",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P006",
+"name": "Für Flurförderzeuge verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P007",
+"name": "Kein Zutritt für Personen mit Herzschrittmachern",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P010",
+"name": "Berühren verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P011",
+"name": "Mit Wasser löschen verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P012",
+"name": "Keine schwere Last",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P013",
+"name": "Eingeschaltete Mobiltelefone verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P014",
+"name": "Kein Zutritt für Personen mit Implantaten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P015",
+"name": "Hineinfassen verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P016",
+"name": "Mit Wasser spritzen verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P020",
+"name": "Aufzug im Brandfall nicht benutzen",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P021",
+"name": "Mitführen von Hunden verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P022",
+"name": "Essen und Trinken verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P023",
+"name": "Abstellen oder Lagern verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P024",
+"name": "Betreten der Fläche verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P027",
+"name": "Personenbeförderung verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P028",
+"name": "Benutzen von Handschuhen verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P031",
+"name": "Schalten verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "P042",
+"name": "Für schwangere Frauen verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "WSP001",
+"name": "Laufen verboten",
+"gruppe": "Verbotszeichen"
+},
+{
+"code": "F001",
+"name": "Feuerlöscher",
+"gruppe": "Brandschutzzeichen"
+},
+{
+"code": "F002",
+"name": "Löschschlauch",
+"gruppe": "Brandschutzzeichen"
+},
+{
+"code": "F003",
+"name": "Feuerleiter",
+"gruppe": "Brandschutzzeichen"
+},
+{
+"code": "F004",
+"name": "Mittel und Geräte zur Brandbekämpfung",
+"gruppe": "Brandschutzzeichen"
+},
+{
+"code": "F005",
+"name": "Brandmelder",
+"gruppe": "Brandschutzzeichen"
+},
+{
+"code": "F006",
+"name": "Brandmeldetelefon",
+"gruppe": "Brandschutzzeichen"
+}
+]
