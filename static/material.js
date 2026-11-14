@@ -5,7 +5,7 @@ let MAT_META = null;
 async function matMeta() { if (!MAT_META) MAT_META = await api("material/meta"); return MAT_META; }
 const MAT_REITER = [["Holzwerkstoffe", "holzwerkstoffe"], ["Massivholz", "massivholz"], ["Beschichtungsstoffe", "beschichtung"],
   ["Chemisch-technische Produkte", "chemie"], ["Beschläge", "beschlaege"], ["Beschlägesets", "sets"], ["Artikel", "artikel"], ["Reste & Platten", "reste"], ["Werkzeuge", "werkzeuge"],
-  ["Auftrag buchen", "auftrag"], ["Lager buchen", "lager"], ["Statistik", "statistik"]];
+  ["Auftrag buchen", "auftrag"], ["Lager buchen", "lager"], ["Preise einlesen", "preise"], ["Statistik", "statistik"]];
 const matFilter = {};
 let matSichtbar = [];
 const mengeTxt = (v, e) => `${n2(v, Math.abs(v % 1) > 0.0001 ? 3 : 0)} ${esc(e || "")}`;
@@ -32,6 +32,7 @@ async function ansichtMaterial(teil = "holzwerkstoffe", sub) {
   if (teil === "auftrag") return auftragBuchen(sub);
   if (teil === "lager") return lagerBuchen();
   if (teil === "statistik") return materialStatistik();
+  if (teil === "preise") return preisImport();
   if (teil === "reste") return restelager(sub);
   if (teil === "werkzeuge") return sub === "import" ? werkzeugImport() : werkzeugListe();
   if (!meta.kategorien[teil]) teil = "holzwerkstoffe";
@@ -548,4 +549,65 @@ async function restelager(markiert) {
   };
   const laden = async () => { d = await api("reste"); zeichnen(); };
   await laden();
+}
+
+
+// ---------- Einkaufspreise von Lieferanten einlesen (Datanorm, CSV, Excel) ----------
+const PREIS_IMPORT = {lieferant_id: "", rabatt: "", alle: false, datei: null, zuordnung: null, erg: null};
+async function preisImport() {
+  matKopf("preise");
+  const lieferanten = (await api("lieferanten?status=aktiv")).filter(l => !["Mitarbeiter", "Finanzamt", "Krankenkasse"].includes(l.gruppe || ""));
+  const P = PREIS_IMPORT, kann = darf("material", 2);
+  const zeigen = () => {
+    const r = P.erg;
+    const pzt = v => v == null ? "–" : `${v > 0 ? "+" : ""}${zahlDE(v, 1)} %`;
+    $("#inhalt").innerHTML = `<div class="titel"><h2>Einkaufspreise einlesen</h2></div>
+      <p class="hinweis" style="margin-top:-6px">Preisdatei des Lieferanten (Datanorm 4 oder 5, CSV oder Excel) einlesen. Abgeglichen wird über die <b>Bestellnummer</b> im Materialstamm, sonst über die EAN.
+        Übernommen werden nur die Preise, die unten angehakt sind – Verkaufspreise mit Aufschlag werden dabei nachgeführt.</p>
+      <div class="form" style="grid-template-columns:1fr">
+        ${zeile("Lieferant", `<select id="piL"><option value="">– alle Lieferanten –</option>${lieferanten.map(l => `<option value="${l.id}" ${String(l.id) === String(P.lieferant_id) ? "selected" : ""}>${esc(l.kurzname)}</option>`).join("")}</select>
+          <label><input type="checkbox" id="piA" ${P.alle ? "checked" : ""}> auch Material anderer Lieferanten abgleichen</label>`)}
+        ${zeile("Rabatt auf Listenpreise", `<input id="piR" value="${esc(P.rabatt)}" style="width:80px"> % <span class="hinweis">nur für Bruttopreise (Datanorm-Preiskennzeichen 1); Tabellen gelten als Nettopreise</span>`)}
+        ${zeile("Datei", `<label class="btn prim">📄 Preisdatei wählen<input type="file" id="piD" hidden></label> <span class="hinweis">${P.datei ? esc(P.datei.name) : ""}</span>`)}
+      </div>
+      <div id="piErg">${!r ? "" : `
+        <div class="kachel" style="margin:12px 0">${esc(r.format)}: <b>${r.artikel}</b> Artikel in der Datei · <b>${r.treffer.length}</b> Treffer im Materialstamm (von ${r.materialien} geprüften) ·
+          davon ${r.treffer.filter(t => !t.gleich).length} mit neuem Preis${r.hinweis ? `<div class="hinweis" style="color:var(--rot)">${esc(r.hinweis)}</div>` : ""}</div>
+        ${r.kopf && r.kopf.length ? `<details ${r.treffer.length ? "" : "open"} style="margin-bottom:10px"><summary>Spalten der Tabelle zuordnen</summary><div class="form" style="grid-template-columns:1fr;margin-top:6px">
+          ${[["artnr", "Artikel-/Bestellnummer"], ["ean", "EAN"], ["text", "Bezeichnung"], ["preis", "Preis (netto)"], ["einheit", "Einheit"], ["pe", "Preiseinheit (je …)"]].map(([k, t]) =>
+            zeile(t, `<select data-pz="${k}"><option value="-1">–</option>${r.kopf.map((h, i) => `<option value="${i}" ${r.zuordnung[k] === i ? "selected" : ""}>${esc(h || "Spalte " + (i + 1))}</option>`).join("")}</select>`)).join("")}
+          </div><button class="btn" id="piNeu">Neu abgleichen</button></details>` : ""}
+        ${r.treffer.length ? `<table class="liste"><tr><th><input type="checkbox" id="piAlle"></th><th>Material</th><th>Bestellnr.</th><th class="r">bisher</th><th class="r">neu</th><th class="r">Änderung</th><th>Einheit</th><th>Hinweis</th></tr>
+          ${r.treffer.map((t, i) => `<tr class="${t.gleich ? "hinweis" : ""}"><td>${t.gleich ? "" : `<input type="checkbox" data-pi="${i}" ${t.vorschlag ? "checked" : ""}>`}</td>
+            <td><a href="#/mat/${t.material_id}">${esc(t.nummer)}</a> ${esc(t.bezeichnung)}${t.text_datei ? `<div class="hinweis">${esc(t.text_datei)}</div>` : ""}</td>
+            <td class="nw">${esc(t.bestellnr || "")} <span class="hinweis">${t.ueber === "EAN" ? "(EAN)" : ""}</span></td>
+            <td class="r nw">${eur(t.alt)}<div class="hinweis">${datum(t.preis_vom)}</div></td><td class="r nw"><b>${eur(t.neu)}</b></td>
+            <td class="r nw" style="color:${t.diff > 0 ? "var(--rot)" : t.diff < 0 ? "var(--gruen)" : "inherit"}">${t.gleich ? "gleich" : pzt(t.diff)}</td>
+            <td class="nw">${esc(t.einheit)}${t.einheit_ok ? "" : ` <span style="color:var(--rot)">≠ ${esc(t.einheit_datei)}</span>`}</td>
+            <td class="hinweis">${!t.gleich && !t.vorschlag ? (t.einheit_ok ? "große Änderung – bitte prüfen" : "Einheit weicht ab – Preis bezieht sich evtl. auf eine andere Menge") : ""}</td></tr>`).join("")}</table>
+          ${kann ? `<button class="btn prim" id="piOk" style="margin-top:10px">Angehakte Preise übernehmen</button>` : ""}` : `<div class="leer">Keine Treffer. Beim Material muss die Bestellnummer des Lieferanten (oder die EAN) eingetragen sein.</div>`}`}
+      </div>`;
+    $("#piL").onchange = e => { P.lieferant_id = e.target.value; if (P.datei) lesen(); };
+    $("#piA").onchange = e => { P.alle = e.target.checked; if (P.datei) lesen(); };
+    $("#piR").onchange = e => { P.rabatt = e.target.value; if (P.datei) lesen(); };
+    $("#piD").onchange = e => { P.datei = e.target.files[0]; P.zuordnung = null; lesen(); };
+    if ($("#piNeu")) $("#piNeu").onclick = () => { P.zuordnung = Object.fromEntries($$("[data-pz]").map(s => [s.dataset.pz, +s.value])); lesen(); };
+    if ($("#piAlle")) $("#piAlle").onchange = e => $$("[data-pi]").forEach(c => { c.checked = e.target.checked; });
+    if ($("#piOk")) $("#piOk").onclick = async () => {
+      const posten = $$("[data-pi]:checked").map(c => r.treffer[+c.dataset.pi]);
+      if (!posten.length) return toast("Nichts angehakt.", true);
+      if (!await frage(`${posten.length} Einkaufspreise übernehmen?`, {ok: "Übernehmen"})) return;
+      const x = await api("preisimport/uebernehmen", {method: "POST", body: {lieferant_id: P.lieferant_id, dateiname: P.datei ? P.datei.name : "", posten}});
+      toast(`${x.geaendert} Preise übernommen`); lesen();
+    };
+  };
+  const lesen = async () => {
+    if (!P.datei) return zeigen();
+    try {
+      P.erg = await api("preisimport/lesen", {method: "POST", body: {dateiname: P.datei.name, daten: await dateiAlsBase64(P.datei), lieferant_id: P.lieferant_id,
+        rabatt: P.rabatt, alle: P.alle, zuordnung: P.zuordnung}});
+    } catch (x) { P.erg = null; toast(x.message, true); }
+    zeigen();
+  };
+  zeigen();
 }

@@ -47,6 +47,7 @@ import gzip
 import projektsicherung
 import bank
 import liquiditaet
+import preise
 import kalkulation
 import benutzer
 import personal
@@ -8759,6 +8760,21 @@ def api(methode, teile, q, daten):
             return bank_api(con, methode, teile, q, daten or {})
         if res == "liquiditaet":
             return liquiditaet_api(con, methode, teile, q, daten or {})
+        if res == "preisimport" and methode == "POST" and teile[1:] in (["lesen"], ["uebernehmen"]):
+            d = daten or {}
+            lid = int(d["lieferant_id"]) if str(d.get("lieferant_id") or "").isdigit() else None
+            if teile[1] == "lesen":
+                if not d.get("daten"):
+                    raise ApiFehler("Keine Datei übergeben.")
+                erg = preise.lesen(base64.b64decode(d["daten"]), str(d.get("dateiname") or ""), d.get("zuordnung"))
+                ab = preise.abgleich(con, lid, erg["artikel"], zahl(d.get("rabatt") or 0, float), nur_lieferant=not d.get("alle"))
+                return {**{k: v for k, v in erg.items() if k != "artikel"}, **ab}
+            erg = preise.uebernehmen(con, d.get("posten"), date.today().isoformat())
+            if erg["geaendert"]:
+                l = con.execute("SELECT kurzname FROM lieferanten WHERE id=?", (lid,)).fetchone() if lid else None
+                prot(con, "preisimport", (l["kurzname"] if l else "")[:80], f"{erg['geaendert']} Einkaufspreise aus „{str(d.get('dateiname') or '')[:80]}“ übernommen"
+                     + (f" (Lieferant {l['kurzname']})" if l else ""), {"liste": erg["liste"][:500]})
+            return erg
         if res == "zahlungseingaenge" and rid and methode == "DELETE":
             zahlungseingang_loeschen(con, rid)
             return {"ok": True}

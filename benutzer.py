@@ -480,7 +480,7 @@ RESSOURCEN = {
     "lieferanten": (["lieferanten", "material"], 1, 2), "zahlungen": (["lieferanten"], 1, 2), "naechste_zahlung": (["lieferanten"], 1, 2),
     "eingang": (["lieferanten"], 2, 2), "rechnungspost": (["lieferanten"], 1, 2), "xml": (["lieferanten", "auftraege"], 1, 1),
     "material": (["material", "auftraege"], 1, 2), "materialsets": (["material", "auftraege"], 1, 2), "lager": (["material"], 1, 2),
-    "auftragskosten": (["material", "auftraege"], 1, 2), "werkzeuge": (["material"], 1, 2),
+    "auftragskosten": (["material", "auftraege"], 1, 2), "werkzeuge": (["material"], 1, 2), "preisimport": (["material"], 2, 2),
     "einstellungen": (None, 0, 2), "vorlagen": (None, 0, 2), "nummernkreise": (["einstellungen"], 1, 2),
     "version": (None, 0, 0), "fenster": (None, 0, 0),
     "benutzer": (["einstellungen"], 2, 2),
