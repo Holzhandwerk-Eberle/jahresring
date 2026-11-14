@@ -59,6 +59,10 @@ ARTEN = {
     "as_ba_freigabe": "Arbeitsschutz: Betriebsanweisung freigegeben",
     "as_unterweisung": "Arbeitsschutz: Unterweisung abgeschlossen",
     "unterschrift_monatsbeleg": "Monatsbeleg unterschrieben",
+    "bank_import": "Kontoauszug eingelesen",
+    "bank_zuordnung": "Kontoumsatz zugeordnet",
+    "bank_loesung": "Zuordnung eines Kontoumsatzes gelöst",
+    "preisimport": "Lieferantenpreise übernommen",
 }
 START = "0" * 64
 _sperre = threading.Lock()

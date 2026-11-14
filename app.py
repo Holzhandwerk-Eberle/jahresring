@@ -45,6 +45,8 @@ import tresor
 import binascii
 import gzip
 import projektsicherung
+import bank
+import liquiditaet
 import kalkulation
 import benutzer
 import personal
@@ -592,6 +594,7 @@ def init_db():
         korrespondenz.schema(con)
         unterschrift.schema(con)
         arbeitsschutz.schema(con)
+        bank.schema(con)
         alt_v = con.execute("SELECT wert FROM einstellungen WHERE schluessel='programm_version'").fetchone()
         alt_v = json.loads(alt_v[0]) if alt_v else ""
         protokoll.einrichten(con, DATEN, VERSION)
@@ -3983,6 +3986,215 @@ def schluss_ohne_linie(b, text):
         return text
     t = re.sub(r"(?:\n|<br\s*/?>|<div>|</div>|<p>|</p>|\s)*_{6,}(?:\s|<br\s*/?>|</?div>|</?p>)*Datum,?\s*Unterschrift[^<\n]*", "", text)
     return re.sub(r"(?:\s|<br\s*/?>)+$", "", t)
+
+
+def op_zahlung_buchen(con, op_id, d):
+    """Zahlungseingang zu einem offenen Posten buchen (von Hand oder aus dem Kontoauszug). Gibt die neuen IDs zurück."""
+    op = con.execute("SELECT * FROM offene_posten WHERE id=?", (op_id,)).fetchone()
+    if not op:
+        raise ApiFehler("Offener Posten nicht gefunden", 404)
+    betrag = round(zahl(d.get("betrag"), float), 2)
+    if not betrag:
+        raise ApiFehler("Bitte einen Betrag eingeben.")
+    skonto = round(zahl(d.get("skonto"), float), 2)
+    datum_ = d.get("datum") or date.today().isoformat()
+    date.fromisoformat(datum_)
+    # Was über den offenen Rechnungsbetrag hinausgeht, deckt zuerst die Mahnkosten
+    auf_mk = 0.0
+    if (op["mahnkosten"] or 0) > 0 and op["offen"] >= 0 and betrag + skonto > op["offen"] + 0.004:
+        auf_mk = round(min(betrag + skonto - op["offen"], op["mahnkosten"]), 2)
+    ids = [con.execute("INSERT INTO zahlungseingaenge (op_id, datum, betrag, art, bemerkung, angelegt, auf_mahnkosten) VALUES (?,?,?,?,?,?,?)",
+                       (op_id, datum_, betrag, d.get("art") or "Überweisung",
+                        d.get("bemerkung") or ("davon Mahnkosten " + de(auf_mk) + " €" if auf_mk else ""), jetzt(), auf_mk)).lastrowid]
+    if skonto:
+        ids.append(con.execute("INSERT INTO zahlungseingaenge (op_id, datum, betrag, art, bemerkung, angelegt) VALUES (?,?,?,?,?,?)",
+                               (op_id, datum_, skonto, "Skonto", "Skontoabzug", jetzt())).lastrowid)
+    con.execute("UPDATE offene_posten SET offen=ROUND(offen-?-?+?,2), mahnkosten=ROUND(IFNULL(mahnkosten,0)-?,2) WHERE id=?",
+                (betrag, skonto, auf_mk, auf_mk, op_id))
+    return ids
+
+
+def zahlungseingang_loeschen(con, zid, aus_bank=False):
+    z = con.execute("SELECT * FROM zahlungseingaenge WHERE id=?", (zid,)).fetchone()
+    if not z:
+        return
+    mk = z["auf_mahnkosten"] or 0
+    con.execute("UPDATE offene_posten SET offen=ROUND(offen+?-?,2), mahnkosten=ROUND(IFNULL(mahnkosten,0)+?,2) WHERE id=?",
+                (z["betrag"], mk, mk, z["op_id"]))
+    con.execute("DELETE FROM zahlungseingaenge WHERE id=?", (zid,))
+    op = con.execute("SELECT nummer FROM offene_posten WHERE id=?", (z["op_id"],)).fetchone()
+    prot(con, "zahlungseingang_geloescht", op["nummer"] if op else z["op_id"],
+         f"Zahlungseingang {de(z['betrag'])} € vom {de_datum(z['datum'])} zu {op['nummer'] if op else 'OP ' + str(z['op_id'])} gelöscht"
+         + (" (Zuordnung zum Kontoauszug gelöst)" if aus_bank else ""), dict(z))
+    if not aus_bank:
+        bank_eingang_entfernt(con, zid)
+
+
+# ---------------------------------------------------------------- Kontoauszüge (bank.py)
+def bank_eingang_entfernt(con, zid):
+    """Ein aus dem Kontoauszug gebuchter Zahlungseingang wurde von Hand gelöscht: den Umsatz wieder zur Zuordnung anbieten."""
+    for r in con.execute("SELECT id, ziel FROM bank_umsaetze WHERE status='zugeordnet' AND ziel LIKE ?", (f"%{zid}%",)).fetchall():
+        ziele = jl(r["ziel"], [])
+        geaendert = False
+        for t in ziele:
+            if t.get("art") == "op" and zid in (t.get("eingaenge") or []):
+                t["eingaenge"] = [i for i in t["eingaenge"] if i != zid]
+                geaendert = True
+        if not geaendert:
+            continue
+        rest = [t for t in ziele if t.get("art") == "zahlung" or t.get("eingaenge")]
+        if rest:
+            con.execute("UPDATE bank_umsaetze SET ziel=? WHERE id=?", (json.dumps(ziele, ensure_ascii=False), r["id"]))
+        else:
+            con.execute("UPDATE bank_umsaetze SET status='offen', ziel='[]', zugeordnet='', von='' WHERE id=?", (r["id"],))
+
+
+def bank_zuordnen(con, uid, ziele):
+    u = con.execute("SELECT * FROM bank_umsaetze WHERE id=?", (uid,)).fetchone()
+    if not u:
+        raise ApiFehler("Umsatz nicht gefunden.", 404)
+    if u["status"] != "offen":
+        raise ApiFehler("Dieser Umsatz ist schon zugeordnet oder erledigt.", 409)
+    ziele = [t for t in (ziele or []) if isinstance(t, dict) and t.get("art") in ("op", "zahlung") and str(t.get("id") or "").isdigit()]
+    if not ziele:
+        raise ApiFehler("Bitte einen offenen Posten oder Zahlungsauftrag wählen.")
+    gutschrift = u["betrag"] > 0
+    if any((t["art"] == "op") != gutschrift for t in ziele):
+        raise ApiFehler("Gutschriften gehören zu offenen Posten (Kundenzahlungen), Abbuchungen zu Zahlungsaufträgen.")
+    erg, texte = [], []
+    if gutschrift:
+        summe = round(sum(zahl(t.get("betrag"), float) for t in ziele), 2)
+        if abs(summe - round(u["betrag"], 2)) > 0.009:
+            raise ApiFehler(f"Die aufgeteilten Beträge ({de(summe)} €) ergeben nicht den Umsatz ({de(u['betrag'])} €).")
+        for t in ziele:
+            b = round(zahl(t.get("betrag"), float), 2)
+            if b <= 0:
+                continue
+            op = con.execute("SELECT nummer FROM offene_posten WHERE id=?", (int(t["id"]),)).fetchone()
+            ids = op_zahlung_buchen(con, int(t["id"]), {"betrag": b, "datum": u["buchung"] or date.today().isoformat(), "art": "Überweisung",
+                                                        "bemerkung": f"Kontoauszug {de_datum(u['buchung'])}: {u['name']}"[:200]})
+            erg.append({"art": "op", "id": int(t["id"]), "betrag": b, "eingaenge": ids, "nummer": op["nummer"] if op else ""})
+            texte.append(f"{op['nummer'] if op else t['id']} {de(b)} €")
+    else:
+        if len(ziele) != 1:
+            raise ApiFehler("Eine Abbuchung gehört zu genau einem Zahlungsauftrag.")
+        t = ziele[0]
+        z = con.execute("SELECT id, nummer, bezahlt, betrag FROM zahlungen WHERE id=?", (int(t["id"]),)).fetchone()
+        if not z:
+            raise ApiFehler("Zahlungsauftrag nicht gefunden.", 404)
+        gesetzt = not z["bezahlt"]
+        if gesetzt:
+            tag = u["buchung"] or date.today().isoformat()
+            con.execute("UPDATE zahlungen SET bezahlt=?, geaendert=? WHERE id=?", (tag, jetzt(), z["id"]))
+            prot(con, "zahlungsauftrag_bezahlt", z["nummer"], f"Als bezahlt am {de_datum(tag)} markiert (Kontoauszug, damit gesperrt): {z['nummer']}",
+                 {"nummern": [z["nummer"]], "bezahlt": tag, "bank_umsatz": uid})
+        erg.append({"art": "zahlung", "id": z["id"], "betrag": -u["betrag"], "gesetzt": gesetzt, "nummer": z["nummer"]})
+        texte.append(z["nummer"])
+    con.execute("UPDATE bank_umsaetze SET status='zugeordnet', ziel=?, zugeordnet=?, von=? WHERE id=?",
+                (json.dumps(erg, ensure_ascii=False), jetzt(), ich_login(), uid))
+    prot(con, "bank_zuordnung", ", ".join(texte)[:80], f"Kontoumsatz {de_datum(u['buchung'])} {de(u['betrag'])} € ({u['name']}) zugeordnet: {', '.join(texte)}",
+         {"umsatz": uid, "schluessel": u["schluessel"], "ziele": erg})
+    return erg
+
+
+def bank_loesen(con, uid):
+    u = con.execute("SELECT * FROM bank_umsaetze WHERE id=?", (uid,)).fetchone()
+    if not u:
+        raise ApiFehler("Umsatz nicht gefunden.", 404)
+    ziele = jl(u["ziel"], [])
+    if any(t.get("art") == "zahlung" and t.get("gesetzt") for t in ziele) and not benutzer.ist_inhaber():
+        raise ApiFehler("„Bezahlt“ bei einem Zahlungsauftrag zurücknehmen kann nur der Inhaber.", 403)
+    for t in ziele:
+        if t.get("art") == "op":
+            for zid in t.get("eingaenge") or []:
+                zahlungseingang_loeschen(con, zid, aus_bank=True)
+        elif t.get("art") == "zahlung" and t.get("gesetzt"):
+            z = con.execute("SELECT nummer, bezahlt, betrag FROM zahlungen WHERE id=?", (t["id"],)).fetchone()
+            if z and z["bezahlt"]:
+                con.execute("UPDATE zahlungen SET bezahlt='', geaendert=? WHERE id=?", (jetzt(), t["id"]))
+                prot(con, "zahlungsauftrag_geoeffnet", z["nummer"], f"„Bezahlt“ zurückgenommen (Zuordnung zum Kontoauszug gelöst): {z['nummer']}",
+                     {"bezahlt_alt": z["bezahlt"], "betrag": z["betrag"], "bank_umsatz": uid})
+    con.execute("UPDATE bank_umsaetze SET status='offen', ziel='[]', notiz='', zugeordnet='', von='' WHERE id=?", (uid,))
+    if u["status"] == "zugeordnet":
+        prot(con, "bank_loesung", str(uid), f"Zuordnung des Kontoumsatzes {de_datum(u['buchung'])} {de(u['betrag'])} € ({u['name']}) gelöst", {"umsatz": uid, "ziele": ziele})
+    return {"ok": True}
+
+
+def bank_api(con, methode, teile, q, d):
+    sub = teile[1] if len(teile) > 1 else None
+    uid = int(sub) if sub and sub.isdigit() else None
+    aktion = teile[2] if len(teile) > 2 else None
+    if methode == "GET" and sub is None:
+        return bank.liste(con, q)
+    if methode == "GET" and sub == "kandidaten":
+        return bank.kandidaten(con)
+    if methode == "POST" and sub == "einlesen":
+        if not d.get("daten"):
+            raise ApiFehler("Keine Datei übergeben.")
+        roh = base64.b64decode(d["daten"])
+        erg = bank.einlesen(con, roh, str(d.get("dateiname") or "kontoauszug.xml")[:120], os.path.join(DATEN, "bank"), ich_login())
+        prot(con, "bank_import", str(d.get("dateiname") or "")[:80], f"Kontoauszug eingelesen: {d.get('dateiname') or ''} · {erg['neu']} neue Umsätze"
+             + (f", {erg['doppelt']} schon vorhanden" if erg["doppelt"] else ""), {"sha256": erg["sha256"], "ablage": erg["ablage"], "neu": erg["neu"], "doppelt": erg["doppelt"]})
+        return erg
+    if methode == "POST" and sub == "sichere":
+        # alle sicheren Vorschläge auf einmal übernehmen
+        daten_ = bank.liste(con, {"status": "offen"})
+        n, fehler = 0, []
+        for u in daten_["umsaetze"]:
+            v = u.get("vorschlag")
+            if v and v["sicher"]:
+                try:
+                    bank_zuordnen(con, u["id"], v["ziele"])
+                    n += 1
+                except ApiFehler as f:
+                    fehler.append(f"{de_datum(u['buchung'])} {u['name']}: {f}")
+        return {"zugeordnet": n, "fehler": fehler}
+    if methode == "POST" and uid and aktion == "zuordnen":
+        return {"ziele": bank_zuordnen(con, uid, d.get("ziele"))}
+    if methode == "POST" and uid and aktion == "loesen":
+        return bank_loesen(con, uid)
+    if methode == "POST" and uid and aktion == "ignorieren":
+        u = con.execute("SELECT status FROM bank_umsaetze WHERE id=?", (uid,)).fetchone()
+        if not u:
+            raise ApiFehler("Umsatz nicht gefunden.", 404)
+        if u["status"] == "zugeordnet":
+            raise ApiFehler("Bitte zuerst die Zuordnung lösen.", 409)
+        con.execute("UPDATE bank_umsaetze SET status='ignoriert', notiz=?, zugeordnet=?, von=? WHERE id=?",
+                    (str(d.get("notiz") or "")[:200], jetzt(), ich_login(), uid))
+        return {"ok": True}
+    raise ApiFehler("Unbekannte Anfrage", 404)
+
+
+def liquiditaet_auftraege_rest(con):
+    """Laufende Aufträge (nicht Anfrage/Angebot, nicht abgeschlossen) mit noch nicht berechnetem Nettobetrag und Termin."""
+    e = einstellungen(con)
+    st_ang = e.get("status_angebot") or ["Anfrage", "Angebot"]
+    st_ende = e.get("status_ende") or []
+    berechnet = {}
+    for b in con.execute("SELECT * FROM belege WHERE status IN ('fest','storniert') AND art IN ('abschlag','rechnung','storno','gutschrift','korrektur')"):
+        berechnet[b["auftrag_id"]] = berechnet.get(b["auftrag_id"], 0) + beleg_umsatz(b)
+    aus = []
+    for a in con.execute("SELECT a.id, a.nummer, a.status, a.plan_bis, a.lieferung, k.kurzname, k.ust FROM auftraege a JOIN kunden k ON k.id=a.kunde_id"):
+        if a["status"] in st_ende or a["status"] in st_ang:
+            continue
+        try:
+            netto = auftrag_rechnen(con, a["id"])["netto"]
+        except ApiFehler:
+            continue
+        termin = con.execute("SELECT MAX(bis) FROM termine WHERE auftrag_id=? AND erledigt=0", (a["id"],)).fetchone()[0]
+        aus.append({"id": a["id"], "nummer": a["nummer"], "kunde": a["kurzname"], "rest_netto": round(max(0, netto - berechnet.get(a["id"], 0)), 2),
+                    "ust_satz": float(a["ust"] if a["ust"] is not None else 19), "termin": a["plan_bis"] or a["lieferung"] or termin or ""})
+    return aus
+
+
+def liquiditaet_api(con, methode, teile, q, d):
+    if methode == "PUT" and teile[1:] == ["einstellungen"]:
+        liquiditaet.einstellungen_speichern(con, d)
+        methode = "GET"
+    if methode == "GET":
+        return liquiditaet.berechnen(con, {"kontostand": bank.kontostand_lesen, "auftraege_rest": liquiditaet_auftraege_rest,
+                                           "lohn_faelligkeiten": personal.lohn_faelligkeiten, "darf_loehne": benutzer.darf("personal", 1)})
+    raise ApiFehler("Unbekannte Anfrage", 404)
 
 
 def prot(con, art, objekt, text, daten=None):
@@ -8515,26 +8727,7 @@ def api(methode, teile, q, daten):
             if rid and unter == "mail":
                 return zahlbest_mail(con, rid, methode, q, daten or {})
             if methode == "POST" and rid and unter == "zahlung":
-                op = con.execute("SELECT * FROM offene_posten WHERE id=?", (rid,)).fetchone()
-                if not op:
-                    raise ApiFehler("Offener Posten nicht gefunden", 404)
-                d = daten or {}
-                betrag = round(zahl(d.get("betrag"), float), 2)
-                if not betrag:
-                    raise ApiFehler("Bitte einen Betrag eingeben.")
-                skonto = round(zahl(d.get("skonto"), float), 2)
-                # Was über den offenen Rechnungsbetrag hinausgeht, deckt zuerst die Mahnkosten
-                auf_mk = 0.0
-                if (op["mahnkosten"] or 0) > 0 and op["offen"] >= 0 and betrag + skonto > op["offen"] + 0.004:
-                    auf_mk = round(min(betrag + skonto - op["offen"], op["mahnkosten"]), 2)
-                con.execute("INSERT INTO zahlungseingaenge (op_id, datum, betrag, art, bemerkung, angelegt, auf_mahnkosten) VALUES (?,?,?,?,?,?,?)",
-                            (rid, d.get("datum") or date.today().isoformat(), betrag, d.get("art") or "Überweisung",
-                             d.get("bemerkung") or ("davon Mahnkosten " + de(auf_mk) + " €" if auf_mk else ""), jetzt(), auf_mk))
-                if skonto:
-                    con.execute("INSERT INTO zahlungseingaenge (op_id, datum, betrag, art, bemerkung, angelegt) VALUES (?,?,?,?,?,?)",
-                                (rid, d.get("datum") or date.today().isoformat(), skonto, "Skonto", "Skontoabzug", jetzt()))
-                con.execute("UPDATE offene_posten SET offen=ROUND(offen-?-?+?,2), mahnkosten=ROUND(IFNULL(mahnkosten,0)-?,2) WHERE id=?",
-                            (betrag, skonto, auf_mk, auf_mk, rid))
+                op_zahlung_buchen(con, rid, daten or {})
                 return {"ok": True}
             if methode == "GET" and rid and unter == "mahnung":
                 return mahnung_vorschlag(con, rid, q)
@@ -8550,16 +8743,12 @@ def api(methode, teile, q, daten):
                                 (op["kunde_id"], op["auftrag_id"], f"Mahnkosten {de(op['mahnkosten'])} € zu {op['nummer']} erlassen", jetzt()))
                     con.execute("UPDATE offene_posten SET mahnkosten=0 WHERE id=?", (rid,))
                 return {"ok": True}
+        if res == "bank":
+            return bank_api(con, methode, teile, q, daten or {})
+        if res == "liquiditaet":
+            return liquiditaet_api(con, methode, teile, q, daten or {})
         if res == "zahlungseingaenge" and rid and methode == "DELETE":
-            z = con.execute("SELECT * FROM zahlungseingaenge WHERE id=?", (rid,)).fetchone()
-            if z:
-                mk = z["auf_mahnkosten"] or 0
-                con.execute("UPDATE offene_posten SET offen=ROUND(offen+?-?,2), mahnkosten=ROUND(IFNULL(mahnkosten,0)+?,2) WHERE id=?",
-                            (z["betrag"], mk, mk, z["op_id"]))
-                con.execute("DELETE FROM zahlungseingaenge WHERE id=?", (rid,))
-                op = con.execute("SELECT nummer FROM offene_posten WHERE id=?", (z["op_id"],)).fetchone()
-                prot(con, "zahlungseingang_geloescht", op["nummer"] if op else z["op_id"],
-                     f"Zahlungseingang {de(z['betrag'])} € vom {de_datum(z['datum'])} zu {op['nummer'] if op else 'OP ' + str(z['op_id'])} gelöscht", dict(z))
+            zahlungseingang_loeschen(con, rid)
             return {"ok": True}
         if res == "mahnungen":
             if methode == "GET" and rid is None:

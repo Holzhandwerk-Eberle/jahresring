@@ -2,7 +2,8 @@
 //  Mahnwesen: Zahlungserinnerung (M0), Mahnung (M1), Letzte Mahnung (M2)
 // =====================================================================
 const OP_REITER = (aktiv, anzahl) => kopf({reiter: [["Offene Posten", "#/op", aktiv === "op"],
-  [`Mahnwesen${anzahl ? ` (${anzahl})` : ""}`, "#/op/mahnwesen", aktiv === "mahn"]]});
+  [`Mahnwesen${anzahl ? ` (${anzahl})` : ""}`, "#/op/mahnwesen", aktiv === "mahn"], ["Kontoauszüge", "#/op/bank", aktiv === "bank"],
+  ...(darf("op", 2) ? [["Liquidität", "#/op/liquiditaet", aktiv === "liq"]] : [])]});
 
 // Kurze Anzeige des Mahnstands eines offenen Postens (für Listen)
 function mahnStand(o) {

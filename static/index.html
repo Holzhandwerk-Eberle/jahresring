@@ -144,6 +144,13 @@ table.liste td a{color:var(--dunkel)}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--dunkel);color:#fff;padding:10px 16px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:20}
 #toast.zeigen{opacity:1}
 #toast.fehler{background:var(--rot)}
+.bk-zweck{max-width:520px;overflow-wrap:anywhere;font-size:12px}.bk-vs .tag{font-weight:600}.bk-vs.sicher .tag{background:#d6ecd2;color:#245b1d}.bk-vs.pruefen .tag{background:#f6e3c2;color:#7a4b00}
+.bk-kn{display:inline-flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}.bk-liste td{vertical-align:top}
+.lq-kacheln{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}.lq-zahl{font-size:22px;font-weight:600;margin-top:2px}
+.lq-svg{width:100%;min-width:560px;height:auto;display:block}.lq-r{stroke:var(--linie,#ddd6cc);stroke-width:1}.lq-r.null{stroke:#8a8178;stroke-width:1.2}
+.lq-t{font-size:11px;fill:#7c746b}.lq-ein{fill:#7fb27a}.lq-aus{fill:#d98a7e}.lq-l{fill:none;stroke:#3d342b;stroke-width:2.2}.lq-p{fill:#3d342b}.lq-p.neg{fill:var(--rot,#b3261e)}
+.lq-leg{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px}.lq-sw{display:inline-block;width:12px;height:12px;border-radius:2px;margin-left:8px}.lq-sw.ein{background:#7fb27a}.lq-sw.aus{background:#d98a7e}.lq-sw.l{background:#3d342b;height:3px}
+.lq-pt{width:100%}.lq-pt td{padding:3px 8px;border:0}
 .modal-hg.as-tafel-hg{z-index:60}.modal.as-tafel{width:min(980px,96vw);max-height:92vh;display:flex;flex-direction:column}.as-tafel-kopf{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.as-tafel-kopf h3{flex:1 1 200px;margin:0}.as-tafel-inhalt{overflow:auto;min-height:200px;background:#e8e4dc;padding:4px;border-radius:6px}
 .modal-hg{position:fixed;inset:0;background:rgba(40,30,20,.35);display:grid;place-items:center;z-index:16}
 .modal{background:#fff;border-radius:8px;padding:18px;width:min(520px,94vw);box-shadow:0 10px 30px rgba(0,0,0,.2)}
@@ -624,6 +631,7 @@ table.as-matrix td{text-align:center;font-size:13px;white-space:nowrap}table.as-
 <script src="material.js"></script>
 <script src="import.js"></script>
 <script src="mahnwesen.js"></script>
+<script src="bank.js"></script>
 <script src="eingang.js"></script>
 <script src="personal.js"></script>
 <script src="service.js"></script>
@@ -2438,7 +2446,7 @@ function hilfeZiel() {
     case "bautagebuch": return "bautagebuch";
     case "leitstand": return "leitstand";
     case "projekte": case "projekt": return "projekte";
-    case "op": return "op";
+    case "op": return ({bank: "kontoauszuege", liquiditaet: "liquiditaet"})[b] || "op";
     case "lieferanten": case "lieferant": return "lieferant";
     case "zahlungen": case "zahlung": return "zahlungen";
     case "material": return mat[b] || "materialstamm";
@@ -2563,6 +2571,8 @@ async function render() {
     else if (a === "belege") { kopf({}); await alleBelege($("#inhalt")); }
     else if (a === "vorgaben") await ansichtVorgaben(b || "werkstoffe");
     else if (a === "op" && b === "mahnwesen") await ansichtMahnwesen(c);
+    else if (a === "op" && b === "bank") await ansichtBank();
+    else if (a === "op" && b === "liquiditaet") await ansichtLiquiditaet();
     else if (a === "op") { OP_REITER("op"); await opListeNeu($("#inhalt")); }
     else if (a === "briefe") { kopf({}); await briefListe($("#inhalt")); }
     else if (a === "statistik") await ansichtStatistik();
