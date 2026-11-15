@@ -224,3 +224,9 @@ Beschläge ändert sich nichts. Handbuch und technische Dokumentation sind angep
   Kalkulation: In der Position unter Zeiten ist die Bezugsgröße jeder Tätigkeit jetzt fest wie in den Einstellungen
   (Kalkulation › Tätigkeiten); änderbar bleiben Lohngruppe, Minuten, Rüstzeit und Helfer. Nur wenn es die
   Bezugsgröße nicht mehr gibt, steht eine Auswahl da. In den Auftragswerten hat die Oberfläche keine Dicke mehr.
+
+2026.11.01-134
+  Kalkulation: Selbst angelegte Bezugsgrößen sind jetzt wie Werkstoffe, Löhne und Zuschläge eine Kopie im Auftrag.
+  Wird eine Bezugsgröße in den Einstellungen geändert oder gelöscht, rechnen bestehende Aufträge unverändert weiter;
+  neu angelegte Bezugsgrößen kommen in den Aufträgen dazu. Die Bezugsgröße einer Tätigkeit in der Position ist auch
+  beim Speichern fest (nur Lohngruppe, Minuten, Rüstzeit und Helfer sind änderbar).

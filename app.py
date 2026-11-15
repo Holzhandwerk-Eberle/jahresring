@@ -87,7 +87,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-133"
+VERSION = "2026.11.01-134"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -1180,9 +1180,10 @@ def taet_katalog_ergaenzen(con):
     con.execute("INSERT OR REPLACE INTO einstellungen VALUES ('_taet_katalog_stand', ?)", (json.dumps(TAETIGKEITEN_KATALOG_STAND),))
 
 
-def zeiten_fixieren(e, p, neu):
-    """Tätigkeiten in der Position: Kostenstelle und Name kommen aus dem Katalog (Einstellungen) bzw. bleiben wie
-    bisher gespeichert. Änderbar sind nur Lohngruppe, Minuten, Bezugsgröße, Rüstzeit und Helfer."""
+def zeiten_fixieren(e, p, neu, bezug_da=None):
+    """Tätigkeiten in der Position: Kostenstelle, Name und Bezugsgröße kommen aus dem Katalog (Einstellungen) bzw. bleiben
+    wie bisher gespeichert. Änderbar sind Lohngruppe, Minuten, Rüstzeit und Helfer. Die Bezugsgröße einer vorhandenen Zeile
+    lässt sich nur ersetzen, wenn es sie im Auftrag nicht mehr gibt (bezug_da = verfügbare Schlüssel; None = nicht prüfen)."""
     if (p.get("zeitmodus") or "taetigkeiten") == "stunden":
         return neu
     kat = {t.get("id"): t for t in taet_katalog(e) if t.get("id")}
@@ -1202,6 +1203,20 @@ def zeiten_fixieren(e, p, neu):
                 continue
             z = {**z, "tid": t["id"], "kst": t.get("kst") or "", "name": t.get("name") or ""}
         aus.append(z)
+    if bezug_da is None:
+        return aus
+    vorher = {}
+    for z in p.get("zeiten") or []:
+        vorher.setdefault((z.get("tid") or "", z.get("kst"), z.get("name")), []).append(z.get("bezug") or "")
+    for z in aus:
+        alt = vorher.get((z.get("tid") or "", z.get("kst"), z.get("name")))
+        if alt:
+            b = alt.pop(0)
+            if b in bezug_da or not b:
+                z["bezug"] = b
+        elif (z.get("bezug") or "") not in bezug_da:   # neue Zeile (Katalog oder Tätigkeitsliste): unbekannte Bezugsgröße → wie im Katalog
+            t = kat.get(z.get("tid"))
+            z["bezug"] = (t.get("bezug") or "") if t else ""
     return aus
 
 
@@ -2542,6 +2557,18 @@ def auftrag_kalk(con, aid):
     # fehlende Schlüssel aus Vorgaben ergänzen (ältere Aufträge)
     for key, v in KALK_VORGABEN.items():
         k.setdefault(key, v)
+    # Eigene Bezugsgrößen sind wie alles andere eine Kopie im Auftrag: in den Einstellungen gelöschte oder geänderte
+    # bleiben hier unverändert; neu angelegte kommen dazu, damit neue Tätigkeiten sie nutzen können.
+    be = con.execute("SELECT wert FROM einstellungen WHERE schluessel='bezug_eigen'").fetchone()
+    aktuell = (json.loads(be[0]) if be else STANDARD_EINSTELLUNGEN.get("bezug_eigen")) or []
+    kopie = k.get("bezug_eigen")
+    if not isinstance(kopie, list):
+        kopie = []
+    da = {str(b.get("k")) for b in kopie}
+    neu = [dict(b) for b in aktuell if b.get("k") and b.get("name") and str(b.get("k")) not in da]
+    if neu or not isinstance(k.get("bezug_eigen"), list):
+        k["bezug_eigen"] = kopie + neu
+        con.execute("UPDATE auftraege SET kalk=? WHERE id=?", (json.dumps(k, ensure_ascii=False), aid))
     # leere Platzhalter (früher P01–P04, K01 … als Standard) aufräumen, sofern nicht in einer Stückliste benutzt
     if any(kalkulation.leer_zeile(w) for w in k.get("werkstoffe", []) + k.get("beschlaege", [])):
         benutzt = set()
@@ -2601,8 +2628,7 @@ def zaehlt(p, titel_gesperrt):
 def auftrag_rechnen(con, aid):
     """Rechnet alle Positionen eines Auftrags, nummeriert sie und bildet Summen."""
     kalk = dict(auftrag_kalk(con, aid))
-    be = con.execute("SELECT wert FROM einstellungen WHERE schluessel='bezug_eigen'").fetchone()   # nur diese eine Einstellung lesen
-    kalk["_bezug_eigen"] = (json.loads(be[0]) if be else STANDARD_EINSTELLUNGEN.get("bezug_eigen")) or []   # nur zur Laufzeit, wird nicht gespeichert
+    kalk["_bezug_eigen"] = kalk.get("bezug_eigen") or []   # Kopie im Auftrag (siehe auftrag_kalk)
     titel, titel_druck = auftrag_titel(con, aid)
     titel_reihe = {t["nr"]: i for i, t in enumerate(titel)}
     titel_gesperrt = {t["nr"] for t in titel if t.get("gesperrt")}
@@ -2728,7 +2754,7 @@ def position_antwort(con, pid):
                                                      "einheit": eltern["einheit"], "masse": eltern["masse"], "titel": eltern["titel"],
                                                      "kinder": len(eltern.get("kinder") or [])} if eltern else None,
             "auftrag": auftrag_laden(con, r["auftrag_id"]), "kalk": erg["kalk"], "titel": erg["titel"],
-            "liste": liste, "bezug": kalkulation.bezug_alle(einstellungen(con).get("bezug_eigen"))}
+            "liste": liste, "bezug": kalkulation.bezug_alle(erg["kalk"].get("bezug_eigen"))}
 
 
 def neue_sortierung(con, aid, parent_id, titel):
@@ -7452,7 +7478,8 @@ def api(methode, teile, q, daten):
                 return position_antwort(con, rid)
             if methode == "PUT" and unter is None:
                 if isinstance((daten or {}).get("zeiten"), list):
-                    daten["zeiten"] = zeiten_fixieren(einstellungen(con), {**p, "zeitmodus": daten.get("zeitmodus", p.get("zeitmodus"))}, daten["zeiten"])
+                    daten["zeiten"] = zeiten_fixieren(einstellungen(con), {**p, "zeitmodus": daten.get("zeitmodus", p.get("zeitmodus"))}, daten["zeiten"],
+                                                      set(kalkulation.bezug_alle(auftrag_kalk(con, p["auftrag_id"]).get("bezug_eigen"))))
                 werte = pos_werte(daten or {})
                 werte.pop("parent_id", None)
                 if werte:
