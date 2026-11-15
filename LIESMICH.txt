@@ -242,3 +242,6 @@ Summen einer Position neu gegliedert: Spalten „diese Position“, „Unterposi
 
 2026.11.01-137
 Lager: Reiter „Beschichtungsstoffe“ heißt jetzt „Oberflächenstoffe“; diese haben kein Feld Dicke mehr.
+
+2026.11.01-138
+Preise einlesen: Knopf „Datei schließen“ neben dem Dateinamen nimmt die eingelesene Preisdatei wieder aus der Ansicht.

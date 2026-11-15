@@ -569,7 +569,7 @@ async function preisImport() {
         ${zeile("Lieferant", `<select id="piL"><option value="">– alle Lieferanten –</option>${lieferanten.map(l => `<option value="${l.id}" ${String(l.id) === String(P.lieferant_id) ? "selected" : ""}>${esc(l.kurzname)}</option>`).join("")}</select>
           <label><input type="checkbox" id="piA" ${P.alle ? "checked" : ""}> auch Material anderer Lieferanten abgleichen</label>`)}
         ${zeile("Rabatt auf Listenpreise", `<input id="piR" value="${esc(P.rabatt)}" style="width:80px"> % <span class="hinweis">nur für Bruttopreise (Datanorm-Preiskennzeichen 1); Tabellen gelten als Nettopreise</span>`)}
-        ${zeile("Datei", `<label class="btn prim">📄 Preisdatei wählen<input type="file" id="piD" hidden></label> <span class="hinweis">${P.datei ? esc(P.datei.name) : ""}</span>`)}
+        ${zeile("Datei", `<label class="btn prim">📄 Preisdatei wählen<input type="file" id="piD" hidden></label> <span class="hinweis">${P.datei ? esc(P.datei.name) : ""}</span>${P.datei ? ` <button class="btn" id="piZu" title="Preisdatei schließen; im Materialstamm bleibt alles, wie es ist">✕ Datei schließen</button>` : ""}`)}
       </div>
       <div id="piErg">${!r ? "" : `
         <div class="kachel" style="margin:12px 0">${esc(r.format)}: <b>${r.artikel}</b> Artikel in der Datei · <b>${r.treffer.length}</b> Treffer im Materialstamm (von ${r.materialien} geprüften) ·
@@ -593,6 +593,7 @@ async function preisImport() {
     $("#piA").onchange = e => { P.alle = e.target.checked; if (P.datei) lesen(); };
     $("#piR").onchange = e => { P.rabatt = e.target.value; if (P.datei) lesen(); };
     $("#piD").onchange = e => { P.datei = e.target.files[0]; P.zuordnung = null; P.schluessel = ""; P.wahl = new Set(); P.suche = P.gruppe = ""; lesen(); };
+    if ($("#piZu")) $("#piZu").onclick = () => { Object.assign(P, {datei: null, erg: null, schluessel: "", zuordnung: null, wahl: new Set(), suche: "", gruppe: ""}); zeigen(); };
     if ($("#piNeu")) $("#piNeu").onclick = () => { P.zuordnung = Object.fromEntries($$("[data-pz]").map(s => [s.dataset.pz, +s.value])); P.schluessel = ""; lesen(); };
     if (r && $("#piNeuBox")) neueZeigen(r);
     if ($("#piAlle")) $("#piAlle").onchange = e => $$("[data-pi]").forEach(c => { c.checked = e.target.checked; });
