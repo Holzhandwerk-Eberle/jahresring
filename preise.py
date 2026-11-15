@@ -4,7 +4,11 @@ Ablauf: Datei lesen → Artikel mit dem Materialstamm abgleichen (Bestellnummer 
 altem und neuem Preis → nur die bestätigten Preise werden übernommen (mit Datum „Preis vom“; Verkaufspreise mit
 Aufschlag werden wie beim Ändern von Hand nachgeführt). Der Materialstamm wird nie ungefragt verändert.
 """
+import hashlib
 import re
+import threading
+import time
+from datetime import date
 
 import kundenimport
 import material
@@ -70,7 +74,8 @@ def datanorm_lesen(text):
                 if preis is None:
                     continue
             artikel[nr] = {"artnr": nr, "text": " ".join(x.strip() for x in f[4:6] if x.strip())[:120], "preis": round(preis / pe, 4),
-                           "einheit": _einheit(f[8]), "netto": f[6].strip() == "2", "rabattgruppe": f[10].strip() if len(f) > 10 else ""}
+                           "einheit": _einheit(f[8]), "netto": f[6].strip() == "2", "rabattgruppe": f[10].strip() if len(f) > 10 else "",
+                           "warengruppe": f[11].strip() if len(f) > 11 else ""}
         elif satz == "B" and len(f) > 3:
             for x in f[3:]:
                 x = x.strip()
@@ -91,6 +96,17 @@ def datanorm_lesen(text):
     return list(artikel.values()), hinweis
 
 
+def datanorm_text(roh):
+    """Datanorm 4 ist meist im DOS-Zeichensatz (CP850/437) geschrieben, neuere Dateien in ANSI oder UTF-8: nach den Umlaut-Bytes entscheiden."""
+    try:
+        return roh.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    dos = sum(roh.count(bytes([b])) for b in (0x81, 0x84, 0x94, 0x8E, 0x99, 0x9A, 0xE1))
+    ansi = sum(roh.count(bytes([b])) for b in (0xFC, 0xE4, 0xF6, 0xC4, 0xD6, 0xDC, 0xDF))
+    return roh.decode("cp850" if dos > ansi else "cp1252", errors="replace")
+
+
 # ---------------------------------------------------------------- CSV / Excel
 SPALTEN = {
     "artnr": ("artikelnummer", "artikelnr", "artnr", "art nr", "bestellnummer", "bestellnr", "best nr", "artikel", "materialnummer", "sku", "nummer"),
@@ -99,6 +115,7 @@ SPALTEN = {
     "preis": ("netto ek", "nettopreis", "netto", "ek", "einkaufspreis", "ek preis", "preis netto", "ihr preis", "preis", "listenpreis", "vk"),
     "einheit": ("einheit", "me", "mengeneinheit", "verkaufseinheit", "unit"),
     "pe": ("preiseinheit", "pe", "preis je", "pro"),
+    "gruppe": ("warengruppe", "artikelgruppe", "produktgruppe", "kategorie", "gruppe"),
 }
 
 
@@ -130,7 +147,7 @@ def tabelle_artikel(zeilen, zuordnung):
             continue
         pe = _zahl(w("pe")) or 1
         aus.append({"artnr": w("artnr"), "ean": re.sub(r"\D", "", w("ean")), "text": w("text")[:120], "preis": round(preis / (pe or 1), 4),
-                    "einheit": _einheit(w("einheit")), "netto": True})
+                    "einheit": _einheit(w("einheit")), "netto": True, "warengruppe": w("gruppe")[:40]})
     return aus, zu
 
 
@@ -140,7 +157,7 @@ def lesen(roh, dateiname, zuordnung=None):
     n = (dateiname or "").lower()
     text = None if (n.endswith(".xlsx") or roh[:2] == b"PK") else kundenimport.dekodieren(roh)
     if text is not None and (re.search(r"datanorm|\.00\d$", n) or re.match(r"\s*V[ ;]", text[:200])) and re.search(r"(?m)^A;", text):
-        art, hinweis = datanorm_lesen(text)
+        art, hinweis = datanorm_lesen(datanorm_text(roh) or text)
         return {"format": "Datanorm", "artikel": art, "hinweis": hinweis, "kopf": [], "zuordnung": {}}
     try:
         zeilen = kundenimport.tabelle_lesen(roh, dateiname)
@@ -205,3 +222,93 @@ def uebernehmen(con, posten, datum):
         geaendert.append({"nummer": m["nummer"], "alt": m["ek_preis"], "neu": neu})
         n += 1
     return {"geaendert": n, "liste": geaendert}
+
+
+
+# ---------------------------------------------------------------- Zwischenspeicher der zuletzt gelesenen Dateien
+# Große Datanorm-Dateien (zehntausende Artikel) werden nur einmal hochgeladen; Suche und Anlegen arbeiten mit dem Schlüssel.
+_SPEICHER = {}
+_SPERRE = threading.Lock()
+
+
+def merken(roh, erg):
+    schluessel = hashlib.sha256(roh).hexdigest()[:32]
+    with _SPERRE:
+        _SPEICHER[schluessel] = (time.time(), erg)
+        for k in sorted(_SPEICHER, key=lambda k: _SPEICHER[k][0])[:-3]:
+            _SPEICHER.pop(k, None)
+    return schluessel
+
+
+def gemerkt(schluessel):
+    with _SPERRE:
+        e = _SPEICHER.get(str(schluessel or ""))
+    if not e:
+        raise Fehler("Die Preisdatei ist nicht mehr im Zwischenspeicher – bitte erneut wählen.", 410)
+    return e[1]
+
+
+# ---------------------------------------------------------------- Neue Artikel aus der Datei anlegen
+def _bekannt(con):
+    nr, ean = set(), set()
+    for m in con.execute("SELECT bestellnr, ean FROM material"):
+        if (m["bestellnr"] or "").strip():
+            nr.add(_nr(m["bestellnr"]))
+        if (m["ean"] or "").strip():
+            ean.add(re.sub(r"\D", "", m["ean"]).lstrip("0"))
+    return nr, ean
+
+
+def neue(con, artikel, suche="", gruppe="", grenze=200):
+    """Artikel der Datei, die es im Materialstamm (bei keinem Lieferanten) noch nicht gibt; mit Suche und Warengruppe."""
+    nr, ean = _bekannt(con)
+    frei = [a for a in artikel if not (a.get("artnr") and _nr(a["artnr"]) in nr) and not (a.get("ean") and a["ean"].lstrip("0") in ean)]
+    gruppen = {}
+    for a in frei:
+        g = a.get("warengruppe") or ""
+        if g:
+            gruppen[g] = gruppen.get(g, 0) + 1
+    worte = [w for w in re.split(r"\s+", str(suche or "").lower().strip()) if w]
+    treffer = []
+    for a in frei:
+        if gruppe and (a.get("warengruppe") or "") != gruppe:
+            continue
+        if worte:
+            heu = f"{a.get('artnr', '')} {a.get('ean', '')} {a.get('text', '')}".lower()
+            if not all(w in heu for w in worte):
+                continue
+        treffer.append(a)
+    return {"neu_gesamt": len(frei), "neu_treffer": len(treffer), "neu": treffer[:grenze],
+            "gruppen": sorted(gruppen.items(), key=lambda x: (-x[1], x[0]))[:80]}
+
+
+def anlegen(con, artikel, auswahl, kategorie, lieferant_id, rabatt=0.0):
+    """Ausgewählte Artikel (Artikelnummern bzw. EAN aus der Datei) als Material anlegen. Schon vorhandene werden übersprungen."""
+    if kategorie not in material.KATEGORIEN:
+        raise Fehler("Bitte eine Materialart wählen.")
+    wahl = {str(x) for x in auswahl or []}
+    if not wahl:
+        raise Fehler("Bitte mindestens einen Artikel anhaken.")
+    if len(wahl) > 2000:
+        raise Fehler("Höchstens 2000 Artikel auf einmal anlegen.")
+    nr, ean = _bekannt(con)
+    angelegt, uebersprungen = [], 0
+    for a in artikel:
+        schl = a.get("artnr") or a.get("ean") or ""
+        if schl not in wahl:
+            continue
+        if (a.get("artnr") and _nr(a["artnr"]) in nr) or (a.get("ean") and a["ean"].lstrip("0") in ean):
+            uebersprungen += 1
+            continue
+        preis = a["preis"] if a.get("netto", True) else a["preis"] * (1 - float(rabatt or 0) / 100)
+        einheit = a.get("einheit") if a.get("einheit") in material.EINHEITEN else material.STANDARD_EINHEIT.get(kategorie, "Stk.")
+        m = material.anlegen(con, {"kategorie": kategorie, "bezeichnung": (a.get("text") or a.get("artnr") or "Artikel")[:200],
+                                   "bestellnr": (a.get("artnr") or "")[:60], "ean": (a.get("ean") or "")[:20], "einheit": einheit,
+                                   "ek_preis": round(preis, 4), "preis_vom": date.today().isoformat(), "lieferant_id": lieferant_id or None,
+                                   "gruppe": (a.get("warengruppe") or "")[:40]})
+        angelegt.append({"id": m["id"], "nummer": m["nummer"], "bezeichnung": m["bezeichnung"], "ek_preis": m["ek_preis"]})
+        if a.get("artnr"):
+            nr.add(_nr(a["artnr"]))
+        if a.get("ean"):
+            ean.add(a["ean"].lstrip("0"))
+    return {"angelegt": len(angelegt), "uebersprungen": uebersprungen, "liste": angelegt}

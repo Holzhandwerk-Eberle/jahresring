@@ -87,7 +87,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-132"
+VERSION = "2026.11.01-133"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -7960,15 +7960,30 @@ def api(methode, teile, q, daten):
             return konten.api(con, methode, teile, q, daten or {}, c["skr"], c["sachkontenlaenge"], benutzer.ist_inhaber())
         if res == "wiedervorlagen":
             return wiedervorlage.api(con, methode, teile, q, daten or {}, ich_login())
-        if res == "preisimport" and methode == "POST" and teile[1:] in (["lesen"], ["uebernehmen"]):
+        if res == "preisimport" and methode == "POST" and teile[1:] in (["lesen"], ["uebernehmen"], ["neue"], ["anlegen"]):
             d = daten or {}
             lid = int(d["lieferant_id"]) if str(d.get("lieferant_id") or "").isdigit() else None
             if teile[1] == "lesen":
-                if not d.get("daten"):
+                if d.get("daten"):
+                    roh = base64.b64decode(d["daten"])
+                    erg = preise.lesen(roh, str(d.get("dateiname") or ""), d.get("zuordnung"))
+                    schluessel = preise.merken(roh + json.dumps(d.get("zuordnung") or {}).encode(), erg)
+                elif d.get("schluessel"):
+                    erg, schluessel = preise.gemerkt(d["schluessel"]), d["schluessel"]
+                else:
                     raise ApiFehler("Keine Datei übergeben.")
-                erg = preise.lesen(base64.b64decode(d["daten"]), str(d.get("dateiname") or ""), d.get("zuordnung"))
                 ab = preise.abgleich(con, lid, erg["artikel"], zahl(d.get("rabatt") or 0, float), nur_lieferant=not d.get("alle"))
-                return {**{k: v for k, v in erg.items() if k != "artikel"}, **ab}
+                return {**{k: v for k, v in erg.items() if k != "artikel"}, **ab, **preise.neue(con, erg["artikel"]), "schluessel": schluessel}
+            if teile[1] == "neue":
+                return preise.neue(con, preise.gemerkt(d.get("schluessel"))["artikel"], d.get("suche") or "", d.get("gruppe") or "")
+            if teile[1] == "anlegen":
+                erg = preise.anlegen(con, preise.gemerkt(d.get("schluessel"))["artikel"], d.get("auswahl"), d.get("kategorie"), lid,
+                                     zahl(d.get("rabatt") or 0, float))
+                if erg["angelegt"]:
+                    l = con.execute("SELECT kurzname FROM lieferanten WHERE id=?", (lid,)).fetchone() if lid else None
+                    prot(con, "preisimport", (l["kurzname"] if l else "")[:80], f"{erg['angelegt']} Materialien aus „{str(d.get('dateiname') or '')[:80]}“ angelegt"
+                         + (f" (Lieferant {l['kurzname']})" if l else ""), {"angelegt": erg["liste"][:500]})
+                return erg
             erg = preise.uebernehmen(con, d.get("posten"), date.today().isoformat())
             if erg["geaendert"]:
                 l = con.execute("SELECT kurzname FROM lieferanten WHERE id=?", (lid,)).fetchone() if lid else None

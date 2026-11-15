@@ -1,0 +1,12 @@
+const { chromium } = require('playwright'); const U='http://127.0.0.1:8799';
+(async () => { const b = await chromium.launch(); const c = await b.newContext({viewport:{width:1300,height:900}}); await c.request.post(U+'/api/anmeldung/anmelden', {data:{login:'jonas', passwort:'geheim123'}});
+  const p = await c.newPage(); const f = []; p.on('pageerror', e => f.push(e.message));
+  const k = await (await c.request.post(U+'/api/kunden', {data: {kurzname: "ZT", plz: "88069", ort: "T", strasse: "W"}})).json();
+  const a = await (await c.request.post(U+'/api/auftraege', {data: {kunde_id: k.id, bezeichnung: "Zeiten"}})).json();
+  const pos = await (await c.request.post(U+`/api/auftraege/${a.id}/positionen`, {data: {text: "Tisch", menge: 1}})).json();
+  const r = await c.request.put(U+`/api/positionen/${pos.id}`, {data: {zeitmodus: "taetigkeiten", zeiten: [{kst: "BANKRAUM", name: "Verleimen", gruppe: "Standard", minuten: 5, bezug: "platte", ruest: 2, helfer: 0}, {kst: "BANKRAUM", name: "Alt", gruppe: "Standard", minuten: 1, bezug: "x_gibtsnicht", ruest: 0, helfer: 0}]}});
+  console.log('put', r.status());
+  await p.goto(U+`/#/position/${pos.id}/zeiten`); await p.waitForTimeout(1800);
+  console.log('selects bezug', await p.$$eval('[data-z="bezug"]', x => x.length));
+  await p.screenshot({path: '/tmp/claude-0/t/gp/zeiten.png'});
+  console.log('fehler', f); await b.close(); })();

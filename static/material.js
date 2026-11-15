@@ -417,6 +417,7 @@ async function lagerBuchen() {
   };
   zeigen();
 }
+const MAT_KATEGORIEN_NAMEN = {holzwerkstoffe: "Holzwerkstoffe", massivholz: "Massivholz", beschichtung: "Beschichtungsstoffe", chemie: "Chemisch-technische Produkte", beschlaege: "Beschläge", artikel: "Artikel"};
 
 // ---------- Statistik ----------
 async function materialStatistik() {
@@ -553,7 +554,7 @@ async function restelager(markiert) {
 
 
 // ---------- Einkaufspreise von Lieferanten einlesen (Datanorm, CSV, Excel) ----------
-const PREIS_IMPORT = {lieferant_id: "", rabatt: "", alle: false, datei: null, zuordnung: null, erg: null};
+const PREIS_IMPORT = {lieferant_id: "", rabatt: "", alle: false, datei: null, zuordnung: null, erg: null, schluessel: "", wahl: new Set(), suche: "", gruppe: "", kat: "beschlaege"};
 async function preisImport() {
   matKopf("preise");
   const lieferanten = (await api("lieferanten?status=aktiv")).filter(l => !["Mitarbeiter", "Finanzamt", "Krankenkasse"].includes(l.gruppe || ""));
@@ -585,13 +586,15 @@ async function preisImport() {
             <td class="r nw" style="color:${t.diff > 0 ? "var(--rot)" : t.diff < 0 ? "var(--gruen)" : "inherit"}">${t.gleich ? "gleich" : pzt(t.diff)}</td>
             <td class="nw">${esc(t.einheit)}${t.einheit_ok ? "" : ` <span style="color:var(--rot)">≠ ${esc(t.einheit_datei)}</span>`}</td>
             <td class="hinweis">${!t.gleich && !t.vorschlag ? (t.einheit_ok ? "große Änderung – bitte prüfen" : "Einheit weicht ab – Preis bezieht sich evtl. auf eine andere Menge") : ""}</td></tr>`).join("")}</table>
-          ${kann ? `<button class="btn prim" id="piOk" style="margin-top:10px">Angehakte Preise übernehmen</button>` : ""}` : `<div class="leer">Keine Treffer. Beim Material muss die Bestellnummer des Lieferanten (oder die EAN) eingetragen sein.</div>`}`}
+          ${kann ? `<button class="btn prim" id="piOk" style="margin-top:10px">Angehakte Preise übernehmen</button>` : ""}` : `<div class="leer">Keine Treffer im Materialstamm. Neue Artikel lassen sich unten aus der Datei anlegen.</div>`}
+        <div id="piNeuBox"></div>`}
       </div>`;
     $("#piL").onchange = e => { P.lieferant_id = e.target.value; if (P.datei) lesen(); };
     $("#piA").onchange = e => { P.alle = e.target.checked; if (P.datei) lesen(); };
     $("#piR").onchange = e => { P.rabatt = e.target.value; if (P.datei) lesen(); };
-    $("#piD").onchange = e => { P.datei = e.target.files[0]; P.zuordnung = null; lesen(); };
-    if ($("#piNeu")) $("#piNeu").onclick = () => { P.zuordnung = Object.fromEntries($$("[data-pz]").map(s => [s.dataset.pz, +s.value])); lesen(); };
+    $("#piD").onchange = e => { P.datei = e.target.files[0]; P.zuordnung = null; P.schluessel = ""; P.wahl = new Set(); P.suche = P.gruppe = ""; lesen(); };
+    if ($("#piNeu")) $("#piNeu").onclick = () => { P.zuordnung = Object.fromEntries($$("[data-pz]").map(s => [s.dataset.pz, +s.value])); P.schluessel = ""; lesen(); };
+    if (r && $("#piNeuBox")) neueZeigen(r);
     if ($("#piAlle")) $("#piAlle").onchange = e => $$("[data-pi]").forEach(c => { c.checked = e.target.checked; });
     if ($("#piOk")) $("#piOk").onclick = async () => {
       const posten = $$("[data-pi]:checked").map(c => r.treffer[+c.dataset.pi]);
@@ -604,10 +607,59 @@ async function preisImport() {
   const lesen = async () => {
     if (!P.datei) return zeigen();
     try {
-      P.erg = await api("preisimport/lesen", {method: "POST", body: {dateiname: P.datei.name, daten: await dateiAlsBase64(P.datei), lieferant_id: P.lieferant_id,
-        rabatt: P.rabatt, alle: P.alle, zuordnung: P.zuordnung}});
+      const basis = {dateiname: P.datei.name, lieferant_id: P.lieferant_id, rabatt: P.rabatt, alle: P.alle, zuordnung: P.zuordnung};
+      try { if (!P.schluessel) throw new Error(); P.erg = await api("preisimport/lesen", {method: "POST", body: {...basis, schluessel: P.schluessel}}); }
+      catch (x) { P.erg = await api("preisimport/lesen", {method: "POST", body: {...basis, daten: await dateiAlsBase64(P.datei)}}); }
+      P.schluessel = P.erg.schluessel;
     } catch (x) { P.erg = null; toast(x.message, true); }
     zeigen();
+  };
+  // neue Artikel aus der Datei: suchen, anhaken, anlegen
+  const neueZeigen = r => {
+    const box = $("#piNeuBox");
+    if (!box) return;
+    const liste = r.neu || [];
+    const schl = a => a.artnr || a.ean || "";
+    box.innerHTML = `<h3 style="margin-top:22px">Neue Artikel aus der Datei <span class="hinweis" style="font-weight:400">· ${r.neu_gesamt} noch nicht im Materialstamm</span></h3>
+      ${!r.neu_gesamt ? `<div class="leer">Alle Artikel der Datei sind schon angelegt.</div>` : `
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        <input id="piSu" placeholder="Bezeichnung, Artikelnummer oder EAN …" value="${esc(P.suche)}" style="flex:1 1 240px;max-width:380px">
+        ${r.gruppen.length ? `<select id="piGr"><option value="">alle Warengruppen</option>${r.gruppen.map(([g, n]) => `<option value="${esc(g)}" ${g === P.gruppe ? "selected" : ""}>${esc(g)} (${n})</option>`).join("")}</select>` : ""}
+      </div>
+      ${liste.length ? `<table class="liste"><tr><th></th><th>Artikelnr.</th><th>Bezeichnung</th><th>Warengruppe</th><th>Einheit</th><th class="r">EK ${P.rabatt ? "(nach Rabatt)" : ""}</th></tr>
+        ${liste.map((a, i) => { const ek = a.netto === false ? a.preis * (1 - (parseFloat(String(P.rabatt).replace(",", ".")) || 0) / 100) : a.preis;
+          return `<tr><td><input type="checkbox" data-pn="${i}" ${P.wahl.has(schl(a)) ? "checked" : ""}></td><td class="nw">${esc(a.artnr || "")}${a.ean ? `<div class="hinweis">${esc(a.ean)}</div>` : ""}</td>
+          <td>${esc(a.text)}</td><td class="hinweis">${esc(a.warengruppe || "")}</td><td>${esc(a.einheit || "")}</td><td class="r nw">${eur(ek)}</td></tr>`; }).join("")}</table>
+        ${r.neu_treffer > liste.length ? `<p class="hinweis">${r.neu_treffer} passende Artikel, die ersten ${liste.length} werden gezeigt – Suche eingrenzen.</p>` : ""}`
+        : `<div class="leer">Keine passenden Artikel.</div>`}
+      ${kann ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
+        <span><b id="piAnz">${P.wahl.size}</b> angehakt · anlegen als</span>
+        <select id="piKat">${Object.entries(MAT_KATEGORIEN_NAMEN).map(([k, t]) => `<option value="${k}" ${k === P.kat ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>
+        <button class="btn prim" id="piAnl">Angehakte anlegen</button>${P.wahl.size ? `<button class="btn" id="piWeg">Auswahl leeren</button>` : ""}</div>
+        <p class="hinweis">Angelegt wird mit Bezeichnung, Bestellnummer, EAN, Einheit, Einkaufspreis${P.lieferant_id ? ", Lieferant" : ""} und Warengruppe; die Materialnummer vergibt das Programm.
+        ${P.lieferant_id ? "" : "<b>Tipp:</b> oben den Lieferanten wählen, damit er beim Material eingetragen wird."}</p>` : ""}`}`;
+    let t;
+    const suchen = async () => {
+      try { Object.assign(P.erg, await api("preisimport/neue", {method: "POST", body: {schluessel: P.schluessel, suche: P.suche, gruppe: P.gruppe}})); }
+      catch (x) { toast(x.message, true); if (x.status === 410) { P.schluessel = ""; return lesen(); } }
+      neueZeigen(P.erg);
+      const su = $("#piSu"); if (su && document.activeElement !== su && P.suche) { su.focus(); su.setSelectionRange(su.value.length, su.value.length); }
+    };
+    if ($("#piSu")) $("#piSu").oninput = e => { clearTimeout(t); t = setTimeout(() => { P.suche = e.target.value.trim(); suchen(); }, 350); };
+    if ($("#piGr")) $("#piGr").onchange = e => { P.gruppe = e.target.value; suchen(); };
+    $$("[data-pn]", box).forEach(c => c.onchange = () => { const k = schl(liste[+c.dataset.pn]); c.checked ? P.wahl.add(k) : P.wahl.delete(k); $("#piAnz").textContent = P.wahl.size; });
+    if ($("#piKat")) $("#piKat").onchange = e => { P.kat = e.target.value; };
+    if ($("#piWeg")) $("#piWeg").onclick = () => { P.wahl = new Set(); neueZeigen(r); };
+    if ($("#piAnl")) $("#piAnl").onclick = async () => {
+      if (!P.wahl.size) return toast("Bitte Artikel anhaken.", true);
+      if (!await frage(`${P.wahl.size} Artikel als „${MAT_KATEGORIEN_NAMEN[P.kat]}“ anlegen?`, {ok: "Anlegen"})) return;
+      try {
+        const x = await api("preisimport/anlegen", {method: "POST", body: {schluessel: P.schluessel, auswahl: [...P.wahl], kategorie: P.kat,
+          lieferant_id: P.lieferant_id, rabatt: P.rabatt, dateiname: P.datei ? P.datei.name : ""}});
+        toast(`${x.angelegt} Materialien angelegt${x.uebersprungen ? `, ${x.uebersprungen} gab es schon` : ""}`);
+        P.wahl = new Set(); lesen();
+      } catch (x) { toast(x.message, true); if (x.status === 410) { P.schluessel = ""; lesen(); } }
+    };
   };
   zeigen();
 }

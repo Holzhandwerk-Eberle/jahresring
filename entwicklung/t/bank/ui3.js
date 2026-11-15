@@ -1,0 +1,13 @@
+const { chromium } = require('playwright'); const U='http://127.0.0.1:8799';
+(async () => { const b = await chromium.launch(); const c = await b.newContext({viewport:{width:1300,height:900}}); await c.request.post(U+'/api/anmeldung/anmelden', {data:{login:'jonas', passwort:'geheim123'}}); const p = await c.newPage(); const f = [];
+  p.on('pageerror', e => f.push(e.message)); p.on('console', m => { if (m.type()==='error') f.push(m.text()); });
+  await p.goto(U+'/#/material/preise'); await p.waitForTimeout(1200);
+  await p.setInputFiles('#piD', '/tmp/claude-0/t/bank/DATANORM.001'); await p.waitForTimeout(1500);
+  await p.screenshot({path: '/tmp/claude-0/t/bank/dbg.png'}); console.log(f, (await p.innerText('#inhalt')).slice(0,400)); await p.fill('#piSu', 'griff'); await p.waitForTimeout(1200);
+  console.log('zeilen nach Suche', await p.$$eval('[data-pn]', x => x.length));
+  await p.check('[data-pn="0"]'); await p.fill('#piSu', ''); await p.waitForTimeout(1200);
+  console.log('angehakt', await p.textContent('#piAnz'), 'zeilen', await p.$$eval('[data-pn]', x => x.length));
+  await p.screenshot({path: '/tmp/claude-0/t/bank/preise_neu.png', fullPage: true});
+  await p.click('#piAnl'); await p.waitForTimeout(500); await p.click('.frage-hg .btn.prim, .modal [data-x="1"]').catch(()=>{}); await p.waitForTimeout(1500);
+  console.log((await p.innerText('#inhalt')).match(/\d+ noch nicht im Materialstamm/));
+  console.log('fehler', f); await b.close(); })();

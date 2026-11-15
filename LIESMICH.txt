@@ -214,3 +214,13 @@ Beschläge ändert sich nichts. Handbuch und technische Dokumentation sind angep
   DATEV: Auf Wunsch enthält der Buchungsstapel die zugeordneten Bankumsätze (Bank an Debitor, Kreditor oder
   Sachkonto). Das Aufwandskonto beim Lieferanten wird aus dem Kontenplan gewählt; ist es kein Automatikkonto, wird
   die Vorsteuer über den BU-Schlüssel gebucht.
+
+2026.11.01-133
+  Preise einlesen: Artikel aus der Datanorm- oder CSV/Excel-Datei, die es im Materialstamm noch nicht gibt, stehen
+  jetzt unter „Neue Artikel aus der Datei“. Mit Suche und Warengruppe eingrenzen, anhaken und mit „Angehakte
+  anlegen“ in der gewählten Materialart anlegen (Bezeichnung, Bestellnummer, EAN, Einheit, Einkaufspreis,
+  Warengruppe, Lieferant). Große Dateien werden nur einmal hochgeladen. Umlaute in Datanorm-Dateien im alten
+  DOS-Zeichensatz werden richtig gelesen.
+  Kalkulation: In der Position unter Zeiten ist die Bezugsgröße jeder Tätigkeit jetzt fest wie in den Einstellungen
+  (Kalkulation › Tätigkeiten); änderbar bleiben Lohngruppe, Minuten, Rüstzeit und Helfer. Nur wenn es die
+  Bezugsgröße nicht mehr gibt, steht eine Auswahl da. In den Auftragswerten hat die Oberfläche keine Dicke mehr.
