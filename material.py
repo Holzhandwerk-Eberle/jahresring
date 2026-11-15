@@ -1,4 +1,4 @@
-"""Materialstamm und Lager: Holzwerkstoffe, Massivholz, Beschichtungsstoffe, Chemisch-technische Produkte,
+"""Materialstamm und Lager: Holzwerkstoffe, Massivholz, Oberflächenstoffe, Chemisch-technische Produkte,
 Beschläge, Beschlägesets, Artikel, Lager- und Auftragsbuchungen."""
 import json
 import sqlite3
@@ -7,7 +7,7 @@ from datetime import date, datetime
 KATEGORIEN = {
     "holzwerkstoffe": "Holzwerkstoffe",
     "massivholz": "Massivholz",
-    "beschichtung": "Beschichtungsstoffe",
+    "beschichtung": "Oberflächenstoffe",
     "chemie": "Chemisch-technische Produkte",
     "beschlaege": "Beschläge",
     "artikel": "Artikel",

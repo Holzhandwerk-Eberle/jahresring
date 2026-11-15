@@ -3,7 +3,7 @@
 // =====================================================================
 let MAT_META = null;
 async function matMeta() { if (!MAT_META) MAT_META = await api("material/meta"); return MAT_META; }
-const MAT_REITER = [["Holzwerkstoffe", "holzwerkstoffe"], ["Massivholz", "massivholz"], ["Beschichtungsstoffe", "beschichtung"],
+const MAT_REITER = [["Holzwerkstoffe", "holzwerkstoffe"], ["Massivholz", "massivholz"], ["Oberflächenstoffe", "beschichtung"],
   ["Chemisch-technische Produkte", "chemie"], ["Beschläge", "beschlaege"], ["Beschlägesets", "sets"], ["Artikel", "artikel"], ["Reste & Platten", "reste"], ["Werkzeuge", "werkzeuge"],
   ["Auftrag buchen", "auftrag"], ["Lager buchen", "lager"], ["Preise einlesen", "preise"], ["Statistik", "statistik"]];
 const matFilter = {};
@@ -122,7 +122,7 @@ async function ansichtMaterialDetail(id, teil = "stamm") {
       ${zeile("Gruppe", `<select data-f="gruppe">${opts(gruppen.includes(m.gruppe) || !m.gruppe ? gruppen : [m.gruppe, ...gruppen], m.gruppe)}</select>
         <label style="display:flex;gap:5px;align-items:center;flex:0 0 auto;padding:4px 0"><input type="checkbox" data-f="aktiv" ${m.aktiv ? "checked" : ""}> aktiv</label>`)}
       ${zeile("Bezeichnung", `<textarea data-f="bezeichnung" rows="4" data-text="1">${esc(m.bezeichnung)}</textarea>`, true)}
-      ${holz || kat === "beschichtung" ? zeile("Dicke", `${zahl("dicke", 1, 'style="width:90px;text-align:right"')} <span style="padding-top:5px">mm</span>`) : ""}
+      ${holz ? zeile("Dicke", `${zahl("dicke", 1, 'style="width:90px;text-align:right"')} <span style="padding-top:5px">mm</span>`) : ""}
       ${kat === "holzwerkstoffe" ? zeile("Plattenformat", `${zahl("plattenlaenge", 0, 'style="width:90px;text-align:right" placeholder="Länge"')} <span style="padding-top:5px">×</span> ${zahl("plattenbreite", 0, 'style="width:90px;text-align:right" placeholder="Breite"')} <span style="padding-top:5px">mm</span><span class="hinweis" style="padding-top:5px">Länge × Breite der ganzen Platte, z. B. 2800 × 2070 – damit das Zuschnittprogramm die richtige Platte aus dem Lager zieht</span>`) : ""}
       ${zeile("EK-Preis", `${zahl("ek_preis")} <span style="padding-top:5px">€ je</span><select data-f="einheit" style="flex:0 0 120px">${opts(meta.einheiten, m.einheit)}</select>`)}
       ${zeile("Preis vom", `<input type="date" data-f="preis_vom" value="${esc(m.preis_vom || "")}" style="flex:0 0 170px">`)}
@@ -417,7 +417,7 @@ async function lagerBuchen() {
   };
   zeigen();
 }
-const MAT_KATEGORIEN_NAMEN = {holzwerkstoffe: "Holzwerkstoffe", massivholz: "Massivholz", beschichtung: "Beschichtungsstoffe", chemie: "Chemisch-technische Produkte", beschlaege: "Beschläge", artikel: "Artikel"};
+const MAT_KATEGORIEN_NAMEN = {holzwerkstoffe: "Holzwerkstoffe", massivholz: "Massivholz", beschichtung: "Oberflächenstoffe", chemie: "Chemisch-technische Produkte", beschlaege: "Beschläge", artikel: "Artikel"};
 
 // ---------- Statistik ----------
 async function materialStatistik() {
