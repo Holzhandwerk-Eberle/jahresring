@@ -89,5 +89,11 @@ p8 = {"menge": 4, "zeitmodus": "taetigkeiten", "zeiten": [{"kst": kst1, "minuten
 c8 = K.position_rechnen(p8, kalk)
 h_anz = (30 + 60 / 4) / 60
 print("T8 stunden je Anz", c8["stunden"], "Helfer", c8["zeit_summen"])
-gleich("Tätigkeit Bearb.+Rüst h", c8["zeit_summen"]["gesamt_pos"], 30 * 4 / 60 + 1 + (30 + 15) * 0.5 * 4 / 60)
-print("FEHLER:" if fehler else "alles stimmt"); print("\n".join(fehler))
+gleich("Tätigkeit Bearb.+Rüst h", c8["zeit_summen"]["gesamt_pos"], 30 * 4 / 60 + 1 + 30 * 0.5 * 4 / 60)   # Helfer nur auf Bearbeitung
+# Menge 0 bei Bezugsgröße: Zeile entfällt samt Rüstzeit und Helfer; ohne Bezugsgröße zählt sie
+p9 = {"menge": 2, "zeitmodus": "taetigkeiten", "zeiten": [{"kst": kst1, "minuten": 5, "bezug": "beschlaege", "ruest": 10, "helfer": 1},
+                                                          {"kst": kst1, "minuten": 45, "bezug": "", "ruest": 6, "helfer": 0}]}
+c9 = K.position_rechnen(p9, kalk)
+print("T9", c9["zeit_summen"])
+gleich("Menge 0 ohne Rüstzeit", c9["zeit_summen"]["gesamt_pos"], 45 * 2 / 60 + 6 / 60)
+print("FEHLER:" if fehler else "alles stimmt", fehler if fehler else "")

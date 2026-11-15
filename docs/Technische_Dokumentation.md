@@ -561,6 +561,8 @@ Werkstatt: `werkstatt.as_links_html()` (Materialsummen je `matnr` über `arbeits
 
 **Bezugsgrößen als Kopie im Auftrag (2026.11.01-134).** `auftrag_kalk` führt `kalk.bezug_eigen` als Kopie der Einstellung `bezug_eigen`: fehlt sie (ältere Aufträge), wird sie angelegt; in den Einstellungen neue Schlüssel werden ergänzt, gelöschte/geänderte bleiben. `auftrag_rechnen` setzt `_bezug_eigen` daraus, die Positionsantwort liefert `bezug` aus der Kopie. `zeiten_fixieren(…, bezug_da)` hält beim Speichern die Bezugsgröße vorhandener Zeilen fest (Abgleich über tid/kst/name in Reihenfolge), ersetzbar nur, wenn sie im Auftrag nicht mehr existiert; neue Zeilen behalten eine gültige Bezugsgröße (Tätigkeitsliste), sonst die des Katalogs. Prüfskript `/tmp/claude-0/t/gp/bezug.py`.
 
+**Zeitenrechnung (2026.11.01-135).** `position_rechnen`: Zeile mit Bezugsgröße und Menge 0 → keine Rüstzeit (und damit nichts); Helfer = `min_anz × helfer` (vorher × (Bearbeitung + Rüsten je Anzahl)). Prüfskript `audit/kalk_test.py` T8/T9.
+
 **Wiedervorlagen (`wiedervorlage.py`).** Tabelle `wiedervorlagen` (auftrag_id, kunde_id, beleg_id, art, datum, text, erledigt, notiz). `nach_rechnung` beim Festschreiben einer Rechnung (art rechnung, nicht Berichtigung) je aktiver Regel aus `wiedervorlage_regeln` (Vorgabe `REGELN`), Datum = Leistungsdatum + Tage, je Auftrag und Art nur einmal offen; `nach_storno` entfernt offene. Startseite `start_daten().wiedervorlagen` (fällig bis heute + 7). Löschen mit Auftrag, Kunde, Anonymisierung und Testdaten (Gruppe Aufträge).
 
 ### Kontenplan und Kontoregeln (2026.11.01-132)

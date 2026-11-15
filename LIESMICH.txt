@@ -230,3 +230,9 @@ Beschläge ändert sich nichts. Handbuch und technische Dokumentation sind angep
   Wird eine Bezugsgröße in den Einstellungen geändert oder gelöscht, rechnen bestehende Aufträge unverändert weiter;
   neu angelegte Bezugsgrößen kommen in den Aufträgen dazu. Die Bezugsgröße einer Tätigkeit in der Position ist auch
   beim Speichern fest (nur Lohngruppe, Minuten, Rüstzeit und Helfer sind änderbar).
+
+2026.11.01-135
+  Kalkulation, Zeiten: Ist die Menge einer Tätigkeit mit Bezugsgröße 0 (z. B. „Beschläge einlassen“ ohne Beschläge),
+  entfällt die Zeile ganz, auch ihre Rüstzeit. Tätigkeiten ohne Bezugsgröße (Fahrzeit, Montage) zählen weiter.
+  Der Helferanteil wird nur noch auf die Bearbeitungszeit gerechnet, nicht auf die Rüstzeit. Bestehende Aufträge
+  rechnen ab jetzt so; festgeschriebene Belege bleiben unverändert.

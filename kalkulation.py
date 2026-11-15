@@ -409,10 +409,13 @@ def position_rechnen(pos, kalk, kinder=()):
         if bez_fehlt:
             warnungen.add(f"Tätigkeit „{z.get('name') or z.get('kst') or ''}“: Bezugsgröße „{z.get('bezug')}“ gibt es nicht mehr – sie wird mit 0 gerechnet")
         min_anz = f(z.get("minuten")) * faktor
-        ruest = 0.0 if z.get("ruest_aus") else f(z.get("ruest"))      # Rüstzeit/Helfer je Zeile abschaltbar
+        # Rüstzeit/Helfer je Zeile abschaltbar; ist die Bezugsgröße in dieser Position 0 (z. B. keine Beschläge),
+        # entfällt die Tätigkeit ganz – auch die Rüstzeit. Tätigkeiten ohne Bezugsgröße (Fahrzeit …) zählen immer.
+        leer = bool(z.get("bezug")) and abs(q) < 1e-9
+        ruest = 0.0 if z.get("ruest_aus") or leer else f(z.get("ruest"))
         ruest_anz = ruest / menge if menge else 0
-        # Helfer = Anteil einer Helferkraft während Bearbeitung und Rüsten (1,0 = ein Helfer die ganze Zeit)
-        helfer_anz = 0.0 if z.get("helfer_aus") else (min_anz + ruest_anz) * f(z.get("helfer"))
+        # Helfer = Anteil einer Helferkraft während der Bearbeitung (1,0 = ein Helfer die ganze Bearbeitungszeit); Rüstzeit ohne Helfer
+        helfer_anz = 0.0 if z.get("helfer_aus") else min_anz * f(z.get("helfer"))
         buche(z.get("kst"), gruppe, (min_anz + ruest_anz) / 60)
         if helfer_anz:
             # Helferstunden auf die Helfer-Kostenstelle/-Lohngruppe; fehlen diese in den Auftragswerten,
