@@ -216,10 +216,13 @@ async function positionsListe(z, a) {
         <td class="r nw">${zahl(w.skv * m)}</td>
         <td class="r nw">${zaehlt ? zahl(c.gesamtpreis) : `{${zahl(c.gesamtpreis)}}`}${akt}</td></tr>`;
     }
-    const unter = p.kinder.length ? `<tr class="pl-unter" data-zu="${p.id}"><td></td><td></td><td></td><td colspan="3">
-        <a href="#/position/${p.id}/unterpositionen">▸ ${p.kinder.length} Unterposition${p.kinder.length > 1 ? "en" : ""}</a>
-        ${p.kinder.map(k => `<div class="pl-uz"><span>${n2(k.menge, k.menge % 1 ? 2 : 0)} ${esc(k.einheit)} ${esc(kurz(k.text, 50))}</span><span>${p.unterdruck === "verdeckt" || p.unterdruck === "text" ? "{" + eur(k.calc.ep_gesamt) + "}" : eur(k.calc.ep_gesamt)}</span></div>`).join("")}
-      </td></tr>` : "";
+    // Unterpositionen: Text, Einzelpreis und Gesamtpreis je Unterposition in den Spalten der Liste
+    const kl = v => p.unterdruck === "verdeckt" || p.unterdruck === "text" ? "{" + eur(v) + "}" : eur(v);
+    const unter = p.kinder.length ? `<tr class="pl-unter" data-zu="${p.id}"><td></td><td></td><td></td>
+        <td><div class="pl-uz"><a href="#/position/${p.id}/unterpositionen">▸ ${p.kinder.length} Unterposition${p.kinder.length > 1 ? "en" : ""}</a></div>
+        ${p.kinder.map(k => `<div class="pl-uz">${n2(k.menge, k.menge % 1 ? 2 : 0)} ${esc(k.einheit)} ${esc(kurz(k.text, 60))}</div>`).join("")}</td>
+        <td class="r"><div class="pl-uz">&nbsp;</div>${p.kinder.map(k => `<div class="pl-uz">${kl(k.calc.ep_gesamt)}</div>`).join("")}</td>
+        <td class="r"><div class="pl-uz">&nbsp;</div>${p.kinder.map(k => `<div class="pl-uz">${kl(k.calc.gesamtpreis)}</div>`).join("")}</td></tr>` : "";
     return `<tr class="pl-pos${p.gesperrt ? " gesperrt" : ""}" data-id="${p.id}" data-titel="${p.titel}" draggable="true">
       ${nrZelle(p)}
       <td class="hinweis">${esc(p.status || "")}</td>
@@ -996,42 +999,49 @@ function summenSeite(ctx) {
   const ex = p.extras;
   const tabelleZeichnen = () => {
     const c = p.calc, m = p.menge || 0;
-    // Mit Unterpositionen: zusätzliche Spalte „inkl. Unterpositionen“ (eigene Werte + Unterpositionen je Anzahl der Hauptposition)
-    const uk = c.unter_kat || {}, mitU = (p.kinder || []).length > 0;
-    const inkl = k => (+c[k] || 0) + (+uk[k] || 0);
-    const svU = inkl("sonder_vertrieb"), wgU = (c.ep_gesamt || 0) - (c.kosten_gesamt || 0) - svU;
-    const iw = {werkstoffe: n2(inkl("werkstoffe")), beschlaege: n2(inkl("beschlaege")), oberflaeche: n2(inkl("oberflaeche")), kleinmaterial: n2(inkl("kleinmaterial")),
-      fremdleistungen: n2(inkl("fremdleistungen")), zukauf: n2(inkl("zukauf")), material: n2(inkl("material")), gk_mat: n2(inkl("gk_material")),
-      material_gk: `<b>${n2(inkl("material_gk"))}</b>`, stunden: n2(inkl("stunden")) + " h", lohn: n2(inkl("lohn")), gk_lohn: n2(inkl("gk_lohn")),
-      lohn_gk: `<b>${n2(inkl("lohn_gk"))}</b>`, sonder_fertigung: n2(inkl("sonder_fertigung")), selbstkosten: `<b>${n2(c.kosten_gesamt || 0)}</b>`,
-      wg: `${wgU >= 0 ? "+" : ""}${n2(wgU)}${c.kosten_gesamt ? ` <span class="hinweis">(${n2(wgU / c.kosten_gesamt * 100)} %)</span>` : ""}`, sonder_vertrieb: n2(svU), unter: "", netto: `<b>${n2(c.ep_gesamt || 0)}</b>`};
-    let zk = null;   // Schlüssel der Zeile für die Spalte „inkl. Unterpositionen“
-    const zl = (l, pz, v, ges = "", anteil = "", cls = "") => `<tr class="${cls}"><td>${l}</td><td class="r">${pz}</td><td class="r">${v}</td>${mitU ? `<td class="r">${zk != null ? iw[zk] ?? "" : ""}</td>` : ""}<td class="r">${ges}</td><td class="r">${anteil}</td></tr>`;
-    const Z = (k, ...a) => { zk = k; const h = zl(...a); zk = null; return h; };
-    const ant = v => c.selbstkosten ? n2(v / c.selbstkosten * 100) + " %" : "";
+    // Spalten: diese Position | Unterpositionen | zusammen (nur mit Unterpositionen) | Gesamt × Menge (nur wenn Menge ≠ 1) | Anteil
+    const uk = c.unter_kat || {}, mitU = (p.kinder || []).length > 0, mitG = Math.abs(m - 1) > 1e-9;
+    const sk = mitU ? (c.kosten_gesamt || 0) : (c.selbstkosten || 0);
+    const svU = (+c.sonder_vertrieb || 0) + (+uk.sonder_vertrieb || 0);
+    const wgZ = mitU ? (c.ep_gesamt || 0) - sk - svU : (c.wg || 0);
+    const vz = v => (v >= 0 ? "+" : "") + n2(v);
+    const ant = v => sk ? n2(v / sk * 100) + " %" : "";
+    // Zeile: Bezeichnung, Zuschlag, eigener Wert, Wert der Unterpositionen, Darstellung (n2 / Stunden / Vorzeichen), Anteil?, fett?
+    const zeile = (l, pz, eig, unt, art = "", mitAnteil = false, fett = false, opt = {}) => {
+      const fmt = v => art === "h" ? n2(v) + " h" : art === "vz" ? vz(v) : n2(v);
+      const b = s => fett ? `<b>${s}</b>` : s;
+      const zus = opt.zus ?? (eig + unt);
+      const ges = opt.ges ?? zus * m;
+      let h = `<tr class="${fett ? "zw" : ""}"><td>${l}</td><td class="r nw">${pz}</td><td class="r nw">${opt.eigHtml ?? b(fmt(eig))}</td>`;
+      if (mitU) h += `<td class="r nw">${opt.untHtml ?? fmt(unt)}</td><td class="r nw">${opt.zusHtml ?? b(fmt(zus))}</td>`;
+      if (mitG) h += `<td class="r nw">${opt.gesHtml ?? b(art === "h" ? fmt(ges) : (art === "vz" ? vz(ges) : n2(ges)))}</td>`;
+      return h + `<td class="r nw">${mitAnteil ? ant(zus) : ""}</td></tr>`;
+    };
+    const u = k => +uk[k] || 0;
+    const np = numInp(c.ep_gesamt, 'id="np" style="width:110px;text-align:right;font-weight:600"');
     if ($("#sWarn")) $("#sWarn").innerHTML = kalkWarnHtml(c);
     $("#sTab").innerHTML = `
-      <tr><th>Kalkulation</th><th class="r" style="width:140px">Zuschlag %</th><th class="r">je Anzahl</th>${mitU ? `<th class="r" title="eigene Kalkulation plus Unterpositionen, je Anzahl der Hauptposition">inkl. Unterpos.</th>` : ""}<th class="r">Gesamt (× ${n2(m, m % 1 ? 2 : 0)})</th><th class="r">Anteil</th></tr>
-      ${Z("werkstoffe", `<a href="#/position/${pid}/werkstoffe">▸ Werkstoffe</a> <span class="hinweis">Stückliste ${p.stueckliste.length} Zeilen${c.kostenliste_werkstoffe ? ` · davon Kostenliste ${n2(c.kostenliste_werkstoffe)}` : ""}</span>`, "", n2(c.werkstoffe))}
-      ${Z("beschlaege", `<a href="#/position/${pid}/beschlaege">▸ Beschläge</a> <span class="hinweis">${p.beschlaege.length} Zeilen</span>`, "", n2(c.beschlaege))}
-      ${Z("oberflaeche", "Oberfläche", "", n2(c.oberflaeche))}
-      ${Z("kleinmaterial", "Kleinmaterial", numInp(c.kleinmaterial_pz, 'data-x="kleinmaterial" style="width:70px"') + " %", n2(c.kleinmaterial))}
-      ${Z("fremdleistungen", `<a href="#/position/${pid}">▸ Fremdleistungen</a> <span class="hinweis">Kostenliste</span>`, "", n2(c.fremdleistungen))}
-      ${Z("zukauf", `<a href="#/position/${pid}">▸ Zukauf</a> <span class="hinweis">Kostenliste, Handelsware</span>`, "", n2(c.zukauf))}
-      ${Z("material", "Summe Material", "", n2(c.material), "", ant(c.material))}
-      ${Z("gk_mat", "Gemeinkosten Material", n2(c.gk_material_pz) + " %", n2(c.gk_material))}
-      ${Z("material_gk", "<b>Material mit GK</b>", "", n2(c.material_gk), "", ant(c.material_gk), "zw")}
-      ${Z("stunden", `<a href="#/position/${pid}/zeiten">▸ Fertigungsstunden</a>`, "", n2(c.stunden) + " h", n2(c.zeit_summen.gesamt_pos) + " h")}
-      ${Z("lohn", "Lohnkosten", "", n2(c.lohn), "", ant(c.lohn))}
-      ${Z("gk_lohn", "Gemeinkosten Lohn", n2(c.gk_lohn_pz) + " %", n2(c.gk_lohn))}
-      ${Z("lohn_gk", "<b>Lohnkosten mit GK</b>", "", n2(c.lohn_gk), "", ant(c.lohn_gk), "zw")}
-      ${Z("sonder_fertigung", `<a href="#/position/${pid}">▸ Sonderkosten Fertigung</a> <span class="hinweis">Kostenliste</span>`, "", n2(c.sonder_fertigung), "", ant(c.sonder_fertigung))}
-      ${Z("selbstkosten", "<b>Selbstkosten</b>", "", n2(c.selbstkosten), eur((mitU ? c.kosten_gesamt || 0 : c.selbstkosten) * m), "100,00 %", "zw")}
-      ${Z("wg", "Wagnis und Gewinn", c.hat_kalk ? numInp(c.wg_pz, 'data-x="wg" style="width:70px"') + " %" : n2(c.wg_pz) + " %", (c.wg >= 0 ? "+" : "") + n2(c.wg), ((mitU ? wgU : c.wg) >= 0 ? "+" : "") + eur((mitU ? wgU : c.wg) * m))}
-      ${Z("sonder_vertrieb", `<a href="#/position/${pid}">▸ Sonderkosten Vertrieb</a> <span class="hinweis">Kostenliste</span>`, "", n2(c.sonder_vertrieb), eur((mitU ? svU : c.sonder_vertrieb) * m))}
-      ${c.unter_ep ? zl(`<a href="#/position/${pid}/unterpositionen">▸ Unterpositionen</a> <span class="hinweis">Preis</span>`, "", n2(c.unter_ep), mitU ? "" : eur(c.unter_ep * m)) : ""}
-      ${Z("netto", "<b>Nettopreis</b>", `<button class="btn" data-r="ab" title="abrunden">,00↓</button><button class="btn" data-r="auf" title="aufrunden">,00↑</button>`,
-        numInp(c.ep_gesamt, 'id="np" style="width:110px;text-align:right;font-weight:600"'), `<b>${eur(c.gesamtpreis)}</b>`, p.preis_manuell && c.hat_kalk ? `<button class="btn" id="neuBer">berechnen</button>` : "", "zw")}`;
+      <tr><th>Kalkulation</th><th class="r" style="width:120px">Zuschlag %</th><th class="r">${mitU ? "diese Position" : "je Anzahl"}</th>${mitU ? `<th class="r" title="Unterpositionen je Anzahl der Hauptposition"><a href="#/position/${pid}/unterpositionen" style="color:inherit">Unterpositionen</a></th><th class="r" title="diese Position plus Unterpositionen, je Anzahl">zusammen</th>` : ""}${mitG ? `<th class="r">Gesamt (×&nbsp;${n2(m, m % 1 ? 2 : 0)})</th>` : ""}<th class="r">Anteil</th></tr>
+      ${zeile(`<a href="#/position/${pid}/werkstoffe">▸ Werkstoffe</a> <span class="hinweis">Stückliste ${p.stueckliste.length} Zeilen${c.kostenliste_werkstoffe ? ` · davon Kostenliste ${n2(c.kostenliste_werkstoffe)}` : ""}</span>`, "", c.werkstoffe, u("werkstoffe"))}
+      ${zeile(`<a href="#/position/${pid}/beschlaege">▸ Beschläge</a> <span class="hinweis">${p.beschlaege.length} Zeilen</span>`, "", c.beschlaege, u("beschlaege"))}
+      ${zeile("Oberfläche", "", c.oberflaeche, u("oberflaeche"))}
+      ${zeile("Kleinmaterial", numInp(c.kleinmaterial_pz, 'data-x="kleinmaterial" style="width:70px"') + " %", c.kleinmaterial, u("kleinmaterial"))}
+      ${zeile(`<a href="#/position/${pid}">▸ Fremdleistungen</a> <span class="hinweis">Kostenliste</span>`, "", c.fremdleistungen, u("fremdleistungen"))}
+      ${zeile(`<a href="#/position/${pid}">▸ Zukauf</a> <span class="hinweis">Kostenliste, Handelsware</span>`, "", c.zukauf, u("zukauf"))}
+      ${zeile("Summe Material", "", c.material, u("material"), "", true)}
+      ${zeile("Gemeinkosten Material", n2(c.gk_material_pz) + " %", c.gk_material, u("gk_material"))}
+      ${zeile("Material mit GK", "", c.material_gk, u("material_gk"), "", true, true)}
+      ${zeile(`<a href="#/position/${pid}/zeiten">▸ Fertigungsstunden</a>`, "", c.stunden, u("stunden"), "h", false, false, {ges: (c.zeit_summen.gesamt_pos || 0) + u("stunden") * m})}
+      ${zeile("Lohnkosten", "", c.lohn, u("lohn"), "", true)}
+      ${zeile("Gemeinkosten Lohn", n2(c.gk_lohn_pz) + " %", c.gk_lohn, u("gk_lohn"))}
+      ${zeile("Lohnkosten mit GK", "", c.lohn_gk, u("lohn_gk"), "", true, true)}
+      ${zeile(`<a href="#/position/${pid}">▸ Sonderkosten Fertigung</a> <span class="hinweis">Kostenliste</span>`, "", c.sonder_fertigung, u("sonder_fertigung"), "", true)}
+      ${zeile("Selbstkosten", "", c.selbstkosten, u("selbstkosten"), "", true, true, {zus: sk})}
+      ${zeile("Wagnis und Gewinn", c.hat_kalk ? numInp(c.wg_pz, 'data-x="wg" style="width:70px"') + " %" : n2(c.wg_pz) + " %", c.wg, u("wg"), "vz", true, false, {zus: wgZ})}
+      ${zeile(`<a href="#/position/${pid}">▸ Sonderkosten Vertrieb</a> <span class="hinweis">Kostenliste</span>`, "", c.sonder_vertrieb, u("sonder_vertrieb"))}
+      ${zeile("Nettopreis", `<button class="btn" data-r="ab" title="abrunden">,00↓</button><button class="btn" data-r="auf" title="aufrunden">,00↑</button>`, c.einzelpreis, c.unter_ep || 0, "", false, true,
+        {zus: c.ep_gesamt || 0, eigHtml: mitU ? `<b>${n2(c.einzelpreis)}</b>` : np, zusHtml: np, gesHtml: `<b>${n2(c.gesamtpreis)}</b>`})
+        .replace(/<td class="r nw"><\/td><\/tr>$/, `<td class="r nw">${p.preis_manuell && c.hat_kalk ? `<button class="btn" id="neuBer">berechnen</button>` : ""}</td></tr>`)}`;
     $$("[data-x]", z).forEach(el => el.onchange = () => { ex[el.dataset.x] = zahlEin(el.value); sp.setze("extras", ex, true); if (el.dataset.x === "wg" && p.preis_manuell) sp.setze("preis_manuell", 0, true); });
     $$("[data-r]", z).forEach(b => b.onclick = async () => { await sp.senden(); const r = await api(`positionen/${pid}/runden`, {method: "POST", body: {modus: b.dataset.r}}); Object.assign(p, r.position); tabelleZeichnen(); });
     $("#np").onchange = () => { const v = zahlEin($("#np").value) - (p.calc.unter_ep || 0); sp.setze("einzelpreis", v, true); sp.setze("preis_manuell", 1, true); };

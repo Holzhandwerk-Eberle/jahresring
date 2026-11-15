@@ -383,7 +383,8 @@ table.pl-zu td.pl-text{min-width:240px}
 .pl-marke{display:inline-block;background:#d8d0c4;color:#fff;border-radius:3px;font-size:10px;line-height:14px;padding:0 4px;margin:2px 0 0 2px;font-weight:600}
 .pl-text div{white-space:normal;line-height:1.45}
 .pl-unter td{background:#f9f6f1!important;padding-top:2px!important;font-size:13px}
-.pl-uz{display:flex;justify-content:space-between;gap:12px;color:var(--leise);max-width:640px}
+#sTab th{white-space:normal;vertical-align:bottom}#sTab td,#sTab th{padding-left:8px;padding-right:8px}
+.pl-uz{color:var(--leise);line-height:1.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:600px}
 .pl-akt{display:none;justify-content:flex-end;gap:2px;margin-top:6px}
 .pl-pos:hover .pl-akt{display:flex}
 .pl-akt button{border:1px solid #cfc6ba;background:#fff;border-radius:4px;width:26px;height:24px;cursor:pointer;font-size:11px}
@@ -2601,7 +2602,7 @@ async function render() {
   }
 }
 window.addEventListener("hashchange", render);
-const VERSION = "2026.11.01-135";
+const VERSION = "2026.11.01-136";
 (async () => {
   try {
     const v = await api("version").catch(() => ({}));

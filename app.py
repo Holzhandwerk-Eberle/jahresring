@@ -87,7 +87,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-135"
+VERSION = "2026.11.01-136"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (

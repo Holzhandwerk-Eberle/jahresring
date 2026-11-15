@@ -236,3 +236,6 @@ Beschläge ändert sich nichts. Handbuch und technische Dokumentation sind angep
   entfällt die Zeile ganz, auch ihre Rüstzeit. Tätigkeiten ohne Bezugsgröße (Fahrzeit, Montage) zählen weiter.
   Der Helferanteil wird nur noch auf die Bearbeitungszeit gerechnet, nicht auf die Rüstzeit. Bestehende Aufträge
   rechnen ab jetzt so; festgeschriebene Belege bleiben unverändert.
+
+2026.11.01-136
+Summen einer Position neu gegliedert: Spalten „diese Position“, „Unterpositionen“ und „zusammen“ (nur mit Unterpositionen), „Gesamt“ mal Menge nur bei Menge ungleich 1 und dann in jeder Zeile gefüllt; Anteil bezogen auf die Selbstkosten einschließlich Unterpositionen, bei Wagnis und Gewinn der sich ergebende Zuschlag. Positionsliste: Unterpositionen mit Einzel- und Gesamtpreis.
