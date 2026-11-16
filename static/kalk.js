@@ -16,6 +16,8 @@ const klAusExtras = ex => {
 };
 const KL_ALT = ["fremdleistungen", "zukauf", "sonder_fertigung", "sonder_vertrieb"];
 const klBetrag = x => (x.menge === "" || x.menge == null ? 1 : +x.menge || 0) * (+x.preis || 0);
+// Lieferzeit im Zahlungsplan: Zahl oder Spanne („4-6“) – für Terminrechnungen zählt die längere Zeit
+const planWochenMax = w => typeof w === "number" ? w : Math.max(0, ...String(w ?? "").replace(/,/g, ".").split(/-|–|—|bis/).map(x => parseFloat(x) || 0));
 const numInp = (wert, attr = "", n = 2) => `<input class="zahl" value="${wert === "" || wert == null ? "" : n2(wert, n)}" ${attr}>`;
 
 // Kleiner Speicher-Helfer: sammelt Änderungen und schickt sie verzögert
@@ -1652,12 +1654,12 @@ function druckEinstellungen(b, dis) {
     ${art === "storno" ? "" : zeile("Konditionen", rg("konditionen", re ? JN : [[true, "Ja"], ["plan", "Zahlungsplan"], [false, "Nein"]], `<span class="hinweis" style="padding-top:2px">${re ? "Zahlungsziel, Skonto, Bankverbindung" : dr.konditionen === "plan" ? "Anzahlung und Restzahlung, Text unter Einstellungen › Belege & Briefbogen" : "Zahlungsbedingungen aus dem Kunden"}</span>`))}
     ${!re && dr.konditionen === "plan" ? zeile("Zahlungsplan", `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">Anzahlung ${numInp(dr.plan_anzahlung ?? "", `data-drz="plan_anzahlung" style="width:70px;text-align:right" placeholder="40" ${dis}`, 0)} %
       <span style="margin-left:10px">Restzahlung</span> ${numInp(dr.plan_rest ?? (E.zahlungsplan_rest ?? 10), `data-drz="plan_rest" style="width:60px;text-align:right" ${dis}`, 0)} Tage nach Leistung
-      <span style="margin-left:10px">Lieferung</span> ${numInp(dr.plan_wochen ?? "", `data-drz="plan_wochen" style="width:60px;text-align:right" placeholder="–" ${dis}`, 0)} Wochen nach Anzahlung <span class="hinweis">(leer = ohne Satz)</span>
+      <span style="margin-left:10px">Lieferung</span> <input class="zahl" value="${esc(typeof dr.plan_wochen === "number" ? n2(dr.plan_wochen, Number.isInteger(dr.plan_wochen) ? 0 : 1) : dr.plan_wochen ?? "")}" data-drz="plan_wochen" style="width:70px;text-align:right" placeholder="–" title="Zahl oder Spanne, z. B. 5 oder 4-6" ${dis}> Wochen nach Anzahlung <span class="hinweis">(Zahl oder Spanne wie 4-6; leer = ohne Satz)</span>
       ${+dr.plan_anzahlung ? "" : `<span style="color:var(--rot)">Bitte Anzahlung in % eintragen.</span>`}</div>
-      ${(() => { const pv = ((b.daten || {}).auftrag || {}).plan_von; if (!pv || !(+dr.plan_wochen > 0) || !+dr.plan_anzahlung) return "";
-        const st = new Date(pv + "T12:00:00"); st.setDate(st.getDate() - Math.round(+dr.plan_wochen * 7)); const sti = st.toISOString().slice(0, 10);
+      ${(() => { const pv = ((b.daten || {}).auftrag || {}).plan_von; const wo = planWochenMax(dr.plan_wochen); if (!pv || !(wo > 0) || !+dr.plan_anzahlung) return "";
+        const st = new Date(pv + "T12:00:00"); st.setDate(st.getDate() - Math.round(wo * 7)); const sti = st.toISOString().slice(0, 10);
         return sti >= (b.datum || "") ? `<div class="hinweis">Im Kopf steht der geplante Ausführungszeitraum mit „bei Anzahlung bis ${datum(sti)}“.</div>`
-          : `<div class="hinweis" style="color:var(--rot)">Der geplante Ausführungszeitraum ist mit ${n2(+dr.plan_wochen, 0)} Wochen ab Anzahlung nicht mehr zu halten (Anzahlung wäre bis ${datum(sti)} nötig gewesen) und wird nicht gedruckt.</div>`; })()}`) : ""}
+          : `<div class="hinweis" style="color:var(--rot)">Der geplante Ausführungszeitraum ist mit ${n2(wo, 0)} Wochen ab Anzahlung nicht mehr zu halten (Anzahlung wäre bis ${datum(sti)} nötig gewesen) und wird nicht gedruckt.</div>`; })()}`) : ""}
     ${re && art !== "storno" ? zeile("QR-Code", rg("qr", JN, E.sepa_iban ? `<span class="hinweis" style="padding-top:2px">GiroCode zum Bezahlen mit der Banking-App</span>` : `<span class="hinweis" style="padding-top:2px">erst IBAN unter Einstellungen > Firma eintragen</span>`)) : ""}
     ${art === "rechnung" && E.lohnanteil !== "nie" ? zeile("Arbeitskosten § 35a", rg("lohnanteil", JN, `<span class="hinweis" style="padding-top:2px">Satz mit dem Lohnanteil${b.daten && b.daten.lohnanteil ? " (" + eur(b.daten.lohnanteil.brutto) + " brutto)" : ""} für die Steuererklärung des Kunden</span>`)) : ""}
     ${art === "abschlag" ? zeile("Positionen", rg("ab_positionen", [["ja", "Ja"], ["ohne", "Ohne Preise"], ["nein", "Nein"]], `<span class="hinweis" style="padding-top:2px">Positionen des Auftrags als Grundlage zeigen</span>`)) + zeile("Druck Auftragssumme", rg("ab_summe", JN)) : ""}
@@ -1681,9 +1683,12 @@ function druckBinden(b, bid, neuVorschau) {
     } catch (e) { toast(e.message, true); }
   });
   $$("[data-drz]").forEach(el => el.onchange = async () => {
-    const k = el.dataset.drz, v = el.value.trim() === "" ? "" : zahlEin(el.value);
-    try { await api("belege/" + bid, {method: "PUT", body: {druck: {[k]: v}}}); b.druck[k] = v; if (k === "plan_anzahlung") return ansichtBeleg(bid); neuVorschau(true); }
-    catch (e) { toast(e.message, true); }
+    const k = el.dataset.drz, v = el.value.trim() === "" ? "" : k === "plan_wochen" ? el.value.trim() : zahlEin(el.value);
+    try {
+      const r = await api("belege/" + bid, {method: "PUT", body: {druck: {[k]: v}}});
+      b.druck[k] = r && r.druck && k in r.druck ? r.druck[k] : v;   // der Server gibt die Lieferzeit bereinigt zurück (z. B. „4-6“)
+      if (k === "plan_anzahlung" || k === "plan_wochen") return ansichtBeleg(bid); neuVorschau(true);
+    } catch (e) { toast(e.message, true); el.focus(); }
   });
   $$("[name=dr_kompakt]").forEach(el => el.onchange = async () => { await api("belege/" + bid, {method: "PUT", body: {kompakt: el.value === "1"}}); neuVorschau(true); });
 }

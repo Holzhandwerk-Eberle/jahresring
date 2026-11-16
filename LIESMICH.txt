@@ -279,3 +279,6 @@ Menüleiste: Die Bildlaufleiste und die Pfeile unter dem Menü sind entfernt. Be
 
 2026.11.01-143
 Kontoauszüge: Der Kasten „Eingelesene Dateien“ steht jetzt oben (nach dem Einlesen aufgeklappt). Mit ✕ entfernt der Inhaber eine eingelesene Datei samt ihren Umsätzen wieder, solange keiner davon zugeordnet oder auf ein Konto gebucht ist. Umsätze, die auch in einem anderen eingelesenen Auszug stehen, bleiben erhalten; das Entfernen steht im Protokoll.
+
+2026.11.01-144
+Zahlungsplan: Die Lieferzeit darf eine Spanne sein („4-6“ oder „4 bis 6“ → „Lieferung ca. 4 bis 6 Wochen nach Eingang der Anzahlung.“). Bisher wurde eine solche Eingabe ohne Meldung verworfen und der Satz fehlte im Beleg; eine nicht lesbare Eingabe meldet das Programm jetzt.

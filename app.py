@@ -91,7 +91,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-143"
+VERSION = "2026.11.01-144"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -1052,7 +1052,7 @@ def update_pruefen():
             text = r.read(200_000).decode("utf-8", "replace")
         gefunden = sorted({v for v in re.findall(r"\b\d{4}\.\d{2}\.\d{2}-\d+\b", text)}, key=_version_zahl)
         if not gefunden:
-            raise ValueError("unter der Adresse steht keine Versionsnummer (erwartet z. B. 2026.11.01-143)")
+            raise ValueError("unter der Adresse steht keine Versionsnummer (erwartet z. B. 2026.11.01-144)")
         neueste = gefunden[-1]
         UPDATE.update(neu=neueste if _version_zahl(neueste) > _version_zahl(VERSION) else "", geprueft=jetzt(), fehler="")
     except Exception as f:  # noqa: BLE001  keine Verbindung, falsche Adresse, Schlüssel abgelaufen …
@@ -5666,13 +5666,32 @@ def beleg_agb_seiten(e, b, ku):
     return [f"/api/vorlage/{f}" for f in vorlage_dateien(art_agb)] if art_agb else []
 
 
+def plan_wochen(wert):
+    """Lieferzeit im Zahlungsplan: eine Zahl („5“, „4,5“) oder eine Spanne („4-6“, „4–6“, „4 bis 6“).
+    Liefert (von, bis) in Wochen; (0, 0) = keine Angabe; None = nicht lesbar."""
+    if isinstance(wert, (int, float)):
+        return (float(wert), float(wert)) if wert > 0 else (0.0, 0.0)
+    t = str(wert or "").strip().lower()
+    if not t:
+        return 0.0, 0.0
+    m = re.fullmatch(r"(\d{1,3}(?:[.,]\d)?)(?:\s*(?:-|–|—|bis)\s*(\d{1,3}(?:[.,]\d)?))?(?:\s*wochen?)?", t)
+    if not m:
+        return None
+    von = float(m.group(1).replace(",", "."))
+    bis = float(m.group(2).replace(",", ".")) if m.group(2) else von
+    if bis < von:
+        von, bis = bis, von
+    return von, bis
+
+
 def zahlungsplan_text(e, dr, s):
-    """Konditionen als Zahlungsplan: Anzahlung in % (je Beleg), Restzahlung in Tagen, optional Lieferzeit in Wochen."""
+    """Konditionen als Zahlungsplan: Anzahlung in % (je Beleg), Restzahlung in Tagen, optional Lieferzeit in Wochen (Zahl oder Spanne)."""
     pz = fl(dr.get("plan_anzahlung"))
     rest = int(fl(dr.get("plan_rest") if dr.get("plan_rest") not in (None, "") else e.get("zahlungsplan_rest") or 10))
-    wochen = fl(dr.get("plan_wochen"))
+    w_von, wochen = plan_wochen(dr.get("plan_wochen")) or (0.0, 0.0)
+    wz = lambda w: de(w, 0 if w == int(w) else 1)   # noqa: E731
     werte = {"anzahlung": de(pz, 0 if pz == int(pz) else 2), "anzahlung_betrag": de(round(fl(s.get("brutto")) * pz / 100, 2)),
-             "rest_tage": str(rest), "lieferwochen": de(wochen, 0 if wochen == int(wochen) else 1)}
+             "rest_tage": str(rest), "lieferwochen": wz(wochen) if w_von == wochen else f"{wz(w_von)} bis {wz(wochen)}"}
 
     def fuellen(t):
         if isinstance(t, list):   # ältere Speicherung als Zeilenliste
@@ -5847,7 +5866,8 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False):
     if b["art"] in ("angebot", "kv", "ab") and au.get("plan_von") and e.get("zeitraum_drucken", True):
         kw_v, kw_b = date.fromisoformat(au["plan_von"]).isocalendar(), date.fromisoformat(au.get("plan_bis") or au["plan_von"]).isocalendar()
         kw_text = f"KW {kw_v[1]}" + (f"–{kw_b[1]}" if kw_b[1] != kw_v[1] or kw_b[0] != kw_v[0] else "") + f"/{kw_b[0]}"
-        wochen = fl(dr.get("plan_wochen")) if dr.get("konditionen") == "plan" and fl(dr.get("plan_anzahlung")) else 0
+        # bei einer Spanne („4 bis 6 Wochen“) zählt für den Stichtag der Anzahlung die längere Lieferzeit
+        wochen = (plan_wochen(dr.get("plan_wochen")) or (0, 0))[1] if dr.get("konditionen") == "plan" and fl(dr.get("plan_anzahlung")) else 0
         if wochen > 0:
             # Zahlungsplan mit Lieferzeit ab Anzahlung: der Termin gilt nur, wenn die Anzahlung rechtzeitig eingeht
             stichtag = date.fromisoformat(au["plan_von"]) - timedelta(days=round(wochen * 7))
@@ -8236,6 +8256,12 @@ def api(methode, teile, q, daten):
                 if "kompakt" in d:
                     werte["kompakt"] = 1 if d["kompakt"] else 0
                 if isinstance(d.get("druck"), dict):
+                    if "plan_wochen" in d["druck"]:
+                        pw = plan_wochen(d["druck"]["plan_wochen"])
+                        if pw is None:
+                            raise ApiFehler("Bitte die Lieferzeit in Wochen als Zahl oder Spanne angeben, zum Beispiel 5 oder 4-6.")
+                        kurz_ = lambda w: int(w) if w == int(w) else w   # noqa: E731
+                        d["druck"]["plan_wochen"] = "" if not pw[1] else kurz_(pw[1]) if pw[0] == pw[1] else f"{kurz_(pw[0])}-{kurz_(pw[1])}".replace(".", ",")
                     alt = jl(con.execute("SELECT druck FROM belege WHERE id=?", (rid,)).fetchone()["druck"], {})
                     werte["druck"] = json.dumps({**alt, **d["druck"]}, ensure_ascii=False)
                 if werte:
