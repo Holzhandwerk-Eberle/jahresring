@@ -99,7 +99,8 @@ def belegdateien(b):
     archiv = os.path.join(HILFE["daten"], "belege", (b["datum"] or "")[:4] or "ohne-datum")
     if not os.path.isdir(archiv) or not b["nummer"]:
         return []
-    return [os.path.join(archiv, f) for f in sorted(os.listdir(archiv)) if f.startswith(b["nummer"] + "_")]
+    # neuer Name „<Nummer>.pdf“, früherer „<Nummer>_<Belegart>_<Kunde>.pdf“, XRechnung „<Nummer>…_XRechnung.xml“
+    return [os.path.join(archiv, f) for f in sorted(os.listdir(archiv)) if f.startswith(b["nummer"] + "_") or f.lower() == b["nummer"].lower() + ".pdf"]
 
 
 def zahlungsauftraege(con, von, bis):

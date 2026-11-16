@@ -282,3 +282,6 @@ Kontoauszüge: Der Kasten „Eingelesene Dateien“ steht jetzt oben (nach dem E
 
 2026.11.01-144
 Zahlungsplan: Die Lieferzeit darf eine Spanne sein („4-6“ oder „4 bis 6“ → „Lieferung ca. 4 bis 6 Wochen nach Eingang der Anzahlung.“). Bisher wurde eine solche Eingabe ohne Meldung verworfen und der Satz fehlte im Beleg; eine nicht lesbare Eingabe meldet das Programm jetzt.
+
+2026.11.01-145
+Dateiname der Belege: Das PDF heißt nur noch wie die Belegnummer (z. B. 2026-0031-A01.pdf) – als Anhang der E-Mail, im Projektordner und im Archiv; die XRechnung entsprechend 2026-0012_XRechnung.xml. Eine Fassung unter dem früheren Namen (Nummer_Belegart_Kunde) im Projektordner wird beim nächsten Erzeugen umbenannt. Archiv-PDFs festgeschriebener Rechnungen bleiben unverändert unter ihrem bisherigen Namen, der Kunde bekommt sie trotzdem unter der Nummer. Mahnungen behalten ihren Namen.

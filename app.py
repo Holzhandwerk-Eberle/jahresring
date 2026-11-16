@@ -91,7 +91,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-144"
+VERSION = "2026.11.01-145"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -1052,7 +1052,7 @@ def update_pruefen():
             text = r.read(200_000).decode("utf-8", "replace")
         gefunden = sorted({v for v in re.findall(r"\b\d{4}\.\d{2}\.\d{2}-\d+\b", text)}, key=_version_zahl)
         if not gefunden:
-            raise ValueError("unter der Adresse steht keine Versionsnummer (erwartet z. B. 2026.11.01-144)")
+            raise ValueError("unter der Adresse steht keine Versionsnummer (erwartet z. B. 2026.11.01-145)")
         neueste = gefunden[-1]
         UPDATE.update(neu=neueste if _version_zahl(neueste) > _version_zahl(VERSION) else "", geprueft=jetzt(), fehler="")
     except Exception as f:  # noqa: BLE001  keine Verbindung, falsche Adresse, Schlüssel abgelaufen …
@@ -5080,8 +5080,7 @@ def mail_vorschlag(con, bid):
             t = t.replace("{" + kk + "}", str(v))
         return t
     text = fuellen(vorlage["text"]).rstrip() + "\n" + mail_signatur(e)
-    kurz = (d.get('kunde') or {}).get('kurzname', '')
-    pdf_name = sauber(f"{b['nummer']}_{b['artname']}_{kurz}" if b["nummer"] else f"{b['artname']}_{kurz}") + ".pdf"
+    pdf_name = beleg_dateiname(b, bid) if b["nummer"] else sauber(b["artname"]) + ".pdf"   # die Nummer kommt erst beim Festschreiben
     anh = [{"id": "beleg", "name": pdf_name, "an": True}]
     if b["ist_rechnung"] and xrechnung_gewuenscht(con, b):
         anh.append({"id": "xrechnung", "name": pdf_name[:-4] + "_XRechnung.xml", "an": True})
@@ -5095,7 +5094,7 @@ def mail_vorschlag(con, bid):
             dirs.sort()
             for f in sorted(files):
                 pf = os.path.join(wurzel, f)
-                if f.startswith((".", "~$")) or f == pdf_name:
+                if f.startswith((".", "~$")) or f in (pdf_name, beleg_dateiname_alt(b, bid)):
                     continue
                 try:
                     groesse = os.path.getsize(pf)
@@ -5136,10 +5135,10 @@ def mail_senden(con, bid, d):
     anh = []
     if "beleg" in gewaehlt:
         with open(pdf["archiv"], "rb") as f:
-            anh.append((os.path.basename(pdf["archiv"]), f.read(), "application/pdf"))
+            anh.append((beleg_dateiname(b, bid), f.read(), "application/pdf"))   # der Empfänger sieht nur die Belegnummer
     if "xrechnung" in gewaehlt and pdf.get("xrechnung"):
         with open(pdf["xrechnung"], "rb") as f:
-            anh.append((os.path.basename(pdf["xrechnung"]), f.read(), "application/xml"))
+            anh.append((beleg_dateiname(b, bid)[:-4] + "_XRechnung.xml", f.read(), "application/xml"))
     if d.get("dateien"):
         ordner, hinweis = projektordner(con, b["auftrag_id"])
         if not ordner:
@@ -5431,16 +5430,36 @@ def status_fortschreiben(con, b):
     return meldung
 
 
+def beleg_dateiname(b, bid=None):
+    """Dateiname eines Belegs: nur die Belegnummer (z. B. „2026-0031-A01.pdf“); ohne Nummer (Entwurf) Belegart und laufende Kennung."""
+    return (sauber(b["nummer"]) if b.get("nummer") else sauber(f"{b['artname']}-Entwurf-{bid or b.get('id') or ''}")) + ".pdf"
+
+
+def beleg_dateiname_alt(b, bid=None):
+    """Früherer Dateiname (Nummer_Belegart_Kunde) – nur noch, um vorhandene Dateien wiederzufinden."""
+    return sauber(f"{b['nummer'] or 'Entwurf-' + str(bid or b.get('id') or '')}_{b['artname']}_{b['daten'].get('kunde', {}).get('kurzname', '')}") + ".pdf"
+
+
 def beleg_pdf(con, bid):
     """Erzeugt das PDF: Archivkopie in daten/belege und Kopie im Projektordner."""
     b = beleg_laden(con, bid)
     con.commit()  # damit der Browser beim Abruf der Druckansicht den aktuellen Stand sieht
     e = einstellungen(con)
-    name = sauber(f"{b['nummer'] or 'Entwurf-' + str(bid)}_{b['artname']}_{b['daten'].get('kunde', {}).get('kurzname', '')}") + ".pdf"
+    name, name_alt = beleg_dateiname(b, bid), beleg_dateiname_alt(b, bid)
     archiv = os.path.join(DATEN, "belege", b["datum"][:4] if b["datum"] else "ohne-datum")
     os.makedirs(archiv, exist_ok=True)
     archiv_pfad = os.path.join(archiv, name)
-    if b["status"] in ("fest", "storniert") and os.path.exists(archiv_pfad):
+    alt_pfad = os.path.join(archiv, name_alt)
+    fest = b["status"] in ("fest", "storniert")
+    if fest and not os.path.exists(archiv_pfad) and os.path.exists(alt_pfad):
+        archiv_pfad = alt_pfad   # festgeschriebene Rechnung mit Archiv-PDF unter dem früheren Namen: Datei und Name bleiben unverändert
+    elif not fest and os.path.exists(alt_pfad):
+        try:   # Arbeitskopie eines noch änderbaren Belegs unter dem früheren Namen: umbenennen statt eine zweite Datei anzulegen
+            os.replace(alt_pfad, archiv_pfad)
+        except OSError:
+            pass
+    stamm = os.path.basename(archiv_pfad)[:-4]
+    if fest and os.path.exists(archiv_pfad):
         pass  # festgeschriebene Rechnung: Archiv-PDF bleibt unverändert
     else:
         pdf_rendern(bid, archiv_pfad)
@@ -5455,7 +5474,7 @@ def beleg_pdf(con, bid):
                 zf_hinweis = str(f)
         if b["ist_rechnung"] and b["status"] in ("fest", "storniert") and os.path.isfile(archiv_pfad):
             # Hash des Archiv-PDFs ins Protokoll: spätere Änderungen an der Datei fallen bei der Belegprüfung auf
-            prot(con, "archiv_pdf", b["nummer"], f"Archiv-PDF zu {b['artname']} {b['nummer']} erzeugt: {name}",
+            prot(con, "archiv_pdf", b["nummer"], f"Archiv-PDF zu {b['artname']} {b['nummer']} erzeugt: {os.path.basename(archiv_pfad)}",
                  {"id": b["id"], "nummer": b["nummer"], "datei": os.path.relpath(archiv_pfad, os.path.join(DATEN, "belege")).replace(os.sep, "/"),
                   "sha256": datei_sha256(archiv_pfad), "groesse": os.path.getsize(archiv_pfad)})
     ergebnis = {"archiv": archiv_pfad, "projekt": None}
@@ -5464,7 +5483,7 @@ def beleg_pdf(con, bid):
     xr_name = xr_pfad = None
     if b["ist_rechnung"] and b["status"] in ("fest", "storniert") and xrechnung_gewuenscht(con, b):
         try:
-            xr_name = name[:-4] + "_XRechnung.xml"
+            xr_name = stamm + "_XRechnung.xml"   # liegt immer neben dem Archiv-PDF, mit dessen Namensstamm
             xr_pfad = os.path.join(archiv, xr_name)
             if not os.path.exists(xr_pfad) or os.path.getsize(xr_pfad) == 0:
                 xml = erechnung.cii_xml(b, True, auftrag_kunde(con, b["auftrag_id"]))
@@ -5477,9 +5496,16 @@ def beleg_pdf(con, bid):
     ordner, hinweis = projektordner(con, b["auftrag_id"])
     if ordner:
         ziel = os.path.join(pdf_unterordner(ordner, b["art"], e), name)
+        for alt_, neu_ in ((name_alt, name), (name_alt[:-4] + "_XRechnung.xml", name[:-4] + "_XRechnung.xml")):
+            alt_ziel = os.path.join(os.path.dirname(ziel), alt_)
+            if alt_ != neu_ and os.path.isfile(alt_ziel):
+                try:   # Kopie unter dem früheren Namen: umbenennen, damit im Projektordner nicht zwei Fassungen liegen
+                    os.replace(alt_ziel, os.path.join(os.path.dirname(ziel), neu_))
+                except OSError:
+                    pass
         shutil.copyfile(archiv_pfad, ziel)
         if xr_pfad:
-            shutil.copyfile(xr_pfad, os.path.join(os.path.dirname(ziel), xr_name))
+            shutil.copyfile(xr_pfad, ziel[:-4] + "_XRechnung.xml")
         ergebnis["projekt"] = ziel
         ergebnis["projekt_rel"] = os.path.relpath(ziel, ordner).replace(os.sep, "/")
     else:
@@ -6348,7 +6374,7 @@ def mahnung_mail_senden(con, mid, d):
     if "rechnung" in gewaehlt and bid:
         pdf = beleg_pdf(con, bid)
         with open(pdf["archiv"], "rb") as f:
-            anh.append((os.path.basename(pdf["archiv"]), f.read(), "application/pdf"))
+            anh.append((beleg_dateiname(beleg_laden(con, bid), bid), f.read(), "application/pdf"))
     con.commit()
     try:
         r = mailversand.senden(cfg, d.get("an"), d.get("cc"), d.get("betreff") or m["betreff"], d.get("text") or "", anh,
