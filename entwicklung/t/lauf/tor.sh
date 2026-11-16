@@ -13,6 +13,10 @@ schritt kalender python3 $T/neu/kalender_test.py
 bash $T/v25/neu.sh >/dev/null 2>&1
 schritt pruefungen python3 $T/neu/pruef.py
 bash $T/v25/neu.sh >/dev/null 2>&1
+schritt pruefungen141 python3 $T/neu/pruef141.py
+schritt update_pdf python3 $T/neu/update_test.py
+schritt preisimport bash -c "bash $T/v25/neu.sh >/dev/null 2>&1; python3 $T/bank/preise.py | grep -q 'FEHLER: \[\]'"
+bash $T/v25/neu.sh >/dev/null 2>&1
 schritt durchlauf bash -c "cd $T/v25 && timeout 600 node s/t10.js > $O/tor_t10.txt 2>&1; tail -1 $O/tor_t10.txt | grep -q 'fehler \[\]'"
 schritt seiten bash -c "cd $T/v25 && timeout 600 node s/crawl.js > $O/tor_crawl.txt 2>&1; grep -q '^Fehler: 0' $O/tor_crawl.txt && grep -q '^Auffällige Texte: 0' $O/tor_crawl.txt"
 schritt inhaltsschutz bash -c "cd $T/v25 && cp $T/neu/csp.js s/csp.js && timeout 300 node s/csp.js > $O/tor_csp.txt 2>&1; ! grep -q FEHLER $O/tor_csp.txt && grep -q 'keine Verstöße' $O/tor_csp.txt"

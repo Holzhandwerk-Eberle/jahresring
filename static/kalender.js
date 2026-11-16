@@ -182,12 +182,15 @@ function planungZeichnen(von, bis) {
 
   // Kopfzeilen
   let kopfM = "", kopfK = "", kopfT = "", raster = "";
+  // Feiertage: farbiger Streifen über die ganze Spalte (in jeder Zeile), der Name steht beim Überfahren und im Kopf
+  const ftName = Object.fromEntries((d.feiertage || []).map(f => [f.datum, f.name]));
   for (let i = 0; i < tage; i++) {
     const t = plusTage(von, i), wt = (t.getDay() + 6) % 7, s = iso(t);
     if (i === 0 || t.getDate() === 1) kopfM += `<div class="kp-m" style="left:${i * tw}px">${MONATE[t.getMonth()]} ${t.getFullYear()}</div>`;
     if (wt === 0 || i === 0) kopfK += `<div class="kp-k" style="left:${i * tw}px;width:${tw * (7 - wt)}px">KW ${kw(t)}</div>`;
-    kopfT += `<div class="kp-t${wt > 4 ? " we" : ""}${s === heuteIso ? " heute" : ""}" style="left:${i * tw}px;width:${tw}px">${tw >= 22 ? WT[wt] + "<br>" : ""}${t.getDate()}</div>`;
-    if (wt > 4) raster += `<div class="kp-we" style="left:${i * tw}px;width:${tw}px"></div>`;
+    kopfT += `<div class="kp-t${wt > 4 ? " we" : ""}${ftName[s] ? " ft" : ""}${s === heuteIso ? " heute" : ""}" style="left:${i * tw}px;width:${tw}px"${ftName[s] ? ` title="Feiertag: ${esc(ftName[s])}"` : ""}>${tw >= 22 ? WT[wt] + "<br>" : ""}${t.getDate()}</div>`;
+    if (ftName[s]) raster += `<div class="kp-ftag" style="left:${i * tw}px;width:${tw}px" title="Feiertag: ${esc(ftName[s])}"></div>`;
+    else if (wt > 4) raster += `<div class="kp-we" style="left:${i * tw}px;width:${tw}px"></div>`;
     if (wt === 0) raster += `<div class="kp-wl" style="left:${i * tw}px"></div>`;
   }
   const heuteX = sichtbar(heuteIso, heuteIso) ? `<div class="kp-heute" style="left:${x(heuteIso) + tw / 2}px"></div>` : "";
@@ -220,8 +223,7 @@ function planungZeichnen(von, bis) {
   };
   const ext = d.extern.map(e => ({...e, tip: `${e.quelle}: ${e.titel}${e.zeit_von ? " " + e.zeit_von + "–" + e.zeit_bis : ""}${e.ort ? " · " + e.ort : ""}`}));
   const extN = lanes(ext);
-  const abwItems = [...(d.feiertage || []).map(f => ({von: f.datum, bis: f.datum, titel: f.name, tip: "Feiertag: " + f.name, farbe: "#b5ab9e", ft: true})),
-    ...(d.abwesenheiten || []).map(a => ({...a, titel: abwText(a), tip: abwTip(a), farbe: ABW_FARBE[a.art] || "#8f99a8"}))]
+  const abwItems = [...(d.abwesenheiten || []).map(a => ({...a, titel: abwText(a), tip: abwTip(a), farbe: ABW_FARBE[a.art] || "#8f99a8"}))]
     .map(e => ({...e, von: e.von < iso(von) ? iso(von) : e.von, bis: e.bis > iso(plusTage(von, tage - 1)) ? iso(plusTage(von, tage - 1)) : e.bis}));
   const abwN = lanes(abwItems);
   const ohneItems = ohne.filter(t => sichtbar(t.von, t.bis)).map(t => ({von: t.von, bis: t.bis, t, farbe: typFarbe(t.typ), tip: `${t.typ}${t.titel ? ": " + t.titel : ""}`}));
@@ -230,7 +232,7 @@ function planungZeichnen(von, bis) {
     <div class="kp-kopf"><div class="kp-label kp-ecke"></div><div class="kp-skala" style="width:${tage * tw}px">${kopfM}${kopfK}${kopfT}</div></div>
     ${d.extern.length || (E.google_kalender || []).length ? `<div class="kp-zeile kp-ext"><div class="kp-label"><b>Google Kalender</b><div class="kp-bez">${esc((E.google_kalender || []).map(k => k.name).join(", "))}</div></div>
       <div class="kp-flaeche" style="height:${extN * 26 + 8}px;width:${tage * tw}px">${raster}${heuteX}${ext.map(e => `<div class="kp-b ext" style="left:${x(e.von)}px;width:${w(e.von, e.bis) - 2}px;top:${4 + e.lane * 26}px;--f:${e.farbe}" title="${esc(e.tip)}"><span>${e.zeit_von && w(e.von, e.bis) > 70 ? e.zeit_von + " " : ""}${esc(e.titel)}</span></div>`).join("")}</div></div>` : ""}
-    ${abwItems.length || (d.feiertage || []).length ? `<div class="kp-zeile kp-ext kp-abw"><div class="kp-label"><b>Abwesend & Feiertage</b><div class="kp-bez">Urlaub, Krank, Schule …</div></div>
+    ${abwItems.length ? `<div class="kp-zeile kp-ext kp-abw"><div class="kp-label"><b>Abwesend</b><div class="kp-bez">Urlaub, Krank, Schule …</div></div>
       <div class="kp-flaeche" style="height:${abwN * 26 + 8}px;width:${tage * tw}px">${raster}${heuteX}${abwItems.map(e => `<div class="kp-b ext${e.beantragt ? " beantr" : ""}${e.ft ? " ft" : ""}" ${e.id ? `data-abw="${e.id}"` : ""} style="left:${x(e.von)}px;width:${w(e.von, e.bis) - 2}px;top:${4 + e.lane * 26}px;--f:${e.farbe}" title="${esc(e.tip)}"><span>${esc(e.titel)}</span></div>`).join("")}</div></div>` : ""}
     ${kapazitaetHtml(d.kapazitaet, {von, tage, tw, raster, heuteX, balken, sichtbar, termine: d.termine})}
     <div class="kp-zeile kp-ohne" data-a=""><div class="kp-label"><b>Allgemein</b><div class="kp-bez">Termine ohne Auftrag</div></div>

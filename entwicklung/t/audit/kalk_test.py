@@ -96,4 +96,11 @@ p9 = {"menge": 2, "zeitmodus": "taetigkeiten", "zeiten": [{"kst": kst1, "minuten
 c9 = K.position_rechnen(p9, kalk)
 print("T9", c9["zeit_summen"])
 gleich("Menge 0 ohne Rüstzeit", c9["zeit_summen"]["gesamt_pos"], 45 * 2 / 60 + 6 / 60)
+# Beschlägeliste: leere Zeile (kein Beschlag, keine Bemerkung) zählt nicht für die Bezugsgröße „Beschläge – St.“
+zt = [{"kst": kst1, "minuten": 6, "bezug": "beschlaege", "ruest": 12, "helfer": 0}]
+c10 = K.position_rechnen({"menge": 1, "zeitmodus": "taetigkeiten", "zeiten": zt, "beschlaege": [{"k": "", "menge": 23, "bemerkung": ""}]}, kalk)
+gleich("leere Beschlagzeile: keine Arbeitszeit", c10["zeit_summen"]["gesamt_pos"], 0)
+c11 = K.position_rechnen({"menge": 1, "zeitmodus": "taetigkeiten", "zeiten": zt, "beschlaege": [{"k": "", "menge": 23, "bemerkung": ""}, {"k": "SCHARN", "menge": 4}, {"k": "", "menge": 2, "bemerkung": "bauseits"}]}, kalk)
+gleich("Beschlag gewählt oder Bemerkung: zählt", c11["zeit_summen"]["gesamt_pos"], 6 * 6 / 60 + 12 / 60)
+gleich("Beschlagkosten unverändert", c11["beschlaege"], 4 * 3.5)
 print("FEHLER:" if fehler else "alles stimmt", fehler if fehler else "")

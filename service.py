@@ -11,7 +11,7 @@ import zipfile
 import tresor
 from datetime import datetime
 
-AUSLASSEN = {"backup", "tmp", "browser-profil", "__pycache__", "zertifikat", "beschaedigt"}
+AUSLASSEN = {"backup", "tmp", "browser-profil", "browser-profil-ersatz", "__pycache__", "zertifikat", "beschaedigt"}
 EXTERN_DB = "Jahresring-Datenbank"   # Unterordner des externen Sicherungsziels für die täglichen Datenbanksicherungen
 MAX_VOLL = 15          # vollständige Sicherungen, die behalten werden
 

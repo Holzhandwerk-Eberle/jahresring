@@ -743,14 +743,26 @@ async function asNotfall() {
     <div class="sektion" style="margin-top:18px">Verbandbuch</div>
     <p class="hinweis" style="margin-top:0">Jede Erste-Hilfe-Leistung wird dokumentiert und fünf Jahre aufbewahrt. Die Einträge sind vertraulich und nur für den Inhaber sichtbar. Mitarbeiter können auch in der Stempeluhr eintragen.</p>
     <button class="btn prim" id="vbNeu">＋ Erste-Hilfe-Leistung eintragen</button>
-    ${ICH.rechte.inhaber ? `<table class="liste" style="margin-top:10px"><tr><th>Wann</th><th>Wer</th><th>Verletzung</th><th>Hergang</th><th>Maßnahmen</th><th>Ersthelfer</th><th></th></tr>
+    ${ICH.rechte.inhaber ? `<table class="liste" style="margin-top:10px"><tr><th>Wann</th><th>Wer</th><th>Verletzung</th><th>Hergang</th><th>Maßnahmen</th><th>Ersthelfer</th><th>Ausfall / Unfallanzeige</th><th></th></tr>
       ${vb.map(x => `<tr><td class="nw">${datum(x.zeit)} ${String(x.zeit).slice(11, 16)}</td><td>${esc(x.name)}</td><td>${esc(x.verletzung)}</td><td>${esc(x.hergang)}${x.ort ? `<div class="hinweis">${esc(x.ort)}</div>` : ""}${x.zeugen ? `<div class="hinweis">Zeugen: ${esc(x.zeugen)}</div>` : ""}</td>
-        <td>${esc(x.massnahmen)}</td><td>${esc(x.helfer)}</td><td>${x.abgelaufen ? `<button class="aktion" data-vdel="${x.id}" title="älter als fünf Jahre – löschen">${ic("loeschen")}</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="7" class="leer">Keine Einträge.</td></tr>`}</table>` : ""}`;
+        <td>${esc(x.massnahmen)}</td><td>${esc(x.helfer)}</td>
+        <td>${x.au_tage == null ? `<span class="hinweis">nicht erfasst</span>` : `${x.au_tage} Tag${x.au_tage === 1 ? "" : "e"} arbeitsunfähig`}${x.au_tage > 3 ? (x.anzeige_am ? `<div class="hinweis">Unfallanzeige am ${datum(x.anzeige_am)}</div>` : `<div style="color:var(--rot);font-weight:600">Unfallanzeige fällig</div>`) : ""}
+          <div><a href="#" data-vau="${x.id}" class="hinweis">eintragen</a></div></td><td>${x.abgelaufen ? `<button class="aktion" data-vdel="${x.id}" title="älter als fünf Jahre – löschen">${ic("loeschen")}</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="8" class="leer">Keine Einträge.</td></tr>`}</table>
+      <p class="hinweis">Fällt die verletzte Person <b>mehr als drei Tage</b> aus (der Unfalltag zählt nicht mit) oder verläuft der Unfall tödlich, ist er der Berufsgenossenschaft binnen drei Tagen anzuzeigen (§ 193 SGB VII). Dafür hier die Ausfalltage nachtragen – die Übersicht erinnert, bis das Datum der Unfallanzeige eingetragen ist.</p>` : ""}`;
   if (!ro) {
     const sp = asDebounce(async (k, val) => { try { await api("arbeitsschutz/organisation", {method: "PUT", body: {notfall: {[k]: val}}}); asSpeicherStatus("gespeichert ✓", "ok"); } catch (e) { toast(e.message, true); } }, 500);
     $$("[data-nf]").forEach(i => i.oninput = () => { asSpeicherStatus("…"); sp(i.dataset.nf, i.value); });
   }
   $("#vbNeu").onclick = () => asVerbandbuchEintrag();
+  $$("[data-vau]").forEach(a => a.onclick = async ev => {
+    ev.preventDefault();
+    const x = vb.find(y => y.id === +a.dataset.vau);
+    const e = await modal("Ausfall und Unfallanzeige", `
+      ${zeile("Arbeitsunfähig", `<input name="au_tage" value="${x.au_tage == null ? "" : x.au_tage}" style="max-width:90px"> <span class="hinweis" style="padding-top:5px">Tage (0 = weitergearbeitet; der Unfalltag zählt nicht mit)</span>`)}
+      ${zeile("Unfallanzeige am", `<input type="date" name="anzeige_am" value="${esc(x.anzeige_am || "")}"><span class="hinweis">Datum, an dem die Anzeige an die Berufsgenossenschaft ging</span>`)}`, "Speichern");
+    if (!e) return;
+    try { await api("arbeitsschutz/verbandbuch/" + x.id, {method: "PUT", body: e}); asNotfall(); } catch (f) { toast(f.message, true); }
+  });
   $$("[data-vdel]").forEach(b => b.onclick = async () => { if (await frage("Eintrag löschen? (älter als fünf Jahre)")) { await api("arbeitsschutz/verbandbuch/" + b.dataset.vdel, {method: "DELETE"}); asNotfall(); } });
 }
 async function asVerbandbuchEintrag() {
@@ -792,7 +804,7 @@ async function asNachweise() {
       ${qs.map(q => `<tr><td>${esc(q.name)}</td><td>${esc(q.art)}${q.bemerkung ? `<div class="hinweis">${esc(q.bemerkung)}</div>` : ""}</td><td>${datum(q.datum)}</td>
         <td>${q.gueltig_bis ? `<span style="${q.gueltig ? "" : "color:var(--rot);font-weight:600"}">${datum(q.gueltig_bis)}</span>` : "–"}</td>
         <td>${q.dateien.map(dd => `<a href="/api/arbeitsschutz/datei/${dd.id}" target="_blank">${esc(dd.titel)}</a>`).join(", ")}${ro ? "" : ` <label class="hinweis" style="cursor:pointer;text-decoration:underline">hochladen<input type="file" data-qd="${q.id}" hidden></label>`}</td>
-        <td>${ro ? "" : `<button class="aktion" data-qe="${q.id}" title="Bearbeiten">${ic("anrede")}</button> <button class="aktion" data-qdel="${q.id}" title="Löschen">${ic("loeschen")}</button>`}</td></tr>`).join("") || `<tr><td colspan="6" class="leer">Noch keine Nachweise – zum Beispiel die Ersthelfer mit Datum der letzten Aus- oder Fortbildung.</td></tr>`}</table>`;
+        <td>${ro ? "" : `<button class="aktion" data-qe="${q.id}" title="Bearbeiten">${ic("anrede")}</button> <button class="aktion" data-qdel="${q.id}" title="Löschen">${ic("loeschen")}</button>`}</td></tr>`).join("") || `<tr><td colspan="6" class="leer">Noch keine Nachweise – zum Beispiel die Ersthelfer mit Datum der letzten Aus- oder Fortbildung.</td></tr>`}</table><div id="asVors"></div><div id="asExpo"></div>`;
   if (ro) return;
   const sp = asDebounce(async (k, val) => { try { await api("arbeitsschutz/organisation", {method: "PUT", body: {organisation: {[k]: val}}}); asSpeicherStatus("gespeichert ✓", "ok"); } catch (e) { toast(e.message, true); } }, 600);
   $$("[data-o]").forEach(i => i.oninput = i.onchange = () => { asSpeicherStatus("…"); sp(i.dataset.o, i.dataset.o === "bereiche" ? i.value.split("\n").map(x => x.trim()).filter(Boolean) : i.value); });
@@ -815,6 +827,65 @@ async function asNachweise() {
     try { await api("arbeitsschutz/dateien", {method: "POST", body: {qualifikation_id: +i.dataset.qd, art: "nachweis", dateiname: f.name, titel: f.name.replace(/\.[^.]+$/, ""), daten: await dateiAlsBase64(f)}}); asNachweise(); }
     catch (e) { toast(e.message, true); }
   });
+  asVorsorge(mas); asExposition(mas);
+}
+
+// Vorsorgekartei (arbeitsmedizinische Vorsorge): wer, wann, aus welchem Anlass – keine Befunde
+async function asVorsorge(mas) {
+  const box = $("#asVors"); if (!box) return;
+  let d; try { d = await api("arbeitsschutz/vorsorge"); } catch (e) { return; }
+  const l = d.eintraege;
+  box.innerHTML = `<div class="titel" style="margin-top:22px"><h3 style="margin:0">Vorsorgekartei (arbeitsmedizinische Vorsorge)</h3><div class="rechts"><button class="btn prim" id="voNeu">＋ Vorsorge</button></div></div>
+    <p class="hinweis" style="margin-top:0">Festgehalten wird, dass, wann und aus welchem Anlass eine Vorsorge stattgefunden hat oder angeboten wurde – <b>keine Befunde oder Diagnosen</b>. Welche Vorsorge Pflicht ist oder angeboten werden muss, ergibt die Gefährdungsbeurteilung zusammen mit dem Betriebsarzt. Die Kartei wird bis zum Ende der Beschäftigung geführt; beim Ausscheiden erhält der Mitarbeiter eine Kopie.</p>
+    <table class="liste"><tr><th>Mitarbeiter</th><th>Anlass</th><th>Art</th><th>Datum</th><th>Stand</th><th>nächste</th><th>Arzt</th><th></th></tr>
+      ${l.map(x => `<tr><td>${esc(x.name)}${x.ausgeschieden ? ` <span class="hinweis">(ausgeschieden)</span>` : ""}</td><td>${esc(x.anlass)}${x.bemerkung ? `<div class="hinweis">${esc(x.bemerkung)}</div>` : ""}</td><td>${esc(x.art)}</td>
+        <td class="nw">${datum(x.datum)}</td><td>${esc(x.status)}</td><td class="nw">${x.naechste ? `<span style="${x.faellig === "ueberfaellig" ? "color:var(--rot);font-weight:600" : x.faellig === "bald" ? "color:#9a7400;font-weight:600" : ""}">${datum(x.naechste)}</span>` : "–"}</td>
+        <td>${esc(x.arzt)}</td><td class="nw"><button class="aktion" data-voe="${x.id}" title="Bearbeiten">${ic("anrede")}</button> <button class="aktion" data-vodel="${x.id}" title="Löschen">${ic("loeschen")}</button></td></tr>`).join("") || `<tr><td colspan="8" class="leer">Noch keine Einträge.</td></tr>`}</table>`;
+  const dialog = async x => {
+    const e = await modal(x ? "Vorsorge bearbeiten" : "Vorsorge eintragen", `
+      ${zeile("Mitarbeiter", `<select name="mitarbeiter_id" ${x ? "disabled" : ""}><option value="">bitte wählen</option>${mas.map(m => `<option value="${m.id}" ${x && x.mitarbeiter_id === m.id ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select>`)}
+      ${zeile("Anlass", `<input name="anlass" list="voAnl" value="${esc(x ? x.anlass : "")}" placeholder="z. B. Lärm"><datalist id="voAnl">${d.anlaesse.map(a => `<option value="${esc(a)}">`).join("")}</datalist>`)}
+      ${zeile("Art", `<select name="art">${opts(d.arten, x ? x.art : "Angebotsvorsorge")}</select>`)}
+      ${zeile("Stand", `<select name="status">${opts(d.status, x ? x.status : "durchgeführt")}</select>`)}
+      ${zeile("Datum", `<input type="date" name="datum" value="${esc(x ? x.datum : heute())}">`)}
+      ${zeile("nächste Vorsorge", `<input type="date" name="naechste" value="${esc(x ? x.naechste : "")}"><span class="hinweis">laut Bescheinigung des Arztes; erscheint rechtzeitig in der Übersicht</span>`)}
+      ${zeile("Arzt", `<input name="arzt" value="${esc(x ? x.arzt : "")}" placeholder="Betriebsarzt, Praxis">`)}
+      ${zeile("Bemerkung", `<input name="bemerkung" value="${esc(x ? x.bemerkung : "")}" placeholder="keine Befunde eintragen">`)}`, x ? "Speichern" : "Eintragen");
+    if (!e) return;
+    try { await api("arbeitsschutz/vorsorge" + (x ? "/" + x.id : ""), {method: x ? "PUT" : "POST", body: e}); asVorsorge(mas); } catch (f) { toast(f.message, true); }
+  };
+  $("#voNeu").onclick = () => dialog(null);
+  $$("[data-voe]", box).forEach(b => b.onclick = () => dialog(l.find(x => x.id === +b.dataset.voe)));
+  $$("[data-vodel]", box).forEach(b => b.onclick = async () => { if (await frage("Eintrag der Vorsorgekartei löschen?")) { await api("arbeitsschutz/vorsorge/" + b.dataset.vodel, {method: "DELETE"}); asVorsorge(mas); } });
+}
+
+// Expositionsverzeichnis: Tätigkeiten mit krebserzeugenden Stoffen (z. B. Eichen- und Buchenholzstaub), 40 Jahre aufzubewahren
+async function asExposition(mas) {
+  const box = $("#asExpo"); if (!box) return;
+  let d; try { d = await api("arbeitsschutz/exposition"); } catch (e) { return; }
+  const l = d.eintraege;
+  box.innerHTML = `<div class="titel" style="margin-top:22px"><h3 style="margin:0">Expositionsverzeichnis (krebserzeugende Stoffe)</h3><div class="rechts"><button class="btn prim" id="exNeu">＋ Exposition</button></div></div>
+    <p class="hinweis" style="margin-top:0">Für Beschäftigte, die bei ihrer Tätigkeit krebserzeugenden Stoffen ausgesetzt sind – im Holzhandwerk vor allem Staub von Eiche und Buche –, verlangt die Gefahrstoffverordnung (§ 14 Abs. 3) ein Verzeichnis mit Höhe und Dauer der Exposition. Ob es im Betrieb nötig ist, ergibt die Gefährdungsbeurteilung (Auskunft: Berufsgenossenschaft, Fachkraft für Arbeitssicherheit). Die Einträge werden ${d.jahre} Jahre nach Ende der Exposition aufbewahrt; beim Ausscheiden erhält der Mitarbeiter einen Auszug.</p>
+    <table class="liste"><tr><th>Mitarbeiter</th><th>Stoff</th><th>Tätigkeit</th><th>von</th><th>bis</th><th>Höhe</th><th>Häufigkeit / Dauer</th><th></th></tr>
+      ${l.map(x => `<tr><td>${esc(x.name)}</td><td>${esc(x.stoff)}${x.bemerkung ? `<div class="hinweis">${esc(x.bemerkung)}</div>` : ""}</td><td>${esc(x.taetigkeit)}</td><td class="nw">${datum(x.von)}</td>
+        <td class="nw">${x.bis ? datum(x.bis) + `<div class="hinweis">aufbewahren bis ${datum(x.aufbewahren_bis)}</div>` : "läuft"}</td><td>${esc(x.hoehe)}</td><td>${esc(x.haeufigkeit)}</td>
+        <td class="nw"><button class="aktion" data-exe="${x.id}" title="Bearbeiten">${ic("anrede")}</button>${x.loeschbar ? ` <button class="aktion" data-exdel="${x.id}" title="Löschen">${ic("loeschen")}</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="8" class="leer">Keine Einträge.</td></tr>`}</table>`;
+  const dialog = async x => {
+    const e = await modal(x ? "Exposition bearbeiten" : "Exposition eintragen", `
+      ${zeile("Mitarbeiter", `<select name="mitarbeiter_id" ${x ? "disabled" : ""}><option value="">bitte wählen</option>${mas.map(m => `<option value="${m.id}" ${x && x.mitarbeiter_id === m.id ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select>`)}
+      ${zeile("Stoff", `<input name="stoff" list="exSt" value="${esc(x ? x.stoff : "")}" placeholder="z. B. Hartholzstaub (Eiche, Buche)"><datalist id="exSt">${d.stoffe.map(a => `<option value="${esc(a)}">`).join("")}</datalist>`)}
+      ${zeile("Tätigkeit", `<input name="taetigkeit" value="${esc(x ? x.taetigkeit : "")}" placeholder="z. B. Schleifen von Eiche, Maschinenraum">`)}
+      ${zeile("von", `<input type="date" name="von" value="${esc(x ? x.von : "")}">`)}
+      ${zeile("bis", `<input type="date" name="bis" value="${esc(x ? x.bis : "")}"><span class="hinweis">leer = dauert an</span>`)}
+      ${zeile("Höhe", `<input name="hoehe" value="${esc(x ? x.hoehe : "")}" placeholder="z. B. Messwert in mg/m³ oder „Grenzwert eingehalten laut Messung vom …“">`)}
+      ${zeile("Häufigkeit / Dauer", `<input name="haeufigkeit" value="${esc(x ? x.haeufigkeit : "")}" placeholder="z. B. etwa 6 Stunden je Woche">`)}
+      ${zeile("Bemerkung", `<input name="bemerkung" value="${esc(x ? x.bemerkung : "")}">`)}`, x ? "Speichern" : "Eintragen");
+    if (!e) return;
+    try { await api("arbeitsschutz/exposition" + (x ? "/" + x.id : ""), {method: x ? "PUT" : "POST", body: e}); asExposition(mas); } catch (f) { toast(f.message, true); }
+  };
+  $("#exNeu").onclick = () => dialog(null);
+  $$("[data-exe]", box).forEach(b => b.onclick = () => dialog(l.find(x => x.id === +b.dataset.exe)));
+  $$("[data-exdel]", box).forEach(b => b.onclick = async () => { if (await frage("Eintrag im Expositionsverzeichnis löschen?")) { try { await api("arbeitsschutz/exposition/" + b.dataset.exdel, {method: "DELETE"}); asExposition(mas); } catch (f) { toast(f.message, true); } } });
 }
 
 // Startseite: kurzer Hinweis, wenn im Arbeitsschutz etwas fällig ist

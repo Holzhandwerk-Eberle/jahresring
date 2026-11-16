@@ -53,7 +53,10 @@ body.anmelde-body::before{content:"";position:fixed;left:50%;top:50%;width:min(9
 .lb-ic{background:none;border:0;cursor:pointer;flex:0 0 auto;color:#d9cfc2;display:grid;place-items:center;width:34px;height:34px;border-radius:6px}
 .lb-ic:hover{background:rgba(255,255,255,.1);color:#fff}
 .lb-ic svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.8}
-.lb-nav{flex:1 1 auto;min-width:0}.lb-suche{min-width:110px}
+.lb-nav{flex:1 1 auto;min-width:0}.lb-suche{min-width:110px;flex:0 100 240px}
+#leiste .lb-suche:focus-within{min-width:240px}
+.lb-mehr .lb-ichm{right:auto;left:0}
+@media (max-width:1440px){.lb-nav a{padding:0 6px;font-size:13.5px}#leiste{gap:10px;padding:0 14px}}
 @media (max-width:1560px){.lb-nav a{padding:0 7px}#leiste{gap:12px}}
 /* PC: Bildlaufleiste im Hauptmenü, wenn nicht alle Einträge Platz haben (Tablet: wischen) */
 @media (pointer:fine){.lb-nav{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.4) transparent}}
@@ -99,7 +102,7 @@ body.anmelde-body::before{content:"";position:fixed;left:50%;top:50%;width:min(9
 .titel h2{margin:0;font-size:19px;min-width:150px}
 .titel .rechts{margin-left:auto;display:flex;gap:6px}
 .such{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-input[type=text],input[type=number],input[type=date],input[type=email],input[type=url],input:not([type]),select,textarea{
+input[type=text],input[type=number],input[type=date],input[type=email],input[type=url],input[type=password],input:not([type]),select,textarea{
   border:1px solid #cfc6ba;border-radius:4px;padding:4px 7px;background:#fff}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--akzent2);outline-offset:-1px;border-color:var(--akzent2)}
 textarea{resize:vertical;width:100%}
@@ -299,6 +302,8 @@ a.sk:hover{border-color:var(--akzent2)}
 .kp-zeile:hover .kp-label{background:var(--zeile)}
 .kp-flaeche{position:relative;cursor:crosshair}
 .kp-we{position:absolute;top:0;bottom:0;background:#f4f0ea}
+.kp-ftag{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,#eadfce 0 5px,#f3ebdf 5px 10px);border-left:1px solid #d9c9b0;border-right:1px solid #d9c9b0}
+.kp-t.ft{color:#8a5a1f;font-weight:700;background:#eadfce;border-radius:3px;cursor:help}
 .kp-wl{position:absolute;top:0;bottom:0;border-left:1px solid #e6dfd5}
 .kp-heute{position:absolute;top:0;bottom:0;border-left:2px solid var(--akzent);opacity:.6}
 .kp-gruppe{background:var(--label);font-weight:600;padding:5px 10px;font-size:13px;position:sticky;left:0}
@@ -541,7 +546,7 @@ input,select,textarea{min-width:0;max-width:100%}
 .zeile>div{overflow-wrap:anywhere}
 /* Tablet / Handy: größere Bedienelemente, Reiter scrollen statt umbrechen */
 @media (pointer:coarse){
-  input[type=text],input[type=number],input[type=date],input[type=email],input[type=url],input:not([type]),select,textarea{min-height:40px;font-size:16px}
+  input[type=text],input[type=number],input[type=date],input[type=email],input[type=url],input[type=password],input:not([type]),select,textarea{min-height:40px;font-size:16px}
   .btn,.ib{min-height:40px;padding:8px 14px}
   input[type=checkbox],input[type=radio]{width:20px;height:20px}
   table.liste td{padding:10px}
@@ -836,6 +841,7 @@ function leiste() {
     l.innerHTML = `
       <a class="lb-marke" href="${startseiteFuer()}"><img class="lb-ring" src="jahresring-hell.svg" alt=""><span class="lb-name">Jahresring<small id="lbFirma" title="${esc(E.firma || "")}">${esc(E.firma || "")}</small></span></a>
       <nav class="lb-nav">${HAUPTMENUE.filter(menueSichtbar).map(([t, u]) => `<a href="${u}" data-nav="${u}">${t}</a>`).join("")}</nav>
+      <div class="lb-ich lb-mehr" id="lbMehr" style="display:none"><button class="lb-ichb" id="lbMehrB" title="Weitere Bereiche">Mehr ▾</button><div class="lb-ichm" id="lbMehrM"></div></div>
       <button class="lb-ic" id="lbFenster" title="Neues Programmfenster öffnen (gleiche Seite)">${ic("fenster")}</button>
       <div class="lb-suche"><input id="suche" placeholder="Suchen …  (Strg+K)" autocomplete="off"><div id="sucheErg" class="lb-erg"></div></div>
       <span class="lb-zeit" id="uhr"></span>
@@ -848,7 +854,8 @@ function leiste() {
       ${ICH.rechte.inhaber ? `<a class="lb-ic" href="#" id="lbAus" title="Programm beenden">${ic("aus")}</a>` : ""}`;
     sucheBinden();
     $("#lbIch").onclick = e => { e.stopPropagation(); $("#lbIchM").classList.toggle("offen"); };
-    document.addEventListener("click", () => $("#lbIchM") && $("#lbIchM").classList.remove("offen"));
+    document.addEventListener("click", () => { $("#lbIchM") && $("#lbIchM").classList.remove("offen"); $("#lbMehrM") && $("#lbMehrM").classList.remove("offen"); });
+    $("#lbMehrB").onclick = e => { e.stopPropagation(); $("#lbMehrM").classList.toggle("offen"); };
     $("#lbPw").onclick = e => { e.preventDefault(); passwortAendern(); };
     $("#lbAb").onclick = e => { e.preventDefault(); abmelden(); };
     if (!darf("kunden") && !darf("auftraege") && !darf("lieferanten") && !darf("material")) $(".lb-suche").style.visibility = "hidden";
@@ -2040,7 +2047,7 @@ const EINST_UNTER = {kalkulation: [["loehne", "Löhne"], ["zuschlaege", "Zuschl�
   texte: [["belegtexte", "Belegtexte"], ["belegarten", "Eigene Belegarten"], ["variablen", "Belegvariablen"], ["mahnungen", "Mahnungen"], ["textbausteine", "Textbausteine"]],
   import: [["kunden", "Kunden"], ["werkzeuge", "Werkzeuge"]],
   arbeitszeit: [["feiertage", "Feiertage"], ["frei", "Arbeitsfreie Tage"], ["plaene", "Sollstundenpläne"]],
-  service: [["infos", "Infos"], ["sicherung", "Datensicherung"], ["projekte", "Projektordner sichern"], ["ruecksicherung", "Rücksicherung"], ["relationen", "Relationencheck"], ["protokoll", "Protokoll"], ["export", "Export"], ["testdaten", "Testdaten löschen"]]};
+  service: [["infos", "Infos"], ["sicherung", "Datensicherung"], ["projekte", "Projektordner sichern"], ["ruecksicherung", "Rücksicherung"], ["relationen", "Relationencheck"], ["protokoll", "Protokoll"], ["loeschen", "Löschprüfung"], ["export", "Export"], ["testdaten", "Testdaten löschen"]]};
 const EINST_FORM = ["firma", "belege", "auftraege", "lieferanten", "mail", "werkstatt", "programm"];
 function einstKopf(tab, sub) {
   kopf({krumen: [["Einstellungen", "#/einstellungen"]],
@@ -2462,7 +2469,7 @@ function hilfeZiel() {
     auswertung: "stunden", titel: "positionsliste", op: "op", briefe: "briefe", anhaenge: "auftrag-reiter", kunde: "kunde"};
   const einst = {firma: "einrichtung", belege: "druckeinstellungen", texte: {_: "einstellungen", belegarten: "eigene-belegarten", variablen: "belegvariablen"}, arbeitszeit: "arbeitszeit-einstellungen", kalkulation: {_: "auftragswerte", taetigkeiten: "taetigkeiten"}, auftraege: "auftraege",
     lieferanten: "zahlungen", mail: "pdf-mail", werkstatt: "zuschnitt", kalender: "kalender", programm: "autostart", benutzer: "benutzer",
-    service: {infos: "infos", sicherung: "datensicherung", projekte: "projektsicherung", ruecksicherung: "ruecksicherung", relationen: "relationen", protokoll: "protokoll", export: "export", testdaten: "testdaten"}};
+    service: {infos: "infos", sicherung: "datensicherung", projekte: "projektsicherung", ruecksicherung: "ruecksicherung", relationen: "relationen", protokoll: "protokoll", loeschen: "loeschpruefung", export: "export", testdaten: "testdaten"}};
   const mat = {reste: "reste", werkzeuge: "werkzeuge", sets: "sets", lager: "lagerbuchen", auftrag: "lagerbuchen", statistik: "lagerbuchen", beschlaege: "materialstamm"};
   const pers = {zeiten: "zeiten", abwesenheit: "abwesenheit", beleg: "monatsbeleg", lohn: "lohn"};
   switch (a) {
@@ -2535,8 +2542,23 @@ new MutationObserver(() => { const el = document.getElementById("inhalt"); if (e
 
 // Hauptmenü: Mausrad blättert waagrecht, Pfeile erscheinen, wenn nicht alle Einträge Platz haben; der aktive Eintrag wird sichtbar gehalten
 function navPruefen() {
-  const n = $(".lb-nav"), l = $("#leiste");
+  const n = $(".lb-nav"), l = $("#leiste"), mehr = $("#lbMehr");
   if (!n || !l) return;
+  // Passt das Menü nicht in die Zeile, wandern die hinteren Einträge in „Mehr ▾“ (der gerade aktive bleibt sichtbar)
+  const links = $$(".lb-nav a"), versteckt = [];
+  links.forEach(a => { a.style.display = ""; });
+  if (mehr) {
+    mehr.style.display = "none";
+    if (n.scrollWidth > n.clientWidth + 2) {
+      mehr.style.display = "";
+      for (let i = links.length - 1; i > 0 && n.scrollWidth > n.clientWidth + 2; i--) {
+        if (links[i].classList.contains("aktiv")) continue;
+        links[i].style.display = "none"; versteckt.unshift(links[i]);
+      }
+      $("#lbMehrM").innerHTML = versteckt.map(a => `<a href="${a.getAttribute("href")}">${esc(a.textContent)}</a>`).join("");
+      if (!versteckt.length) mehr.style.display = "none";
+    }
+  }
   l.classList.toggle("nav-voll", n.scrollWidth > n.clientWidth + 2);
   const a = $(".lb-nav a.aktiv");
   if (a) { const nr = n.getBoundingClientRect(), ar = a.getBoundingClientRect(); if (ar.left < nr.left || ar.right > nr.right) n.scrollLeft += ar.left - nr.left - (nr.width - ar.width) / 2; }
@@ -2627,7 +2649,7 @@ async function render() {
   }
 }
 window.addEventListener("hashchange", render);
-const VERSION = "2026.11.01-140";
+const VERSION = "2026.11.01-141";
 (async () => {
   try {
     const v = await api("version").catch(() => ({}));

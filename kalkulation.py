@@ -371,7 +371,9 @@ def position_rechnen(pos, kalk, kinder=()):
     for b in eigene:
         if b.get("k") and (b.get("quelle") or "teil") == "position":
             bezug["x_" + str(b["k"])] = f(pb.get(str(b["k"])))
-    bezug["beschlaege"] = sum(f(b.get("menge")) for b in pos.get("beschlaege") or [])
+    # Anzahl Beschläge: leere Zeilen (kein Beschlag gewählt und keine Bemerkung) zählen nicht – sonst rechnet eine versehentlich
+    # angelegte oder noch nicht ausgefüllte Zeile Arbeitszeit. Eine Zeile nur mit Bemerkung zählt (z. B. bauseits gestellte Beschläge).
+    bezug["beschlaege"] = sum(f(b.get("menge")) for b in pos.get("beschlaege") or [] if b.get("k") or str(b.get("bemerkung") or "").strip())
     beschlaege = 0.0
     bzeilen = []
     for b in pos.get("beschlaege") or []:

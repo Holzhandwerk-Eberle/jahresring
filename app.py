@@ -78,6 +78,7 @@ from kalkulation import (KALK_VORGABEN, TAETIGKEITEN_VORGABE, TAETIGKEITEN_KATAL
                          KATEGORIEN, position_rechnen, vorgaben_kopie, lohn_von, gk_von, f as fl)
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import urllib.request
 from urllib.parse import parse_qs, quote, urlparse
 
 BASIS = os.path.dirname(os.path.abspath(__file__))
@@ -90,7 +91,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-140"
+VERSION = "2026.11.01-141"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -406,6 +407,7 @@ STANDARD_EINSTELLUNGEN = {
     "girocode": True,
     "app_fenster": True,
     "netzwerk": False,
+    "update": {"adresse": "", "schluessel": ""},   # Update-Hinweis: Adresse einer Datei mit der neuesten Versionsnummer (leer = aus)
     "netz_adressen": "",   # weitere Namen, unter denen das Programm im eigenen Netz aufgerufen wird (durch Komma getrennt)
     # Angaben für den Auskunftsbrief nach Art. 15 DSGVO; betriebseigene Systeme ergänzt der Betrieb in den Einstellungen
     "auskunft_speicherorte": "Büroprogramm Jahresring auf dem Rechner des Betriebs, Projektordner des Betriebs, E-Mail-Postfach",
@@ -604,6 +606,7 @@ def init_db():
         bank.schema(con)
         wiedervorlage.schema(con)
         konten.schema(con)
+        preise.schema(con)
         alt_v = con.execute("SELECT wert FROM einstellungen WHERE schluessel='programm_version'").fetchone()
         alt_v = json.loads(alt_v[0]) if alt_v else ""
         protokoll.einrichten(con, DATEN, VERSION)
@@ -1017,6 +1020,49 @@ def projekt_waechter():
         time.sleep(60)
 
 
+# ---------------------------------------------------------------- Update-Hinweis
+# Ist in den Einstellungen eine Adresse hinterlegt (Datei mit der neuesten Versionsnummer, z. B. version.txt), fragt das
+# Programm sie einmal am Tag ab und weist den Inhaber auf eine neuere Version hin. Installiert wird nichts von selbst.
+UPDATE = {"neu": "", "geprueft": "", "fehler": ""}
+
+
+def _version_zahl(v):
+    m = re.fullmatch(r"(\d{4})\.(\d{2})\.(\d{2})-(\d+)", v or "")
+    return tuple(int(x) for x in m.groups()) if m else ()
+
+
+class _KeineUmleitung(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):   # der Zugangsschlüssel darf nicht an eine andere Adresse weitergereicht werden
+        return None
+
+
+def update_pruefen():
+    u = einstellungen_roh("update", {}) or {}
+    adr = str(u.get("adresse") or "").strip()
+    if not adr.startswith("https://"):
+        UPDATE.update(neu="", geprueft="", fehler="")
+        return dict(UPDATE)
+    kopf = {"User-Agent": "Jahresring", "Accept": "application/vnd.github.raw, text/plain, */*"}
+    schl = geheim.entschluesseln(u.get("schluessel") or "")
+    if schl:
+        kopf["Authorization"] = "Bearer " + schl
+    try:
+        oeffner = urllib.request.build_opener(_KeineUmleitung) if schl else urllib.request.build_opener()
+        with oeffner.open(urllib.request.Request(adr, headers=kopf), timeout=12) as r:
+            text = r.read(200_000).decode("utf-8", "replace")
+        gefunden = sorted({v for v in re.findall(r"\b\d{4}\.\d{2}\.\d{2}-\d+\b", text)}, key=_version_zahl)
+        if not gefunden:
+            raise ValueError("unter der Adresse steht keine Versionsnummer (erwartet z. B. 2026.11.01-141)")
+        neueste = gefunden[-1]
+        UPDATE.update(neu=neueste if _version_zahl(neueste) > _version_zahl(VERSION) else "", geprueft=jetzt(), fehler="")
+    except Exception as f:  # noqa: BLE001  keine Verbindung, falsche Adresse, Schlüssel abgelaufen …
+        t = str(getattr(f, "reason", "") or f)[:160]
+        if getattr(f, "code", None) in (401, 403, 404):
+            t = f"Zugriff abgelehnt oder Datei nicht gefunden (HTTP {f.code}) – Adresse und Zugangsschlüssel prüfen"
+        UPDATE.update(neu="", geprueft=jetzt(), fehler=t)
+    return dict(UPDATE)
+
+
 def tmp_aufraeumen(tage=3):
     """Zwischendateien (gelesene, aber nicht gebuchte Eingangsrechnungen, Vorschau- und Mess-PDFs) nach einigen Tagen löschen."""
     tmp, n, grenze = os.path.join(DATEN, "tmp"), 0, time.time() - tage * 86400
@@ -1028,6 +1074,8 @@ def tmp_aufraeumen(tage=3):
             if os.path.isfile(pfad) and os.path.getmtime(pfad) < grenze:
                 os.remove(pfad)
                 n += 1
+            elif os.path.isdir(pfad) and name.startswith("profil-") and os.path.getmtime(pfad) < time.time() - 3600:
+                shutil.rmtree(pfad, ignore_errors=True)   # liegengebliebenes Einmal-Profil des PDF-Browsers
         except OSError:
             pass
     return n
@@ -1057,6 +1105,11 @@ def sicherungs_waechter():
     while True:
         time.sleep(3600)
         tmp_aufraeumen()
+        if UPDATE["geprueft"][:10] != date.today().isoformat():
+            try:
+                update_pruefen()
+            except Exception as x:  # noqa: BLE001
+                print("Update-Hinweis:", x)
         try:
             backup()
         except Exception as x:  # noqa: BLE001
@@ -4836,27 +4889,59 @@ NETZ = {"aktiv": False}
 INTERN = secrets.token_urlsafe(24)  # erlaubt dem PDF-Browser auf diesem PC den Zugriff ohne Anmeldung
 
 
-def pdf_url_rendern(url, ziel):
-    url += ("&" if "?" in url else "?") + "intern=" + INTERN
-    exe = browser_finden()
-    if not exe:
-        raise ApiFehler("Kein Edge/Chrome gefunden, um das PDF zu erzeugen. Bitte die Druckansicht öffnen und „Als PDF speichern“ wählen.")
-    profil = os.path.join(DATEN, "browser-profil")
-    os.makedirs(profil, exist_ok=True)
-    tmp = ziel + ".tmp.pdf"
+PDF_PROFIL = {"ersatz_bis": 0}
+
+
+def _pdf_lauf(exe, profil, tmp, url, zeit):
+    """Ein Lauf des PDF-Browsers. Liefert "" bei Erfolg, sonst den Grund."""
     if os.path.exists(tmp):
         os.remove(tmp)
+    os.makedirs(profil, exist_ok=True)
     cmd = [exe, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
            "--disable-extensions", f"--user-data-dir={profil}", "--no-pdf-header-footer", "--print-to-pdf-no-header",
            f"--print-to-pdf={tmp}", url]
     if not sys.platform.startswith("win") and hasattr(os, "geteuid") and os.geteuid() == 0:
         cmd.insert(1, "--no-sandbox")
     try:
-        subprocess.run(cmd, capture_output=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        r = subprocess.run(cmd, capture_output=True, timeout=zeit, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except subprocess.TimeoutExpired:
-        raise ApiFehler("PDF-Erzeugung hat zu lange gedauert.")
-    if not os.path.exists(tmp) or os.path.getsize(tmp) < 500:
-        raise ApiFehler("PDF konnte nicht erzeugt werden. Bitte die Druckansicht öffnen und „Als PDF speichern“ wählen.")
+        return "Zeitüberschreitung"
+    except OSError as f:
+        return f"Browser lässt sich nicht starten ({f})"
+    if os.path.exists(tmp) and os.path.getsize(tmp) >= 500:
+        return ""
+    meldung = (r.stderr or b"").decode("utf-8", "replace").strip().splitlines()
+    return f"keine Datei erzeugt (Rückgabewert {r.returncode}{', ' + meldung[-1][:200] if meldung else ''})"
+
+
+def pdf_url_rendern(url, ziel):
+    url += ("&" if "?" in url else "?") + "intern=" + INTERN
+    exe = browser_finden()
+    if not exe:
+        raise ApiFehler("Kein Edge/Chrome gefunden, um das PDF zu erzeugen. Bitte die Druckansicht öffnen und „Als PDF speichern“ wählen.")
+    tmp = ziel + ".tmp.pdf"
+    # Hängt noch ein früherer Lauf am Profilordner (z. B. nach einem Absturz des Browsers), übergibt der neue Aufruf nur an diesen
+    # und endet ohne PDF. Dann mit dem Ersatzprofil wiederholen und es eine Weile zuerst nehmen; als Letztes ein Einmal-Profil.
+    profile = [os.path.join(DATEN, "browser-profil"), os.path.join(DATEN, "browser-profil-ersatz")]
+    if PDF_PROFIL["ersatz_bis"] > time.time():
+        profile.reverse()
+    profile.append(os.path.join(DATEN, "tmp", "profil-" + secrets.token_hex(4)))
+    gruende = []
+    try:
+        for nr, profil in enumerate(profile):
+            grund = _pdf_lauf(exe, profil, tmp, url, 120 if nr == 0 else 90)
+            if not grund:
+                if nr == 1:
+                    PDF_PROFIL["ersatz_bis"] = 0 if profil.endswith("browser-profil") else time.time() + 1800
+                break
+            gruende.append(grund)
+            print(f"PDF-Erzeugung: Versuch {nr + 1} ohne Ergebnis ({grund}) – Browser-Profil {os.path.basename(profil)}")
+        else:
+            if all(g == "Zeitüberschreitung" for g in gruende):
+                raise ApiFehler("PDF-Erzeugung hat zu lange gedauert.")
+            raise ApiFehler("PDF konnte nicht erzeugt werden (" + gruende[-1][:120] + "). Bitte die Druckansicht öffnen und „Als PDF speichern“ wählen.")
+    finally:
+        shutil.rmtree(profile[2], ignore_errors=True)
     os.replace(tmp, ziel)
     return ziel
 
@@ -4877,6 +4962,10 @@ def einstellungen_oeffentlich(con):
     m = dict(e.get("mail") or {})
     m["passwort_gesetzt"] = bool(m.pop("passwort", ""))
     e["mail"] = m
+    upd = dict(e.get("update") or {})
+    upd["schluessel_gesetzt"] = bool(upd.pop("schluessel", ""))   # der Zugangsschlüssel verlässt das Programm nie
+    e["update"] = upd
+    e["_update"] = dict(UPDATE)
     e["_mail_texte_standard"] = MAIL_TEXTE
     e["_unterschrift"] = os.path.exists(os.path.join(DATEN, UNTERSCHRIFT))
     e["_text_14b_standard"] = HINWEIS_14B
@@ -5817,6 +5906,12 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False):
     return briefbogen_html(e, fi, beleg_titel(b), anschrift_html, info_html, inhalt, als_pdf, entwurf=entwurf, agb_html=agb_html)
 
 
+# Bildschirmansicht eines Belegs auf dem Briefbogen: Ist der Inhalt länger als eine Seite, würde die Fußzeile des Briefbogens mitten
+# im Text stehen (am Bildschirm gibt es keinen Seitenumbruch) – dann nur den Kopf des Briefbogens zeigen.
+LANG_JS = """addEventListener("load", () => { const bg = document.querySelector(".bg-erste"), s = document.querySelector("table.seite");
+  if (bg && s && s.offsetHeight > bg.offsetHeight + 4) document.documentElement.classList.add("lang"); });"""
+
+
 def briefbogen_html(e, fi, titel, anschrift_html, info_html, inhalt, als_pdf, entwurf=False, agb_html=""):
     """Seitenrahmen auf dem Briefbogen (Vorlage) oder mit einfachem Kopf/Fuß – für Belege, Mahnungen usw."""
     logo = os.path.exists(os.path.join(DATEN, "logo.png")) or os.path.exists(os.path.join(DATEN, "logo.jpg"))
@@ -5838,7 +5933,10 @@ def briefbogen_html(e, fi, titel, anschrift_html, info_html, inhalt, als_pdf, en
         erste, folge = f"/api/vorlage/{brief[0]}", f"/api/vorlage/{brief[1] if len(brief) > 1 else brief[0]}"
         bildschirm = "" if als_pdf else """
 html{background:#888} body{width:210mm;margin:10mm auto;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.3);position:relative}
-.bg-folge{display:none} .agb{margin-top:10mm;box-shadow:0 2px 12px rgba(0,0,0,.3)}"""
+.bg-folge{display:none} .agb{margin-top:10mm;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+@media screen { html.lang .bg-erste{height:%smm;overflow:hidden} html.lang .bg-erste img{height:297mm}
+  .ohne-umbruch{display:none} html.lang .ohne-umbruch{display:block;position:absolute;top:-8mm;left:0;right:0;margin:0;text-align:center;font:9pt/1.3 "Segoe UI",Arial,sans-serif;color:#f2f2f2} }
+@media print { .ohne-umbruch{display:none} }""" % max(20, L["inhalt_start"])
         return f"""{titel_html}
 <style>
 @page {{ size: A4; margin: 0; }}
@@ -5858,6 +5956,7 @@ table.seite > tbody > tr > td {{ padding: 0 {L["rechts"]}mm 0 {L["links"]}mm; }}
 {bildschirm}
 </style></head><body>
 {'<div class="wasser">ENTWURF</div>' if entwurf else ''}
+{'' if als_pdf else '<p class="ohne-umbruch">Bildschirmansicht ohne Seitenumbruch – Seitenaufteilung und Fußzeile erscheinen im PDF und im Ausdruck.</p>'}
 <div class="bg-folge"><img class="voll" src="{folge}"></div>
 <div class="bg-erste"><img class="voll" src="{erste}"></div>
 <table class="seite"><thead><tr><td></td></tr></thead><tfoot><tr><td></td></tr></tfoot><tbody><tr><td>
@@ -5865,7 +5964,7 @@ table.seite > tbody > tr > td {{ padding: 0 {L["rechts"]}mm 0 {L["links"]}mm; }}
 {inhalt}
 </td></tr></tbody></table>
 {agb_html}
-{druck_js}
+{druck_js}{'' if als_pdf else kern.skript(LANG_JS)}
 </body></html>"""
 
     return f"""{titel_html}
@@ -7134,6 +7233,14 @@ def api(methode, teile, q, daten):
             if methode == "POST":
                 d = daten or {}
                 return monatsbeleg_unterschreiben(con, rid, str(d.get("monat") or ""), d.get("rolle") or "mitarbeiter", d, ich_login())
+        if res == "update" and teile[1:] == ["pruefen"] and methode == "POST":
+            if not benutzer.ist_inhaber():
+                raise ApiFehler("Den Update-Hinweis prüft der Inhaber.", 403)
+            return update_pruefen()
+        if res == "datenschutz" and teile[1:] == ["faellig"] and methode == "GET":
+            if not benutzer.ist_inhaber():
+                raise ApiFehler("Die Löschliste sieht nur der Inhaber.", 403)
+            return datenschutz.faellig(con, lambda c, kid: kunde_anonymisieren(c, kid))
         if res in ("lieferanten", "mitarbeiter") and rid and unter == "anonymisieren" and methode in ("GET", "POST"):
             if not benutzer.ist_inhaber():
                 raise ApiFehler("Anonymisieren darf nur der Inhaber.", 403)
@@ -7593,6 +7700,18 @@ def api(methode, teile, q, daten):
                         neu["passwort"] = alt.get("passwort", "")
                     neu["passwort"] = geheim.verschluesseln(neu["passwort"])   # Windows: DPAPI, nie im Klartext ablegen
                     daten["mail"] = neu
+                if isinstance(daten.get("update"), dict):
+                    if not benutzer.ist_inhaber():
+                        raise ApiFehler("Den Update-Hinweis stellt der Inhaber ein.", 403)
+                    alt_u = einstellungen(con).get("update") or {}
+                    adr = str(daten["update"].get("adresse", alt_u.get("adresse", "")) or "").strip()
+                    if adr and not re.fullmatch(r"https://[^\s]{4,400}", adr):
+                        raise ApiFehler("Die Adresse für den Update-Hinweis muss mit https:// beginnen.")
+                    schl = daten["update"].get("schluessel")
+                    schl = alt_u.get("schluessel", "") if schl in (None, "") and not daten["update"].get("schluessel_loeschen") else str(schl or "").strip()
+                    daten["update"] = {"adresse": adr, "schluessel": geheim.verschluesseln(schl) if schl else ""}
+                    UPDATE.update(neu="", geprueft="", fehler="")
+                    threading.Thread(target=lambda: (time.sleep(1.5), update_pruefen()), daemon=True).start()
                 if isinstance(daten.get("sollplaene"), list):
                     daten["sollplaene"] = personal.plaene_pruefen(daten["sollplaene"])
                 for k, v in daten.items():
@@ -8239,36 +8358,8 @@ def api(methode, teile, q, daten):
             return konten.api(con, methode, teile, q, daten or {}, c["skr"], c["sachkontenlaenge"], benutzer.ist_inhaber())
         if res == "wiedervorlagen":
             return wiedervorlage.api(con, methode, teile, q, daten or {}, ich_login())
-        if res == "preisimport" and methode == "POST" and teile[1:] in (["lesen"], ["uebernehmen"], ["neue"], ["anlegen"]):
-            d = daten or {}
-            lid = int(d["lieferant_id"]) if str(d.get("lieferant_id") or "").isdigit() else None
-            if teile[1] == "lesen":
-                if d.get("daten"):
-                    roh = base64.b64decode(d["daten"])
-                    erg = preise.lesen(roh, str(d.get("dateiname") or ""), d.get("zuordnung"))
-                    schluessel = preise.merken(roh + json.dumps(d.get("zuordnung") or {}).encode(), erg)
-                elif d.get("schluessel"):
-                    erg, schluessel = preise.gemerkt(d["schluessel"]), d["schluessel"]
-                else:
-                    raise ApiFehler("Keine Datei übergeben.")
-                ab = preise.abgleich(con, lid, erg["artikel"], zahl(d.get("rabatt") or 0, float), nur_lieferant=not d.get("alle"))
-                return {**{k: v for k, v in erg.items() if k != "artikel"}, **ab, **preise.neue(con, erg["artikel"]), "schluessel": schluessel}
-            if teile[1] == "neue":
-                return preise.neue(con, preise.gemerkt(d.get("schluessel"))["artikel"], d.get("suche") or "", d.get("gruppe") or "")
-            if teile[1] == "anlegen":
-                erg = preise.anlegen(con, preise.gemerkt(d.get("schluessel"))["artikel"], d.get("auswahl"), d.get("kategorie"), lid,
-                                     zahl(d.get("rabatt") or 0, float))
-                if erg["angelegt"]:
-                    l = con.execute("SELECT kurzname FROM lieferanten WHERE id=?", (lid,)).fetchone() if lid else None
-                    prot(con, "preisimport", (l["kurzname"] if l else "")[:80], f"{erg['angelegt']} Materialien aus „{str(d.get('dateiname') or '')[:80]}“ angelegt"
-                         + (f" (Lieferant {l['kurzname']})" if l else ""), {"angelegt": erg["liste"][:500]})
-                return erg
-            erg = preise.uebernehmen(con, d.get("posten"), date.today().isoformat())
-            if erg["geaendert"]:
-                l = con.execute("SELECT kurzname FROM lieferanten WHERE id=?", (lid,)).fetchone() if lid else None
-                prot(con, "preisimport", (l["kurzname"] if l else "")[:80], f"{erg['geaendert']} Einkaufspreise aus „{str(d.get('dateiname') or '')[:80]}“ übernommen"
-                     + (f" (Lieferant {l['kurzname']})" if l else ""), {"liste": erg["liste"][:500]})
-            return erg
+        if res == "preisimport" and methode == "POST" and teile[1:] in (["lesen"], ["uebernehmen"], ["neue"], ["anlegen"], ["rabatte"]):
+            return preise.web_api(con, teile, daten or {})
         if res == "zahlungseingaenge" and rid and methode == "DELETE":
             zahlungseingang_loeschen(con, rid)
             return {"ok": True}
@@ -9735,7 +9826,7 @@ class Handler(BaseHTTPRequestHandler):
                     # Werkstatt und Mitarbeiter: nur die Auswahllisten und Schalter, die ihre Seiten brauchen
                     erg = {k: v for k, v in erg.items() if k in EINSTELLUNGEN_WERKSTATT}
                 elif teile[0] == "einstellungen" and methode == "GET" and not benutzer.darf("einstellungen", 1):
-                    erg = {k: v for k, v in erg.items() if not any(w in k.lower() for w in ("mail", "smtp", "iban", "bic", "bank", "caldav", "kalender_", "glaeubiger", "pfad", "ordner", "konten", "sicherung", "zaehler", "sepa", "mahn", "_netz", "netzwerk"))} if isinstance(erg, dict) else erg
+                    erg = {k: v for k, v in erg.items() if not any(w in k.lower() for w in ("mail", "smtp", "iban", "bic", "bank", "caldav", "kalender_", "glaeubiger", "pfad", "ordner", "konten", "sicherung", "zaehler", "sepa", "mahn", "_netz", "netzwerk", "update", "netz_adressen"))} if isinstance(erg, dict) else erg
                 if not rechte["preise"]:
                     erg = benutzer.preise_entfernen(erg)
                 erg = sicht_einschraenken(teile, methode, erg, rechte)
@@ -10183,6 +10274,7 @@ material.PREISREGEL["methode"] = lambda con: einstellungen(con).get("lagerpreis_
 projekte.HILFE.update({"soll_ist": lambda con, aid: soll_ist(con, aid), "beleg_umsatz": lambda b: beleg_umsatz(b)})
 export.HILFE.update({"daten": DATEN, "basis": BASIS, "version": VERSION, "einstellungen": lambda con: einstellungen(con),
                      "archiv_pdf": lambda con, bid: beleg_pdf(con, bid), "klartext": lambda t: montage.klartext(t, 1000)})
+preise.HILFE.update({"prot": lambda *a, **k: prot(*a, **k)})
 bank.HILFE.update({"daten": DATEN, "prot": lambda *a, **k: prot(*a, **k), "ich_login": lambda: ich_login(),
                    "skr": lambda con: export.datev_cfg(einstellungen(con))["skr"],
                    "op_zahlung_buchen": lambda *a, **k: op_zahlung_buchen(*a, **k), "zahlungseingang_loeschen": lambda *a, **k: zahlungseingang_loeschen(*a, **k)})
@@ -10224,6 +10316,7 @@ def main():
     threading.Thread(target=sicherungs_waechter, daemon=True).start()
     threading.Thread(target=projekt_waechter, daemon=True).start()
     threading.Thread(target=zwischenspeicher_vorwaermen, daemon=True).start()
+    threading.Thread(target=lambda: (time.sleep(20), update_pruefen()), daemon=True).start()
     autostart_nachziehen()
     try:
         netz = einstellungen_roh("netzwerk", False) is True

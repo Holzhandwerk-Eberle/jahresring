@@ -60,6 +60,13 @@ CREATE TABLE IF NOT EXISTS as_verbandbuch (
     id INTEGER PRIMARY KEY AUTOINCREMENT, zeit TEXT, ort TEXT DEFAULT '', name TEXT DEFAULT '', hergang TEXT DEFAULT '',
     verletzung TEXT DEFAULT '', zeugen TEXT DEFAULT '', hilfe_zeit TEXT DEFAULT '', massnahmen TEXT DEFAULT '', helfer TEXT DEFAULT '',
     angelegt TEXT, von TEXT DEFAULT '');
+CREATE TABLE IF NOT EXISTS as_vorsorge (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, mitarbeiter_id INTEGER NOT NULL, anlass TEXT DEFAULT '', art TEXT DEFAULT 'Angebotsvorsorge',
+    status TEXT DEFAULT 'durchgeführt', datum TEXT DEFAULT '', naechste TEXT DEFAULT '', arzt TEXT DEFAULT '', bemerkung TEXT DEFAULT '',
+    angelegt TEXT, von TEXT DEFAULT '');
+CREATE TABLE IF NOT EXISTS as_exposition (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, mitarbeiter_id INTEGER NOT NULL, stoff TEXT DEFAULT '', taetigkeit TEXT DEFAULT '', von TEXT DEFAULT '',
+    bis TEXT DEFAULT '', hoehe TEXT DEFAULT '', haeufigkeit TEXT DEFAULT '', bemerkung TEXT DEFAULT '', angelegt TEXT, wer TEXT DEFAULT '');
 """
 
 GB_ARTEN = {"bereich": "Arbeitsbereich", "maschine": "Maschine / Arbeitsmittel", "taetigkeit": "Tätigkeit", "psychisch": "Psychische Belastung"}
@@ -163,6 +170,10 @@ def vorlagen():
 
 def schema(con):
     con.executescript(SCHEMA)
+    vorhanden = {r[1] for r in con.execute("PRAGMA table_info(as_verbandbuch)")}
+    for sp, typ in (("au_tage", "INTEGER"), ("anzeige_am", "TEXT DEFAULT ''")):
+        if sp not in vorhanden:
+            con.execute(f"ALTER TABLE as_verbandbuch ADD COLUMN {sp} {typ}")
 
 
 # ---------------------------------------------------------------- Einstellungen des Bereichs
@@ -1228,6 +1239,133 @@ def verbandbuch_loeschen(con, vid):
     con.execute("DELETE FROM as_verbandbuch WHERE id=?", (vid,))
 
 
+def verbandbuch_nachtrag(con, vid, d):
+    """Nachtrag zu einem Verbandbuch-Eintrag: Tage der Arbeitsunfähigkeit und Datum der Unfallanzeige. Ab mehr als drei Tagen
+    Arbeitsunfähigkeit ist der Unfall dem Unfallversicherungsträger anzuzeigen (§ 193 SGB VII)."""
+    if not con.execute("SELECT 1 FROM as_verbandbuch WHERE id=?", (vid,)).fetchone():
+        raise Fehler("Eintrag nicht gefunden.", 404)
+    w = {}
+    if "au_tage" in d:
+        t = str(d.get("au_tage") if d.get("au_tage") is not None else "").strip()
+        if t and not re.fullmatch(r"\d{1,4}", t):
+            raise Fehler("Bitte die Tage der Arbeitsunfähigkeit als Zahl angeben.")
+        w["au_tage"] = int(t) if t else None
+    if "anzeige_am" in d:
+        w["anzeige_am"] = datum_ok(d["anzeige_am"])
+    if w:
+        con.execute(f"UPDATE as_verbandbuch SET {','.join(k + '=?' for k in w)} WHERE id=?", list(w.values()) + [vid])
+    return dict(con.execute("SELECT * FROM as_verbandbuch WHERE id=?", (vid,)).fetchone())
+
+
+# ---------------------------------------------------------------- Vorsorgekartei (ArbMedVV) und Expositionsverzeichnis (GefStoffV)
+VORSORGE_ARTEN = ["Pflichtvorsorge", "Angebotsvorsorge", "Wunschvorsorge"]
+VORSORGE_STATUS = ["durchgeführt", "angeboten, nicht wahrgenommen", "geplant"]
+VORSORGE_ANLAESSE = ["Lärm", "Hartholzstaub (Eiche, Buche)", "Holzstaub", "Lackieren, Isocyanate", "Lösemittel", "Hautbelastung, Feuchtarbeit",
+                     "Heben und Tragen, Zwangshaltungen", "Vibrationen", "Bildschirmarbeit", "Arbeiten mit Absturzgefahr", "Fahr- und Steuertätigkeiten"]
+EXPO_STOFFE = ["Hartholzstaub (Eiche, Buche)", "Formaldehyd", "Quarzstaub", "Asbest (Arbeiten im Bestand)"]
+EXPO_JAHRE = 40
+
+
+def _ma_name(r):
+    return f"{r['vorname'] or ''} {r['nachname'] or ''}".strip()
+
+
+def vorsorge(con):
+    heute, bald = date.today().isoformat(), (date.today() + timedelta(days=60)).isoformat()
+    aus = []
+    for r in con.execute("SELECT v.*, m.vorname, m.nachname, m.austritt FROM as_vorsorge v LEFT JOIN mitarbeiter m ON m.id=v.mitarbeiter_id "
+                         "ORDER BY m.nachname, m.vorname, v.datum DESC, v.id DESC"):
+        d = dict(r)
+        d["name"] = _ma_name(r)
+        d["ausgeschieden"] = bool(r["austritt"]) and r["austritt"] < heute
+        d["faellig"] = "ueberfaellig" if d["naechste"] and d["naechste"] < heute else "bald" if d["naechste"] and d["naechste"] <= bald else ""
+        aus.append(d)
+    # fällig ist je Mitarbeiter und Anlass nur der jüngste Eintrag
+    gesehen = set()
+    for d in sorted(aus, key=lambda x: (x["datum"] or "", x["id"]), reverse=True):
+        k = (d["mitarbeiter_id"], d["anlass"])
+        if k in gesehen or d["ausgeschieden"]:
+            d["faellig"] = ""
+        gesehen.add(k)
+    return aus
+
+
+def vorsorge_speichern(con, vid, d, wer):
+    w = {}
+    if "mitarbeiter_id" in d:
+        w["mitarbeiter_id"] = int(d["mitarbeiter_id"]) if str(d.get("mitarbeiter_id") or "").isdigit() else None
+    for k, n in (("anlass", 120), ("arzt", 200), ("bemerkung", 300)):
+        if k in d:
+            w[k] = str(d[k] or "").strip()[:n]
+    if "art" in d:
+        w["art"] = d["art"] if d["art"] in VORSORGE_ARTEN else "Angebotsvorsorge"
+    if "status" in d:
+        w["status"] = d["status"] if d["status"] in VORSORGE_STATUS else "durchgeführt"
+    for k in ("datum", "naechste"):
+        if k in d:
+            w[k] = datum_ok(d[k])
+    if vid is None:
+        if not w.get("mitarbeiter_id") or not con.execute("SELECT 1 FROM mitarbeiter WHERE id=?", (w["mitarbeiter_id"],)).fetchone():
+            raise Fehler("Bitte den Mitarbeiter wählen.")
+        if not w.get("anlass"):
+            raise Fehler("Bitte den Anlass angeben (z. B. Lärm).")
+        w.update(angelegt=jetzt(), von=wer)
+        vid = con.execute(f"INSERT INTO as_vorsorge ({','.join(w)}) VALUES ({','.join('?' * len(w))})", list(w.values())).lastrowid
+    elif w:
+        if "mitarbeiter_id" in w and not w["mitarbeiter_id"]:
+            w.pop("mitarbeiter_id")
+        con.execute(f"UPDATE as_vorsorge SET {','.join(k + '=?' for k in w)} WHERE id=?", list(w.values()) + [vid])
+    return next((x for x in vorsorge(con) if x["id"] == vid), None)
+
+
+def exposition(con):
+    heute = date.today().isoformat()
+    aus = []
+    for r in con.execute("SELECT e.*, m.vorname, m.nachname FROM as_exposition e LEFT JOIN mitarbeiter m ON m.id=e.mitarbeiter_id "
+                         "ORDER BY m.nachname, m.vorname, e.von DESC, e.id DESC"):
+        d = dict(r)
+        d["name"] = _ma_name(r)
+        ende = d["bis"] or heute
+        d["aufbewahren_bis"] = f"{int(ende[:4]) + EXPO_JAHRE}{ende[4:]}" if d["bis"] else ""   # 40 Jahre nach Ende der Exposition
+        d["loeschbar"] = (bool(d["bis"]) and d["aufbewahren_bis"] < heute) or (d["angelegt"] or "")[:10] == heute
+        aus.append(d)
+    return aus
+
+
+def exposition_speichern(con, eid, d, wer):
+    w = {}
+    if "mitarbeiter_id" in d and eid is None:
+        w["mitarbeiter_id"] = int(d["mitarbeiter_id"]) if str(d.get("mitarbeiter_id") or "").isdigit() else None
+    for k, n in (("stoff", 120), ("taetigkeit", 300), ("hoehe", 200), ("haeufigkeit", 200), ("bemerkung", 300)):
+        if k in d:
+            w[k] = str(d[k] or "").strip()[:n]
+    for k in ("von", "bis"):
+        if k in d:
+            w[k] = datum_ok(d[k])
+    if w.get("von") and w.get("bis") and w["bis"] < w["von"]:
+        raise Fehler("Das Ende der Exposition liegt vor dem Beginn.")
+    if eid is None:
+        if not w.get("mitarbeiter_id") or not con.execute("SELECT 1 FROM mitarbeiter WHERE id=?", (w["mitarbeiter_id"],)).fetchone():
+            raise Fehler("Bitte den Mitarbeiter wählen.")
+        if not w.get("stoff") or not w.get("von"):
+            raise Fehler("Bitte Stoff und Beginn der Exposition angeben.")
+        w.update(angelegt=jetzt(), wer=wer)
+        eid = con.execute(f"INSERT INTO as_exposition ({','.join(w)}) VALUES ({','.join('?' * len(w))})", list(w.values())).lastrowid
+    elif w:
+        con.execute(f"UPDATE as_exposition SET {','.join(k + '=?' for k in w)} WHERE id=?", list(w.values()) + [eid])
+    return next((x for x in exposition(con) if x["id"] == eid), None)
+
+
+def exposition_loeschen(con, eid):
+    e = next((x for x in exposition(con) if x["id"] == eid), None)
+    if not e:
+        raise Fehler("Eintrag nicht gefunden.", 404)
+    if not e["loeschbar"]:
+        raise Fehler(f"Das Expositionsverzeichnis wird {EXPO_JAHRE} Jahre nach Ende der Exposition aufbewahrt (§ 14 Abs. 3 GefStoffV). "
+                     "Löschen geht nur am Tag der Erfassung (Tippfehler) oder nach Ablauf der Frist.", 409)
+    con.execute("DELETE FROM as_exposition WHERE id=?", (eid,))
+
+
 # ---------------------------------------------------------------- Übersicht
 def bedarf(n):
     ersthelfer = 0 if n < 2 else 1 if n <= 20 else math.ceil(n * 0.1)
@@ -1295,7 +1433,15 @@ def uebersicht(con, inhaber=False):
             p("rot", f"{q['art']} {q['name']}: abgelaufen am {de_datum(q['gueltig_bis'])}", "#/arbeitsschutz/nachweise", q["gueltig_bis"])
         elif q["gueltig_bis"] and q["gueltig_bis"] <= (date.today() + timedelta(days=60)).isoformat():
             p("gelb", f"{q['art']} {q['name']}: gültig bis {de_datum(q['gueltig_bis'])} – Fortbildung planen", "#/arbeitsschutz/nachweise", q["gueltig_bis"])
+    for x in vorsorge(con):
+        if x["faellig"]:
+            p("rot" if x["faellig"] == "ueberfaellig" else "gelb", f"Arbeitsmedizinische Vorsorge {x['anlass']} für {x['name']}: "
+              + ("fällig seit " if x["faellig"] == "ueberfaellig" else "fällig am ") + de_datum(x["naechste"]), "#/arbeitsschutz/nachweise", x["naechste"])
     if inhaber:
+        for x in verbandbuch(con):
+            if (x.get("au_tage") or 0) > 3 and not x.get("anzeige_am"):
+                p("rot", f"Unfall vom {de_datum((x['zeit'] or '')[:10])} ({x['name']}): mehr als drei Tage arbeitsunfähig – Unfallanzeige an die "
+                  "Berufsgenossenschaft binnen drei Tagen (§ 193 SGB VII)", "#/arbeitsschutz/notfall")
         n_alt = sum(1 for x in verbandbuch(con) if x["abgelaufen"])
         if n_alt:
             p("info", f"{n_alt} Eintrag/Einträge im Verbandbuch älter als fünf Jahre (können gelöscht werden)", "#/arbeitsschutz/notfall")

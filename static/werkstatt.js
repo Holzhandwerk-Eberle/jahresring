@@ -180,8 +180,34 @@ function programmFensterZeilen() {
     ${(E._autostart || {}).moeglich ? zeile("Autostart", `<div class="spalte">
       <label><input type="checkbox" id="asAn" ${E._autostart.aktiv ? "checked" : ""}> Beim Anmelden an Windows automatisch starten</label>
       <label style="margin-left:22px"><input type="checkbox" id="asFenster" ${E._autostart.fenster ? "checked" : ""} ${E._autostart.aktiv ? "" : "disabled"}> dabei auch das Programmfenster öffnen</label>
-      <span class="hinweis">Ohne Fenster läuft Jahresring still im Hintergrund (Symbol unten rechts in der Taskleiste) – praktisch, damit die Stempeluhr auf den Handys immer erreichbar ist. Öffnen dann über „Jahresring“ auf dem Desktop oder das Taskleistensymbol.</span></div>`) : ""}`;
+      <span class="hinweis">Ohne Fenster läuft Jahresring still im Hintergrund (Symbol unten rechts in der Taskleiste) – praktisch, damit die Stempeluhr auf den Handys immer erreichbar ist. Öffnen dann über „Jahresring“ auf dem Desktop oder das Taskleistensymbol.</span></div>`) : ""}
+    ${ICH.rechte.inhaber ? `<div class="sektion">Update-Hinweis</div>
+    ${zeile("Adresse", `<div class="spalte"><input id="upAdr" value="${esc((E.update || {}).adresse || "")}" placeholder="https://… (Datei mit der neuesten Versionsnummer, z. B. version.txt)">
+      <span class="hinweis">Leer = ausgeschaltet. Ist eine Adresse eingetragen, fragt das Programm sie einmal am Tag ab und meldet auf der Startseite, wenn dort eine neuere Version steht. Installiert wird nichts von selbst; übertragen wird nur die Abfrage.</span></div>`)}
+    ${zeile("Zugangsschlüssel", `<div class="spalte"><input id="upSchl" type="password" autocomplete="new-password" placeholder="${(E.update || {}).schluessel_gesetzt ? "gespeichert – zum Ändern neu eingeben" : "nur bei geschützter Ablage (Lesezugriff)"}" style="max-width:420px">
+      <span class="hinweis">Wird verschlüsselt auf diesem PC gespeichert und nie angezeigt.${(E.update || {}).schluessel_gesetzt ? ` <a href="#" id="upSchlWeg">Schlüssel entfernen</a>` : ""}</span></div>`)}
+    ${zeile("Stand", `<div><button class="btn" type="button" id="upJetzt">Jetzt prüfen</button> <span class="hinweis" id="upStand">${updateStandText(E._update)}</span></div>`)}` : ""}`;
 }
+function updateStandText(u) {
+  u = u || {};
+  if (u.fehler) return `<span style="color:var(--rot)">Prüfung nicht möglich: ${esc(u.fehler)}</span>`;
+  if (u.neu) return `<b style="color:var(--akzent)">Neuere Version verfügbar: ${esc(u.neu)}</b> (installiert: ${esc(VERSION)})`;
+  return u.geprueft ? `Stand ${datum(u.geprueft.slice(0, 10))} ${esc(u.geprueft.slice(11, 16))}: Das Programm ist aktuell (${esc(VERSION)}).` : "noch nicht geprüft";
+}
+document.addEventListener("change", async e => {
+  if (e.target.id !== "upAdr" && e.target.id !== "upSchl") return;
+  try { E = await api("einstellungen", {method: "PUT", body: {update: e.target.id === "upAdr" ? {adresse: e.target.value.trim()} : {schluessel: e.target.value.trim()}}}); toast("Gespeichert"); if (e.target.id === "upSchl") e.target.value = ""; }
+  catch (x) { toast(x.message, true); }
+});
+document.addEventListener("click", async e => {
+  const el = e.target.closest && e.target.closest("#upJetzt, #upSchlWeg"); if (!el) return;
+  e.preventDefault();
+  try {
+    if (el.id === "upSchlWeg") { E = await api("einstellungen", {method: "PUT", body: {update: {schluessel_loeschen: true}}}); toast("Schlüssel entfernt"); el.remove(); return; }
+    $("#upStand").textContent = "wird geprüft …";
+    const u = await api("update/pruefen", {method: "POST"}); E._update = u; $("#upStand").innerHTML = updateStandText(u);
+  } catch (x) { toast(x.message, true); }
+});
 async function autostartSetzen() {
   const an = $("#asAn").checked, fe = $("#asFenster");
   fe.disabled = !an;

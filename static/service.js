@@ -103,6 +103,25 @@ async function serviceSeite(z, sub) {
     }
     return;
   }
+  if (sub === "loeschen") {
+    // Jährliche Löschprüfung (Datenschutz): wer darf nach Ablauf der Aufbewahrungsfristen anonymisiert werden?
+    z.innerHTML = `<div class="titel"><h2>Löschprüfung</h2></div>
+      <p>Zeigt Kunden, Lieferanten und ausgeschiedene Mitarbeiter, deren Aufbewahrungsfristen abgelaufen sind, sowie Interessenten und Lieferanten ohne Belege, die seit drei Jahren unverändert sind. Gelöscht oder anonymisiert wird hier nichts – ein Klick öffnet den Datensatz, dort steht „Anonymisieren …“ bzw. „Löschen“.</p>
+      <div id="lpErg"><div class="leer">wird geprüft …</div></div>`;
+    try {
+      const d = await api("datenschutz/faellig");
+      const tab = (titel, liste, link, spalte) => `<div class="sektion" style="margin-top:14px">${titel} <span class="hinweis" style="font-weight:400">· ${liste.length}</span></div>` + (liste.length
+        ? `<table class="liste"><tr><th style="width:110px">Nummer</th><th>Name</th><th style="width:150px">${spalte}</th><th style="width:170px">Frist abgelaufen am</th></tr>
+          ${liste.map(x => `<tr class="klick" data-hash="${link(x)}"><td><a href="${link(x)}">${esc(String(x.nummer))}</a></td><td>${esc(x.name)}${x.ohne_belege ? ` <span class="hinweis">ohne Belege – kann gelöscht werden</span>` : ""}</td>
+            <td>${datum(x.letzter)}</td><td>${x.frist_ende ? datum(x.frist_ende) : "–"}</td></tr>`).join("")}</table>`
+        : `<div class="hinweis">Niemand fällig.</div>`);
+      $("#lpErg").innerHTML = (d.anzahl ? "" : `<div class="kachel" style="border-left:4px solid var(--gruen)">Derzeit ist nichts zu löschen oder zu anonymisieren.</div>`)
+        + tab("Kunden", d.kunden, x => `#/kunde/${x.id}`, "letzter Beleg") + tab("Lieferanten", d.lieferanten, x => `#/lieferant/${x.id}`, "letzter Beleg")
+        + tab("Ausgeschiedene Mitarbeiter", d.mitarbeiter, x => `#/personal/ma/${x.id}`, "Austritt")
+        + `<p class="hinweis" style="margin-top:14px">Fristen: Rechnungen 10 Jahre, Angebote und Geschäftsbriefe 6 Jahre, Lohn- und Zeitunterlagen 10 Jahre, jeweils ab Ende des Kalenderjahres; ein Expositionsverzeichnis 40 Jahre. Empfohlen: einmal im Jahr prüfen und in der Datenschutz-Dokumentation vermerken.</p>`;
+    } catch (e) { $("#lpErg").innerHTML = `<div class="leer">${esc(e.message)}</div>`; }
+    return;
+  }
   if (sub === "relationen") {
     z.innerHTML = `<div class="titel"><h2>Relationencheck</h2></div>
       <p>Check des Datenstands auf fehlende Relationen (verwaiste Datensätze/Dateien).</p>

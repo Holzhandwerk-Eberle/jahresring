@@ -200,7 +200,7 @@ async function positionsListe(z, a) {
     if (kalk) {
       const w = plWerte(p), m = +p.menge || 0, wg = c.gesamtpreis - (w.sk + w.skv) * m;
       if (zaehlt) { summe.werk += w.werk * m; summe.lohn += w.lohn * m; summe.std += w.std * m; summe.skf += w.skf * m; summe.sk += w.sk * m; summe.skv += w.skv * m; summe.wg += wg; }
-      const zahl = v => zahlDE(v);
+      const zahl = v => eur(v);   // Geldbeträge mit €-Zeichen wie in der aufgeklappten Ansicht
       const marken = [(p.stueckliste || []).length ? `<span class="pl-marke" title="Stückliste">S</span>` : "", (p.beschlaege || []).length ? `<span class="pl-marke" title="Beschläge">B</span>` : ""].join("");
       const mt = masseText(p.masse);
       return `<tr class="pl-pos pl-kalk${p.gesperrt ? " gesperrt" : ""}" data-id="${p.id}" data-titel="${p.titel}" draggable="true">
@@ -209,7 +209,7 @@ async function positionsListe(z, a) {
         <td class="pl-text"><div class="pl-kurz">${p.zeige.anzahl ? esc(p.einheit) + " " : ""}${esc(kurz(p.text, 110)) || "<span class='hinweis'>(ohne Text)</span>"}</div>${mt ? `<div class="hinweis">${mt}</div>` : ""}${p.kinder.length ? `<div class="hinweis">+ ${p.kinder.length} Unterposition${p.kinder.length > 1 ? "en" : ""}</div>` : ""}</td>
         <td class="r nw">${zahl(w.werk * m)}${marken ? `<div>${marken}</div>` : ""}</td>
         <td class="r nw">${zahl(w.lohn * m)}${(p.zeiten || []).length ? `<div><span class="pl-marke" title="Tätigkeiten">T</span></div>` : ""}</td>
-        <td class="r nw">${zahlDE(w.std * m)}h</td>
+        <td class="r nw">${zahlDE(w.std * m)} h</td>
         <td class="r nw">${zahl(w.skf * m)}</td>
         <td class="r nw">${zahl(w.sk * m)}</td>
         <td class="r nw">${wg >= 0 ? "+" : ""}${zahl(wg)}<div class="hinweis">${w.sk ? zahlDE(wg / (w.sk * m || 1) * 100, 0) + "%" : ""}</div></td>
@@ -241,7 +241,7 @@ async function positionsListe(z, a) {
         ${t.nr && d.titel_druck === "summen" && ps.length ? `<tr class="pl-tsum"><td colspan="${spalten - 1}" class="r">Summe T${String(t.nr).padStart(2, "0")}</td><td class="r">${eur(d.titel_summen[t.nr] || 0)}</td></tr>` : ""}
       `).join("");
   const fuss = kalk
-    ? `<tr class="pl-summe"><td colspan="3"><b>Nettosummen</b></td><td class="r">${zahlDE(summe.werk)}</td><td class="r">${zahlDE(summe.lohn)}</td><td class="r nw">${zahlDE(summe.std)}h</td><td class="r">${zahlDE(summe.skf)}</td><td class="r">${zahlDE(summe.sk)}</td><td class="r nw">${summe.wg >= 0 ? "+" : ""}${zahlDE(summe.wg)}<div class="hinweis">${summe.sk ? zahlDE(summe.wg / summe.sk * 100, 0) + "%" : ""}</div></td><td class="r">${zahlDE(summe.skv)}</td><td class="r"><b>${zahlDE(d.netto)}</b></td></tr>`
+    ? `<tr class="pl-summe"><td colspan="3"><b>Nettosummen</b></td><td class="r nw">${eur(summe.werk)}</td><td class="r nw">${eur(summe.lohn)}</td><td class="r nw">${zahlDE(summe.std)} h</td><td class="r nw">${eur(summe.skf)}</td><td class="r nw">${eur(summe.sk)}</td><td class="r nw">${summe.wg >= 0 ? "+" : ""}${eur(summe.wg)}<div class="hinweis">${summe.sk ? zahlDE(summe.wg / summe.sk * 100, 0) + "%" : ""}</div></td><td class="r nw">${eur(summe.skv)}</td><td class="r nw"><b>${eur(d.netto)}</b></td></tr>`
     : `<tr class="pl-summe"><td colspan="5"><b>Nettosumme</b></td><td class="r"><b>${eur(d.netto)}</b></td></tr>`;
   z.innerHTML = `
     <div class="titel"><h2>Positionen</h2>
@@ -768,7 +768,9 @@ function beschlagSeite(ctx) {
   const zeilen = p.beschlaege;
   const sp = speicherer("positionen/" + pid, r => { p.calc = r.position.calc; kosten(); });
   const kosten = () => {
-    p.calc.beschlagzeilen.forEach((b, i) => { const zl = $(`[data-bz="${i}"]`, z); if (zl) { zl.children[3].textContent = b.einheit || ""; zl.children[4].textContent = n2(b.kosten_me); zl.children[5].textContent = n2(b.gesamt); } });
+    p.calc.beschlagzeilen.forEach((b, i) => { const zl = $(`[data-bz="${i}"]`, z); if (zl) { zl.children[3].textContent = b.einheit || ""; zl.children[4].textContent = n2(b.kosten_me); zl.children[5].textContent = n2(b.gesamt);
+      const zb = zeilen[i] || {}, leer = !zb.k && !String(zb.bemerkung || "").trim(), m = $('[data-b="menge"]', zl);
+      if (m) { m.style.opacity = leer ? ".45" : ""; m.title = leer ? "Zählt nicht für die Arbeitszeit: kein Beschlag gewählt und keine Bemerkung" : ""; } } });
     $("#bsSum").textContent = eur(p.calc.beschlaege);
   };
   const zeichnen = () => {
@@ -784,7 +786,8 @@ function beschlagSeite(ctx) {
           <td><button class="btn rot" data-del="${i}">✕</button></td></tr>`).join("")}
         <tr><td colspan="5"><b>Summe Beschläge je Anzahl</b></td><td class="r"><b id="bsSum"></b></td><td colspan="2"></td></tr>
       </table>
-      <div style="margin-top:10px"><button class="btn prim" id="bNeu">+ Beschlag</button></div>`;
+      <div style="margin-top:10px"><button class="btn prim" id="bNeu">+ Beschlag</button></div>
+      <p class="hinweis" style="margin-top:10px">Für die Bezugsgröße „Beschläge – St.“ (z. B. Beschläge einlassen oder montieren) zählt die Menge aller Zeilen mit gewähltem Beschlag. Eine Zeile ohne Beschlag zählt nur, wenn eine Bemerkung eingetragen ist (z. B. bauseits gestellte Beschläge); leere Zeilen zählen nicht.</p>`;
     kosten();
     $$("[data-b]", z).forEach(el => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
       const b = zeilen[+el.dataset.i]; b[el.dataset.b] = el.dataset.b === "menge" ? zahlEin(el.value) : el.value; sp.setze("beschlaege", zeilen, el.tagName === "SELECT");
@@ -2019,7 +2022,11 @@ async function vorschauZeichnen(bid, lauf, aktuell) {
   info.textContent = "Vorschau wird erstellt …";
   try {
     const r = await fetch(`/druck/${bid}.pdf?t=${Date.now()}`);
-    if (!r.ok) throw new Error("PDF");
+    if (!r.ok) {
+      let grund = "PDF konnte nicht erzeugt werden";
+      try { grund = (await r.json()).fehler || grund; } catch (e2) { /* keine lesbare Antwort */ }
+      throw new Error(grund);
+    }
     const daten = new Uint8Array(await r.arrayBuffer());
     const basis = "/pdfjs/";
     if (!window.pdfjsLib) {
@@ -2047,7 +2054,12 @@ async function vorschauZeichnen(bid, lauf, aktuell) {
   } catch (e) {
     if (lauf !== aktuell()) return;
     box.innerHTML = `<iframe src="/druck/${bid}?t=${Date.now()}" style="width:100%;height:1100px;border:0;background:#fff"></iframe>`;
-    info.textContent = "HTML-Vorschau (PDF-Vorschau nicht verfügbar)";
+    const grund = String((e && e.message) || "unbekannt");
+    info.textContent = "Bildschirmansicht ohne Seitenumbruch – PDF-Vorschau nicht möglich";
+    info.title = "Grund: " + grund + " – Einzelheiten: Symbol in der Taskleiste › Protokoll anzeigen.";
+    info.insertAdjacentHTML("beforeend", ` <a href="#" id="vsNochmal">erneut versuchen</a>`);
+    const nm = $("#vsNochmal"); if (nm) nm.onclick = ev => { ev.preventDefault(); vorschauZeichnen(bid, lauf, aktuell); };
+    console.warn("PDF-Vorschau:", e);
   }
 }
 

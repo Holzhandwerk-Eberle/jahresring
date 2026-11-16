@@ -1,0 +1,8 @@
+#!/bin/bash
+# Prüf-Browser: scheitert je nach Inhalt von /tmp/claude-0/t/fake2/modus (immer | profil | nie)
+modus=$(cat /tmp/claude-0/t/fake2/modus 2>/dev/null)
+profil=""; for a in "$@"; do case "$a" in --user-data-dir=*) profil="${a#--user-data-dir=}";; esac; done
+echo "$profil" >> /tmp/claude-0/t/fake2/aufrufe
+if [ "$modus" = "immer" ]; then echo "gesperrt" >&2; exit 21; fi
+if [ "$modus" = "profil" ] && [ "$(basename "$profil")" = "browser-profil" ]; then exit 0; fi
+exec /tmp/claude-0/t/fake/chrome "$@"

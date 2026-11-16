@@ -491,6 +491,7 @@ RESSOURCEN = {
     "einstellungen": (None, 0, 2), "vorlagen": (None, 0, 2), "nummernkreise": (["einstellungen"], 1, 2),
     "version": (None, 0, 0), "fenster": (None, 0, 0),
     "benutzer": (["einstellungen"], 2, 2),
+    "datenschutz": (["einstellungen"], 2, 2), "update": (["einstellungen"], 2, 2),
     "service": (["einstellungen"], 2, 2), "autostart": (["einstellungen"], 2, 2), "bildvarianten": (["auftraege"], 2, 2),
     "montage": (["auftraege"], 1, 1), "kundenunterschrift": (["auftraege"], 1, 1), "korrespondenz": (["kunden", "auftraege", "lieferanten"], 1, 2), "scan": (["auftraege", "material"], 1, 1), "newsletter": (["kunden"], 2, 2), "bautagebuch": (["auftraege"], 1, 1), "projekte": (["auftraege"], 1, 2), "leitstand": (["auftraege"], 1, 1), "reste": (["material", "auftraege"], 1, 1),
     "mitarbeiter": (["personal"], 1, 2), "zeiten": (["personal"], 1, 2), "abwesenheiten": (["personal"], 1, 2),

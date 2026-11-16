@@ -216,9 +216,37 @@ def arbeitsschutz_api(con, methode, teile, q, daten):
             return A.verbandbuch(con)
         if methode == "POST" and not rid:
             return A.verbandbuch_eintragen(con, d, wer)
+        if methode == "PUT" and rid:
+            if not inhaber:
+                raise ApiFehler("Das Verbandbuch sieht und ergänzt nur der Inhaber.", 403)
+            return A.verbandbuch_nachtrag(con, rid, d)
         if methode == "DELETE" and rid:
             A.verbandbuch_loeschen(con, rid)
             return {"ok": True}
+    # ---- Vorsorgekartei und Expositionsverzeichnis: vertraulich, nur mit Bearbeitungsrecht im Arbeitsschutz
+    if u in ("vorsorge", "exposition"):
+        if not schreiben:
+            raise ApiFehler("Vorsorgekartei und Expositionsverzeichnis sind vertraulich (nur mit Bearbeitungsrecht im Arbeitsschutz).", 403)
+        if u == "vorsorge":
+            if methode == "GET":
+                return {"eintraege": A.vorsorge(con), "arten": A.VORSORGE_ARTEN, "status": A.VORSORGE_STATUS, "anlaesse": A.VORSORGE_ANLAESSE}
+            if methode == "POST" and not rid:
+                return A.vorsorge_speichern(con, None, d, wer)
+            if methode == "PUT" and rid:
+                return A.vorsorge_speichern(con, rid, d, wer)
+            if methode == "DELETE" and rid:
+                con.execute("DELETE FROM as_vorsorge WHERE id=?", (rid,))
+                return {"ok": True}
+        else:
+            if methode == "GET":
+                return {"eintraege": A.exposition(con), "stoffe": A.EXPO_STOFFE, "jahre": A.EXPO_JAHRE}
+            if methode == "POST" and not rid:
+                return A.exposition_speichern(con, None, d, wer)
+            if methode == "PUT" and rid:
+                return A.exposition_speichern(con, rid, d, wer)
+            if methode == "DELETE" and rid:
+                A.exposition_loeschen(con, rid)
+                return {"ok": True}
     raise ApiFehler("Unbekannte Anfrage", 404)
 
 

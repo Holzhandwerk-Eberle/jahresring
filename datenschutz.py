@@ -123,15 +123,22 @@ def mitarbeiter(con, mid, daten, ausfuehren=False, wer="", version="", sig_ordne
         if d[:4].isdigit():
             letzter = max(letzter, d[:10])
     frist_ende = _frist(letzter[:4]) if letzter[:4].isdigit() else ""
+    expo = ""
+    if _tabelle_da(con, "as_exposition"):
+        # Expositionsverzeichnis (krebserzeugende Stoffe): 40 Jahre nach Ende der Exposition aufzubewahren – mit Namen
+        for r in con.execute("SELECT bis FROM as_exposition WHERE mitarbeiter_id=?", (mid,)):
+            ende = (r["bis"] or austritt or date.today().isoformat())[:10]
+            expo = max(expo, f"{int(ende[:4]) + 40}-12-31")
+        frist_ende = max(frist_ende, expo)
     erlaubt = bool(austritt) and austritt < date.today().isoformat() and (not frist_ende or frist_ende < date.today().isoformat())
     name = " ".join(x for x in (m["vorname"], m["nachname"]) if x)
-    info = {"name": name, "austritt": austritt, "letzter_eintrag": letzter, "frist_ende": frist_ende, "erlaubt": erlaubt}
+    info = {"name": name, "austritt": austritt, "letzter_eintrag": letzter, "frist_ende": frist_ende, "erlaubt": erlaubt, "exposition": bool(expo)}
     if not ausfuehren:
         return info
     if not austritt:
         raise ApiFehler("Anonymisiert werden nur ausgeschiedene Mitarbeiter. Bitte zuerst das Austrittsdatum eintragen.")
     if not erlaubt:
-        raise ApiFehler(f"Die Aufbewahrungsfrist (Lohn- und Zeitunterlagen) läuft noch bis {de_datum(frist_ende)}; vorher darf der Mitarbeiter nicht anonymisiert werden.")
+        raise ApiFehler(f"Die Aufbewahrungsfrist (Lohn- und Zeitunterlagen{', Expositionsverzeichnis 40 Jahre' if expo else ''}) läuft noch bis {de_datum(frist_ende)}; vorher darf der Mitarbeiter nicht anonymisiert werden.")
     sp = _spalten(con, "mitarbeiter")
     leer = [f for f in ("vorname", "kuerzel", "strasse", "plz", "ort", "telefon", "email", "iban", "bic", "bemerkungen", "geburtsdatum") if f in sp]
     werte = {**{f: "" for f in leer}, "nachname": f"{X} ({m['nummer']})", "aktiv": 0, "geaendert": jetzt()}
@@ -156,6 +163,10 @@ def mitarbeiter(con, mid, daten, ausfuehren=False, wer="", version="", sig_ordne
                 bilder += 1
         con.execute("UPDATE signaturen SET name=?, geraet='' WHERE id=?", (X, s["id"]))
     # Arbeitsschutz: Teilnahme an Unterweisungen ohne Namen, Qualifikationen und deren Nachweise entfernen
+    if _tabelle_da(con, "as_vorsorge"):   # Vorsorgekartei: nach Ende der Beschäftigung zu löschen (ArbMedVV)
+        con.execute("DELETE FROM as_vorsorge WHERE mitarbeiter_id=?", (mid,))
+    if _tabelle_da(con, "as_exposition"):
+        con.execute("DELETE FROM as_exposition WHERE mitarbeiter_id=?", (mid,))
     if _tabelle_da(con, "as_teilnehmer"):
         con.execute("UPDATE as_teilnehmer SET name=? WHERE mitarbeiter_id=?", (X, mid))
     if _tabelle_da(con, "as_qualifikationen"):
@@ -179,3 +190,43 @@ def mitarbeiter(con, mid, daten, ausfuehren=False, wer="", version="", sig_ordne
     protokoll.eintragen(con, "anonymisiert", f"Mitarbeiter {m['nummer']}", f"Mitarbeiter {m['nummer']} nach Ablauf der Aufbewahrungsfrist anonymisiert",
                         {"art": "mitarbeiter", "id": mid, "unterschriften": bilder}, benutzer=wer, version=version)
     return {**info, "erledigt": True}
+
+
+# ---------------------------------------------------------------- Löschliste
+def faellig(con, kunde_info):
+    """Wer darf jetzt anonymisiert (bzw. als Interessent gelöscht) werden? Für die jährliche Löschprüfung.
+    kunde_info(con, id) liefert die Auskunft des Kunden (Frist, erlaubt) wie beim Knopf „Anonymisieren“."""
+    heute = date.today()
+    alt = heute.replace(year=heute.year - 3).isoformat()   # ohne Belege: 3 Jahre nach der letzten Änderung
+    aus = {"kunden": [], "lieferanten": [], "mitarbeiter": []}
+    for k in con.execute("SELECT id, nummer, kurzname, angelegt, geaendert FROM kunden WHERE kurzname NOT LIKE ? ORDER BY nummer", (X + "%",)).fetchall():
+        try:
+            i = kunde_info(con, k["id"])
+        except ApiFehler:
+            continue
+        if not i.get("erlaubt"):
+            continue
+        ohne = not i.get("frist_ende")
+        if ohne and (k["geaendert"] or k["angelegt"] or "9999")[:10] > alt:
+            continue   # Interessent ohne Belege, aber noch frisch
+        aus["kunden"].append({"id": k["id"], "nummer": k["nummer"], "name": k["kurzname"], "frist_ende": i.get("frist_ende") or "",
+                              "letzter": i.get("letzter_beleg") or (k["geaendert"] or k["angelegt"] or "")[:10], "ohne_belege": ohne, "auftraege": i.get("auftraege", 0)})
+    for l in con.execute("SELECT id, nummer, kurzname, gruppe, angelegt, geaendert FROM lieferanten WHERE kurzname NOT LIKE ? "
+                         "AND IFNULL(gruppe,'') NOT IN ('Mitarbeiter','Finanzamt','Krankenkasse') ORDER BY nummer", (X + "%",)).fetchall():
+        try:
+            i = lieferant(con, l["id"], "")
+        except ApiFehler:
+            continue
+        if not i["erlaubt"]:
+            continue
+        ohne = not i["frist_ende"]
+        if ohne and ((l["geaendert"] or l["angelegt"] or "9999")[:10] > alt or i["material"]):
+            continue   # ohne Rechnungen: nur melden, wenn seit drei Jahren unverändert und kein Material mehr daran hängt
+        aus["lieferanten"].append({"id": l["id"], "nummer": l["nummer"], "name": l["kurzname"], "frist_ende": i["frist_ende"],
+                                   "letzter": i["letzter_beleg"] or (l["geaendert"] or l["angelegt"] or "")[:10], "ohne_belege": ohne})
+    for m in con.execute("SELECT id, nummer, vorname, nachname FROM mitarbeiter WHERE IFNULL(austritt,'')<>'' AND nachname NOT LIKE ? ORDER BY nummer", (X + "%",)).fetchall():
+        i = mitarbeiter(con, m["id"], "")
+        if i["erlaubt"]:
+            aus["mitarbeiter"].append({"id": m["id"], "nummer": m["nummer"], "name": i["name"], "frist_ende": i["frist_ende"], "letzter": i["austritt"]})
+    aus["anzahl"] = sum(len(v) for v in aus.values())
+    return aus
