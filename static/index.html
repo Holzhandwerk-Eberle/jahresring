@@ -31,7 +31,7 @@ body.anmelde-body::before{content:"";position:fixed;left:50%;top:50%;width:min(9
 .anm-marke img{width:40px;height:40px}
 @media print{body::after,body::before{display:none!important}}
 .lb-name small{font-weight:400;color:#bfb3a5;font-size:11.5px;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lb-name small:empty{display:none}
-.lb-nav{display:flex;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none;height:100%}
+.lb-nav{display:flex;gap:2px;flex:1;overflow:hidden;height:100%}
 .lb-nav a{color:#d9cfc2;text-decoration:none;padding:0 11px;display:flex;align-items:center;white-space:nowrap;border-bottom:3px solid transparent;border-top:3px solid transparent;font-size:14px}
 .lb-nav a:hover{color:#fff;background:rgba(255,255,255,.06)}
 .lb-nav a.aktiv{color:#fff;border-bottom-color:var(--akzent2);font-weight:600}
@@ -59,11 +59,7 @@ body.anmelde-body::before{content:"";position:fixed;left:50%;top:50%;width:min(9
 @media (max-width:1440px){.lb-nav a{padding:0 6px;font-size:13.5px}#leiste{gap:10px;padding:0 14px}}
 @media (max-width:1560px){.lb-nav a{padding:0 7px}#leiste{gap:12px}}
 /* PC: Bildlaufleiste im Hauptmenü, wenn nicht alle Einträge Platz haben (Tablet: wischen) */
-@media (pointer:fine){.lb-nav{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.4) transparent}}
 .lb-nav.voll::after,.lb-nav.voll::before{content:none}
-.lb-pfeil{display:none;flex:0 0 auto;align-self:center;background:rgba(255,255,255,.1);color:#fff;border:0;border-radius:4px;width:22px;height:28px;cursor:pointer;font-size:15px;line-height:1;padding:0}
-.lb-pfeil:hover{background:rgba(255,255,255,.22)}
-@media (pointer:fine){#leiste.nav-voll .lb-pfeil{display:block}}
 /* breite Tabellen: zusätzliche Bildlaufleiste über der Tabelle (PC) */
 .tab-oben{overflow-x:auto;overflow-y:hidden;display:none;scrollbar-width:auto;margin-bottom:2px}
 .tab-oben>div{height:1px}
@@ -869,14 +865,6 @@ function leiste() {
       try { await new Promise(r => setTimeout(r, 1300)); await fetch("/api/beenden", {method: "POST"}); } catch (x) {}
       document.body.innerHTML = `<div style="font:16px system-ui;max-width:520px;margin:18vh auto;text-align:center;color:#3b3530"><h2>Jahresring ist beendet</h2><p>Dieses Fenster kann jetzt geschlossen werden.<br>Zum Weiterarbeiten wieder „Jahresring“ auf dem Desktop starten.</p></div>`;
     };
-  }
-  const nav = $(".lb-nav", l);
-  if (nav && !nav.dataset.rad) {
-    nav.dataset.rad = "1";
-    nav.addEventListener("wheel", e => { if (nav.scrollWidth > nav.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { nav.scrollLeft += e.deltaY; e.preventDefault(); } }, {passive: false});
-    const pfeil = (txt, richtung, titel) => { const b = document.createElement("button"); b.type = "button"; b.className = "lb-pfeil"; b.textContent = txt; b.title = titel;
-      b.onclick = () => nav.scrollBy({left: richtung * Math.max(160, nav.clientWidth * 0.6), behavior: "smooth"}); return b; };
-    nav.before(pfeil("‹", -1, "Menü nach links blättern")); nav.after(pfeil("›", 1, "Menü nach rechts blättern"));
   }
   const h = location.hash || "#/start";
   $$(".lb-nav a", l).forEach(a => {
@@ -2559,9 +2547,7 @@ function navPruefen() {
       if (!versteckt.length) mehr.style.display = "none";
     }
   }
-  l.classList.toggle("nav-voll", n.scrollWidth > n.clientWidth + 2);
-  const a = $(".lb-nav a.aktiv");
-  if (a) { const nr = n.getBoundingClientRect(), ar = a.getBoundingClientRect(); if (ar.left < nr.left || ar.right > nr.right) n.scrollLeft += ar.left - nr.left - (nr.width - ar.width) / 2; }
+  n.scrollLeft = 0;   // die Leiste rollt nicht mehr: was keinen Platz hat, steht unter „Mehr ▾“
 }
 window.addEventListener("resize", () => navPruefen());
 
@@ -2649,7 +2635,7 @@ async function render() {
   }
 }
 window.addEventListener("hashchange", render);
-const VERSION = "2026.11.01-141";
+const VERSION = "2026.11.01-142";
 (async () => {
   try {
     const v = await api("version").catch(() => ({}));

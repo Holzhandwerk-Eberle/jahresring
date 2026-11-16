@@ -273,3 +273,6 @@ Datenschutz: Einstellungen › Service › Löschprüfung zeigt Kunden, Lieferan
 Update-Hinweis (Einstellungen › Programm): Auf Wunsch fragt das Programm einmal täglich eine eingetragene Adresse nach der neuesten Versionsnummer ab und meldet auf der Startseite, wenn es eine neuere gibt. Ohne Adresse ausgeschaltet; installiert wird nichts von selbst.
 Darstellung: Menüleiste mit „Mehr ▾“ für Bereiche ohne Platz; Kalender-Planung mit Feiertagen als schraffierter Spalte; Zuschnitt mit beschrifteten Reststücken, Erklärung von Zuschnitt- und Fertigmaß und Ausnutzungsbalken in drei Farben.
 Intern: Der Preisimport liegt vollständig in einem eigenen Modul.
+
+2026.11.01-142
+Menüleiste: Die Bildlaufleiste und die Pfeile unter dem Menü sind entfernt. Bereiche ohne Platz stehen nur noch unter „Mehr ▾“.
