@@ -777,16 +777,16 @@ function beschlagSeite(ctx) {
     z.innerHTML = posKopfzeile(ctx, "Beschlägeliste") + `
       ${bss.some(b => b.name || b.preis) ? "" : `<div class="leer" style="margin-bottom:10px">Noch keine Auftragsbeschläge hinterlegt. <a href="#/position/${ctx.pid}/werte/beschlaege">Auftragsbeschläge eintragen</a></div>`}
       <table class="liste">
-        <tr><th style="width:44px">Nr</th><th>Beschlag</th><th>Bemerkung</th><th>Me</th><th class="r">Kosten/Me</th><th class="r">Gesamt</th><th style="width:110px" class="r">Menge</th><th></th></tr>
+        <tr><th style="width:44px">Nr</th><th>Beschlag</th><th style="width:110px" class="r">Menge</th><th>Me</th><th class="r">Kosten/Me</th><th class="r">Gesamt</th><th>Bemerkung</th><th></th></tr>
         ${zeilen.map((b, i) => `<tr data-bz="${i}"><td>${String(i + 1).padStart(3, "0")}</td>
           <td><select data-b="k" data-i="${i}" style="width:100%"><option value="">— wählen —</option>${bss.map(s => `<option value="${s.k}" ${s.k === b.k ? "selected" : ""}>${s.k} ${esc(s.artnr || "")} ${esc(s.name || "")}</option>`).join("")}</select></td>
-          <td><input data-b="bemerkung" data-i="${i}" value="${esc(b.bemerkung || "")}" style="width:100%"></td>
-          <td></td><td class="r"></td><td class="r"></td>
           <td class="r">${numInp(b.menge, `data-b="menge" data-i="${i}" style="width:90px;text-align:right"`)}</td>
+          <td></td><td class="r"></td><td class="r"></td>
+          <td><input data-b="bemerkung" data-i="${i}" value="${esc(b.bemerkung || "")}" style="width:100%"></td>
           <td><button class="btn rot" data-del="${i}">✕</button></td></tr>`).join("")}
         <tr><td colspan="5"><b>Summe Beschläge je Anzahl</b></td><td class="r"><b id="bsSum"></b></td><td colspan="2"></td></tr>
       </table>
-      <div style="margin-top:10px"><button class="btn prim" id="bNeu">+ Beschlag</button></div>
+      <div style="margin-top:10px"><button class="btn prim" id="bNeu">+ Beschlag</button> <button class="btn" id="bSet">+ Beschlägeset …</button></div>
       <p class="hinweis" style="margin-top:10px">Für die Bezugsgröße „Beschläge – St.“ (z. B. Beschläge einlassen oder montieren) zählt die Menge aller Zeilen mit gewähltem Beschlag. Eine Zeile ohne Beschlag zählt nur, wenn eine Bemerkung eingetragen ist (z. B. bauseits gestellte Beschläge); leere Zeilen zählen nicht.</p>`;
     kosten();
     $$("[data-b]", z).forEach(el => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
@@ -794,6 +794,18 @@ function beschlagSeite(ctx) {
     }));
     $$("[data-del]", z).forEach(b => b.onclick = () => { zeilen.splice(+b.dataset.del, 1); sp.setze("beschlaege", zeilen, true); zeichnen(); });
     $("#bNeu").onclick = () => { zeilen.push({k: "", menge: 1, bemerkung: ""}); sp.setze("beschlaege", zeilen, true); zeichnen(); };
+    $("#bSet").onclick = async () => {
+      const w = await beschlagsetWaehlen(true); if (!w) return;
+      // fehlende Beschläge des Sets zuerst als Kopie in die Auftragsbeschläge, dann die Zeilen mit Menge × Anzahl Sets
+      const ks = w.teile.map(x => materialInKalk(d.kalk, x.m, "beschlag"));
+      if (ks.some(r => r.neu)) {
+        try { await api(`auftraege/${ctx.a.id}/kalk`, {method: "PUT", body: {beschlaege: d.kalk.beschlaege}}); } catch (x) { toast(x.message, true); return; }
+      }
+      const name = `Set ${w.set.nummer}${w.set.bezeichnung ? " " + kurz(w.set.bezeichnung, 40) : ""}`;
+      w.teile.forEach((x, i) => zeilen.push({k: ks[i].k, menge: Math.round(x.menge * w.anzahl * 1000) / 1000, bemerkung: name}));
+      sp.setze("beschlaege", zeilen, true); zeichnen();
+      toast(`${name}: ${w.teile.length} ${w.teile.length === 1 ? "Beschlag" : "Beschläge"} eingetragen`);
+    };
     posKopfBinden(ctx);
   };
   zeichnen();
@@ -1205,7 +1217,7 @@ async function auftragsWerte(z, {auftrag = null, teil}) {
           ${mitMenge ? `<td class="r">${n2(bMengen[b.k] || 0, (bMengen[b.k] || 0) % 1 ? 2 : 0)}</td><td class="r bges">${n2((+b.preis || 0) * (bMengen[b.k] || 0))}</td>` : ""}
           <td><button class="btn rot" data-weg="beschlaege.${i}">✕</button></td></tr>`).join("")}
         ${mitMenge && k.beschlaege.length ? `<tr><td colspan="6" class="r"><b>Beschläge gesamt</b></td><td class="r"><b id="bGesamt">${eur(summe)}</b></td><td></td></tr>` : ""}
-        </table>${k.beschlaege.length ? "" : `<div class="leer" style="margin-top:10px">Noch keine Beschläge. Mit „+ Beschlag“ aus dem Materialstamm hinzufügen.</div>`}<button class="btn prim" data-plus="beschlag" style="margin-top:10px">+ Beschlag</button>
+        </table>${k.beschlaege.length ? "" : `<div class="leer" style="margin-top:10px">Noch keine Beschläge. Mit „+ Beschlag“ aus dem Materialstamm hinzufügen.</div>`}<button class="btn prim" data-plus="beschlag" style="margin-top:10px">+ Beschlag</button> <button class="btn" data-plus="set" style="margin-top:10px">+ Beschlägeset</button>
         <p class="hinweis">Beschläge werden ohne Verschnitt gerechnet: Kosten je Einheit × Menge.${mitMenge ? " Die Menge ist die Summe aller Positionen (× Positionsmenge)." : ""}</p>`;
     }
     if (teil === "loehne") {
@@ -1255,6 +1267,13 @@ async function auftragsWerte(z, {auftrag = null, teil}) {
         if (!d) return;
         const v = frei.find(x => x.kst === d.kst); if (!v) return;
         k.kostenstellen.push({...v}); setze("kostenstellen", true); zeichnen(); return;
+      }
+      if (t === "set") {
+        const w = await beschlagsetWaehlen(false); if (!w) return;
+        const neu = w.teile.filter(x => materialInKalk(k, x.m, "beschlag").neu).length;
+        setze("beschlaege", true); zeichnen();
+        toast(`Set ${w.set.nummer}: ${neu} ${neu === 1 ? "Beschlag" : "Beschläge"} hinzugefügt${neu < w.teile.length ? `, ${w.teile.length - neu} schon im ${vorgabe ? "Standard" : "Auftrag"}` : ""}`);
+        return;
       }
       const m = await materialWaehlen(t === "beschlag" ? ["beschlaege", "artikel", "chemie"] : ["holzwerkstoffe", "massivholz", "beschichtung", "chemie", "artikel"],
         t === "beschlag" ? "Beschlag hinzufügen" : "Material hinzufügen");
@@ -2430,6 +2449,25 @@ function kalkTyp(m) {
   if (m.kategorie === "holzwerkstoffe") return gr.includes("kant") ? "kante" : gr.includes("furnier") ? "furnier" : "platte";
   return {massivholz: "massiv", beschichtung: "oberflaeche"}[m.kategorie] || "sonstig";
 }
+// Beschlägeset aus dem Lager wählen: liefert das Set, die Anzahl und seine Beschläge samt Stammdaten (null = abgebrochen)
+async function beschlagsetWaehlen(mitAnzahl) {
+  let sets;
+  try { sets = await api("materialsets"); } catch (e) { toast(e.message, true); return null; }
+  sets = sets.filter(x => x.anzahl);
+  if (!sets.length) { toast("Noch kein Beschlägeset mit Beschlägen angelegt (Lager › Beschlägesets).", true); return null; }
+  const d = await modal("Beschlägeset hinzufügen", `
+    ${zeile("Set", `<select name="set" style="width:100%">${sets.map(x => `<option value="${x.id}">${esc(x.nummer)} · ${esc(kurz(x.bezeichnung, 60))} (${x.anzahl} ${x.anzahl === 1 ? "Beschlag" : "Beschläge"}, ${eur(x.summe)})</option>`).join("")}</select>`)}
+    ${mitAnzahl ? zeile("Anzahl Sets", numInp(1, 'name="anzahl" style="width:90px;text-align:right"') + ` <span class="hinweis">je 1 Stück der Position</span>`) : ""}
+    <p class="hinweis">${mitAnzahl ? "Die Beschläge des Sets werden einzeln mit ihrer Menge in die Beschlägeliste eingetragen; was im Auftrag noch fehlt, kommt zu den Auftragsbeschlägen."
+      : "Alle Beschläge des Sets werden als Kopie in die Auftragsbeschläge übernommen. Die Mengen trägt „+ Beschlägeset“ in der Beschlägeliste der Position ein."}</p>`, "Übernehmen");
+  if (!d) return null;
+  try {
+    const set = await api("materialsets/" + d.set), teile = [];
+    for (const x of set.positionen) teile.push({m: await api("material/" + x.material_id), menge: +x.menge || 1});
+    return {set, anzahl: mitAnzahl ? Math.max(zahlEin(d.anzahl) || 1, 0) : 1, teile};
+  } catch (e) { toast(e.message, true); return null; }
+}
+
 function materialInKalk(k, m, rolle) {
   const einh = {"lfm.": "lfm", "Liter": "l"}[m.einheit] || m.einheit;
   const daten = {name: (m.bezeichnung || "").split("\n")[0], preis: (m.kalkpreis ?? m.ek_preis) || 0, v: m.verschnitt || 0, stamm_preis: (m.kalkpreis ?? m.ek_preis) || 0, stamm_v: m.verschnitt || 0, matnr: m.nummer, lieferant: m.lieferant || "",

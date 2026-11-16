@@ -20,5 +20,7 @@ bash $T/v25/neu.sh >/dev/null 2>&1
 schritt durchlauf bash -c "cd $T/v25 && timeout 600 node s/t10.js > $O/tor_t10.txt 2>&1; tail -1 $O/tor_t10.txt | grep -q 'fehler \[\]'"
 schritt seiten bash -c "cd $T/v25 && timeout 600 node s/crawl.js > $O/tor_crawl.txt 2>&1; grep -q '^Fehler: 0' $O/tor_crawl.txt && grep -q '^Auffällige Texte: 0' $O/tor_crawl.txt"
 schritt inhaltsschutz bash -c "cd $T/v25 && cp $T/neu/csp.js s/csp.js && timeout 300 node s/csp.js > $O/tor_csp.txt 2>&1; ! grep -q FEHLER $O/tor_csp.txt && grep -q 'keine Verstöße' $O/tor_csp.txt"
+bash $T/v25/neu.sh >/dev/null 2>&1
+schritt beschlagsets bash -c "cd $T/v25 && cp $T/neu/sets.js s/sets.js && timeout 300 node s/sets.js > $O/tor_sets.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_sets.txt"
 [ $rc = 0 ] && echo "Schnellprüfung bestanden" || echo "Schnellprüfung NICHT bestanden"
 exit $rc
