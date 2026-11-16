@@ -38,7 +38,7 @@ async function asPdfZeigen(url, titel) {
       await skriptLaden("/pdfjs/pdf.min.js");
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.js";
     }
-    const doc = await window.pdfjsLib.getDocument({data: daten}).promise;
+    const doc = await window.pdfjsLib.getDocument({data: daten, isEvalSupported: false}).promise;
     const breite = Math.max(280, box.clientWidth - 8), dpr = window.devicePixelRatio || 1;
     const neu = [];
     for (let n = 1; n <= doc.numPages; n++) {

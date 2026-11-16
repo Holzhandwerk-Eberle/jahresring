@@ -565,6 +565,8 @@ Werkstatt: `werkstatt.as_links_html()` (Materialsummen je `matnr` über `arbeits
 
 **Summenansicht (`kalk.js`, summenSeite).** Spalten: eigene Werte (`calc`), Unterpositionen (`calc.unter_kat`, Nettopreis `unter_ep`), zusammen (Summe; Selbstkosten `kosten_gesamt`, Preis `ep_gesamt`); Spalte Gesamt (× Menge) nur bei Menge ≠ 1. Anteil bezogen auf die Selbstkosten zusammen. Die Nettopreis-Eingabe setzt `einzelpreis = Eingabe − unter_ep`.
 
+**Start und wiederhergestelltes Fenster (`sw.js`, `app.main`).** Ist der Server nicht erreichbar, liefert der Service Worker bei Seitenaufrufen eine Warteseite, die im Sekundentakt `/api/version?wartet=1` abfragt und bei Erfolg neu lädt. Der Server merkt sich solche Anfragen vom eigenen PC (`FENSTER_WARTET`); kam bis 1,8 s nach dem Start eine, öffnet `main()` kein weiteres Fenster. pdf.js wird überall mit `isEvalSupported: false` aufgerufen (CVE-2024-4367).
+
 **Wiedervorlagen (`wiedervorlage.py`).** Tabelle `wiedervorlagen` (auftrag_id, kunde_id, beleg_id, art, datum, text, erledigt, notiz). `nach_rechnung` beim Festschreiben einer Rechnung (art rechnung, nicht Berichtigung) je aktiver Regel aus `wiedervorlage_regeln` (Vorgabe `REGELN`), Datum = Leistungsdatum + Tage, je Auftrag und Art nur einmal offen; `nach_storno` entfernt offene. Startseite `start_daten().wiedervorlagen` (fällig bis heute + 7). Löschen mit Auftrag, Kunde, Anonymisierung und Testdaten (Gruppe Aufträge).
 
 ### Kontenplan und Kontoregeln (2026.11.01-132)

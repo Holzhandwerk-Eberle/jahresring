@@ -2417,7 +2417,7 @@ async function pdfAlsBilder(datei, dpi) {
   const basis = "/pdfjs/";
   await skriptLaden(basis + "pdf.min.js");
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = basis + "pdf.worker.min.js";
-  const doc = await window.pdfjsLib.getDocument({data: new Uint8Array(await datei.arrayBuffer())}).promise;
+  const doc = await window.pdfjsLib.getDocument({data: new Uint8Array(await datei.arrayBuffer()), isEvalSupported: false}).promise;
   const seiten = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const seite = await doc.getPage(i);
@@ -2602,7 +2602,7 @@ async function render() {
   }
 }
 window.addEventListener("hashchange", render);
-const VERSION = "2026.11.01-138";
+const VERSION = "2026.11.01-139";
 (async () => {
   try {
     const v = await api("version").catch(() => ({}));

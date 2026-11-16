@@ -245,3 +245,6 @@ Lager: Reiter „Beschichtungsstoffe“ heißt jetzt „Oberflächenstoffe“; d
 
 2026.11.01-138
 Preise einlesen: Knopf „Datei schließen“ neben dem Dateinamen nimmt die eingelesene Preisdatei wieder aus der Ansicht.
+
+2026.11.01-139
+Start nach dem Hochfahren: Stellt Windows das Jahresring-Fenster wieder her, bevor das Programm läuft, zeigt es jetzt „Jahresring startet …“ und öffnet sich von selbst, sobald das Programm bereit ist (bisher: „nicht erreichbar“). Das Programm öffnet dann kein zweites Fenster. Sicherheit: Die PDF-Anzeige im Programm führt keinen in PDF-Dateien versteckten Programmcode mehr aus.

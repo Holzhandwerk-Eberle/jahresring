@@ -88,7 +88,7 @@ document.addEventListener("click", async e => {
       await new Promise((ok, fehl) => { const sk = document.createElement("script"); sk.src = "/pdfjs/pdf.min.js"; sk.onload = ok; sk.onerror = fehl; document.head.appendChild(sk); });
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.js";
     }
-    const doc = await window.pdfjsLib.getDocument({data: daten}).promise, breite = Math.max(260, box.clientWidth || 320), dpr = window.devicePixelRatio || 1;
+    const doc = await window.pdfjsLib.getDocument({data: daten, isEvalSupported: false}).promise, breite = Math.max(260, box.clientWidth || 320), dpr = window.devicePixelRatio || 1;
     const neu = [];
     for (let n = 1; n <= doc.numPages; n++) {
       const seite = await doc.getPage(n), v0 = seite.getViewport({scale: 1}), sk = breite / v0.width, vp = seite.getViewport({scale: sk * dpr});

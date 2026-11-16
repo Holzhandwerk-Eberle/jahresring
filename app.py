@@ -87,7 +87,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-138"
+VERSION = "2026.11.01-139"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -4511,6 +4511,9 @@ def umzug_offen():
     return NETZ["aktiv"] and lokale_ip() not in ("127.0.0.1", "") and not os.path.exists(umzug_erledigt_pfad())
 
 
+FENSTER_WARTET = {"zeit": 0}
+
+
 def app_fenster(url):
     """Öffnet das Büro als eigenes Programmfenster (Chrome/Edge im App-Modus: ohne Adressleiste und Lesezeichen).
     Geht das nicht, öffnet sich ein normaler Browser-Tab."""
@@ -8908,6 +8911,8 @@ class Handler(BaseHTTPRequestHandler):
         benutzer.setze_aktuell(None)
         ANFRAGE.lokal = self.lokal() or self.ip() == lokale_ip()   # am Büro-PC selbst (auch über dessen Netzwerkadresse)
         self.token = self.cookie()
+        if q.get("wartet") == "1" and self.lokal():
+            FENSTER_WARTET["zeit"] = time.time()   # ein von Windows wiederhergestelltes Programmfenster wartet schon auf den Start
         if HTTPS["stempel_port"] and methode == "GET" and pfad in ("", "/") and self.server.server_address[1] == HTTPS["stempel_port"]:
             return self.senden(302, b"", "text/plain", {"Location": "/stempel"})   # unter dieser Adresse läuft nur die Stempeluhr
         if HTTPS["aktiv"] or pfad.startswith("/zertifikat"):
@@ -9926,7 +9931,9 @@ def main():
     print("Beenden: Symbol unten rechts in der Taskleiste (Rechtsklick > Beenden) oder Ein/Aus-Knopf im Programm.")
     korrespondenz.hintergrund_starten()
     if "--kein-browser" not in sys.argv:
-        threading.Timer(0.8, lambda: app_fenster(url)).start()
+        # Hat Windows beim Hochfahren schon ein Jahresring-Fenster wiederhergestellt, meldet es sich im Sekundentakt
+        # (Warteseite in sw.js) – dann kein zweites Fenster öffnen.
+        threading.Timer(1.8, lambda: None if FENSTER_WARTET["zeit"] else app_fenster(url)).start()
     if os.name == "nt" and "--konsole" not in sys.argv:
         threading.Thread(target=server.serve_forever, daemon=True).start()
         try:

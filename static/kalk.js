@@ -2026,7 +2026,7 @@ async function vorschauZeichnen(bid, lauf, aktuell) {
       await skriptLaden(basis + "pdf.min.js");
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = basis + "pdf.worker.min.js";
     }
-    const doc = await window.pdfjsLib.getDocument({data: daten}).promise;
+    const doc = await window.pdfjsLib.getDocument({data: daten, isEvalSupported: false}).promise;
     if (lauf !== aktuell()) return;
     const breite = Math.min(box.clientWidth - 28, 900), dpr = window.devicePixelRatio || 1;
     const neu = document.createElement("div");
