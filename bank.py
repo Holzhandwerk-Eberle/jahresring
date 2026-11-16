@@ -385,6 +385,74 @@ def vorschlag(u, ops, zas, alle_zas=None):
     return None
 
 
+def dateien(con, grenze=30):
+    """Eingelesene Dateien (eine Datei kann mehrere Auszüge enthalten) mit Zeitraum, Zahl der Umsätze und der schon gebuchten."""
+    gruppen = {}
+    for a in zeilen(con.execute("SELECT * FROM bank_auszuege ORDER BY id DESC")):
+        gruppen.setdefault(a["ablage"] or f"#{a['id']}", []).append(a)
+    aus = []
+    for g in list(gruppen.values())[:grenze]:
+        ids = [a["id"] for a in g]
+        marken = ",".join("?" * len(ids))
+        n = con.execute(f"SELECT COUNT(*) AS n, SUM(CASE WHEN status<>'offen' THEN 1 ELSE 0 END) AS g FROM bank_umsaetze WHERE auszug_id IN ({marken})", ids).fetchone()
+        saldo = max((a for a in g if a["saldo_ende"] is not None and a["saldo_datum"]), key=lambda a: (a["saldo_datum"], a["id"]), default=None)
+        aus.append({"id": min(ids), "datei": g[0]["datei"], "format": g[0]["format"], "importiert": g[0]["importiert"], "benutzer": g[0]["benutzer"],
+                    "von": min((a["von"] for a in g if a["von"]), default=""), "bis": max((a["bis"] for a in g if a["bis"]), default=""),
+                    "neu": sum(a["neu"] or 0 for a in g), "doppelt": sum(a["doppelt"] or 0 for a in g), "auszuege": len(g),
+                    "saldo_ende": saldo["saldo_ende"] if saldo else None, "umsaetze": n["n"] or 0, "gebucht": n["g"] or 0})
+    return aus
+
+
+def _nachtragen(con, ordner):
+    """Nach dem Entfernen einer Datei: Umsätze, die auch in einer anderen, noch vorhandenen Datei stehen (dort als „schon vorhanden“
+    gezählt), aus dieser wieder anlegen – sonst würden sie fehlen, obwohl ihr Auszug noch eingelesen ist."""
+    n = 0
+    for r in con.execute("SELECT ablage, MIN(datei) AS datei FROM bank_auszuege WHERE ablage<>'' GROUP BY ablage HAVING SUM(doppelt)>0").fetchall():
+        try:
+            with open(os.path.join(ordner, r["ablage"]), "rb") as f:
+                auszuege = camt_lesen(f.read(), r["datei"])
+        except Exception:   # noqa: BLE001 – Datei fehlt oder ist nicht mehr lesbar: dann bleibt es beim jetzigen Stand
+            continue
+        ids = [x["id"] for x in con.execute("SELECT id FROM bank_auszuege WHERE ablage=? ORDER BY id", (r["ablage"],))]
+        for aid, a in zip(ids, auszuege):
+            dazu = 0
+            for u in schluessel_setzen(a["umsaetze"]):
+                c = con.execute("INSERT OR IGNORE INTO bank_umsaetze (auszug_id, iban, buchung, valuta, betrag, name, gegen_iban, zweck, e2e, referenz, schluessel, angelegt) "
+                                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (aid, u["iban"], u["buchung"], u["valuta"], u["betrag"], u["name"], u["gegen_iban"],
+                                                                     u["zweck"], u["e2e"], u["referenz"], u["schluessel"], jetzt()))
+                dazu += c.rowcount
+            if dazu:
+                con.execute("UPDATE bank_auszuege SET neu=neu+?, doppelt=MAX(0, doppelt-?) WHERE id=?", (dazu, dazu, aid))
+                n += dazu
+    return n
+
+
+def datei_entfernen(con, aid, ordner):
+    """Eine eingelesene Datei samt ihren Umsätzen wieder entfernen (z. B. falsches Konto, falscher Zeitraum). Geht nur, solange
+    keiner ihrer Umsätze zugeordnet oder auf ein Konto gebucht ist – gebuchte Zahlungen bleiben so immer nachvollziehbar."""
+    a = con.execute("SELECT * FROM bank_auszuege WHERE id=?", (aid,)).fetchone()
+    if not a:
+        raise ApiFehler("Kontoauszug nicht gefunden.", 404)
+    ids = [r["id"] for r in con.execute("SELECT id FROM bank_auszuege WHERE ablage=?", (a["ablage"],))] if a["ablage"] else [aid]
+    marken = ",".join("?" * len(ids))
+    gebucht = con.execute(f"SELECT COUNT(*) FROM bank_umsaetze WHERE auszug_id IN ({marken}) AND status<>'offen'", ids).fetchone()[0]
+    if gebucht:
+        raise ApiFehler(f"{gebucht} {'Umsatz' if gebucht == 1 else 'Umsätze'} aus dieser Datei {'ist' if gebucht == 1 else 'sind'} schon zugeordnet oder auf ein Konto gebucht. "
+                        "Bitte dort zuerst „Zuordnung lösen“ bzw. „Zurückholen“ wählen – danach lässt sich der Kontoauszug entfernen.", 409)
+    n = con.execute(f"DELETE FROM bank_umsaetze WHERE auszug_id IN ({marken})", ids).rowcount
+    con.execute(f"DELETE FROM bank_auszuege WHERE id IN ({marken})", ids)
+    if a["ablage"]:
+        try:
+            os.remove(os.path.join(ordner, a["ablage"]))
+        except OSError:
+            pass
+    wieder = _nachtragen(con, ordner)
+    HILFE["prot"](con, "bank_entfernt", str(a["datei"] or "")[:80], f"Kontoauszug entfernt: {a['datei'] or ''} · {n} Umsätze gelöscht (keiner war zugeordnet)"
+         + (f", {wieder} aus anderen eingelesenen Auszügen wieder angelegt" if wieder else ""),
+         {"sha256": a["sha256"], "ablage": a["ablage"], "umsaetze": n, "wieder_angelegt": wieder, "eingelesen": a["importiert"]})
+    return {"ok": True, "umsaetze": n, "wieder_angelegt": wieder}
+
+
 def liste(con, q):
     status = q.get("status") or "offen"
     sql, par = "SELECT * FROM bank_umsaetze WHERE 1=1", []
@@ -422,7 +490,7 @@ def liste(con, q):
                                       "konto_text": f"{r['konto']} {namen.get(r['konto'], '')}".strip(), "notiz": r["notiz"]}
     kontostand = kontostand_lesen(con)
     zaehler = {r["status"]: r["n"] for r in con.execute("SELECT status, COUNT(*) AS n FROM bank_umsaetze GROUP BY status")}
-    return {"umsaetze": us, "kontostand": kontostand, "anzahl": zaehler,
+    return {"umsaetze": us, "kontostand": kontostand, "anzahl": zaehler, "dateien": dateien(con),
             "auszuege": zeilen(con.execute("SELECT id, datei, format, iban, von, bis, saldo_ende, saldo_datum, neu, doppelt, importiert, benutzer "
                                            "FROM bank_auszuege ORDER BY id DESC LIMIT 30"))}
 
@@ -603,6 +671,10 @@ def web_api(con, methode, teile, q, d):
         HILFE["prot"](con, "bank_import", str(d.get("dateiname") or "")[:80], f"Kontoauszug eingelesen: {d.get('dateiname') or ''} · {erg['neu']} neue Umsätze"
              + (f", {erg['doppelt']} schon vorhanden" if erg["doppelt"] else ""), {"sha256": erg["sha256"], "ablage": erg["ablage"], "neu": erg["neu"], "doppelt": erg["doppelt"]})
         return erg
+    if methode == "DELETE" and sub == "auszuege" and aktion and aktion.isdigit():
+        if not benutzer.ist_inhaber():
+            raise ApiFehler("Einen eingelesenen Kontoauszug entfernt nur der Inhaber.", 403)
+        return datei_entfernen(con, int(aktion), os.path.join(HILFE["daten"], "bank"))
     if methode == "POST" and sub == "sichere":
         # alle sicheren Vorschläge auf einmal übernehmen
         daten_ = liste(con, {"status": "offen"})

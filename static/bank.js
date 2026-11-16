@@ -3,6 +3,7 @@
 //  Jahresring – Kontoauszüge (CAMT) und Liquiditätsvorschau
 // =====================================================================
 const BANK_FILTER = {status: "offen", q: ""};
+let BANK_DATEIEN_OFFEN = false;   // Liste der eingelesenen Dateien aufgeklappt (nach dem Einlesen von selbst)
 
 async function ansichtBank() {
   OP_REITER("bank");
@@ -12,6 +13,7 @@ async function ansichtBank() {
   const sicher = d.umsaetze.filter(u => u.status === "offen" && u.vorschlag && u.vorschlag.sicher);
   const ks = d.kontostand;
   const kann = darf("op", 2);
+  const dateien = d.dateien || [];
   const zielText = u => (u.ziel || []).map(t => `<div>${t.art === "op" ? "Zahlungseingang" : "Zahlungsauftrag"} <b>${esc(t.nummer || "")}</b> ${eur(Math.abs(t.betrag))}${t.art === "zahlung" && !t.gesetzt ? ` <span class="hinweis">(war schon bezahlt)</span>` : ""}</div>`).join("");
   const vorschlagText = v => !v ? `<span class="hinweis">kein Vorschlag</span>`
     : `<div class="bk-vs ${v.sicher ? "sicher" : "pruefen"}"><span class="tag">${v.sicher ? "sicher" : "prüfen"}</span> ${v.konto ? `Konto <b>${esc(v.konto_text)}</b>` : v.ziele.map(t => `${esc(t.text)}${v.ziele.length > 1 ? ` (${eur(t.betrag)})` : ""}`).join("<br>")}<div class="hinweis">${esc(v.grund)}</div></div>`;
@@ -28,6 +30,12 @@ async function ansichtBank() {
       Gutschriften werden offenen Rechnungen zugeordnet, Abbuchungen den Zahlungsaufträgen. Schon eingelesene Umsätze erkennt das Programm und legt sie nicht doppelt an.</p>
     <div class="kachel" style="margin-bottom:12px">${ks ? `Kontostand laut Auszug vom <b>${datum(ks.saldo_datum)}</b>: <b style="font-size:17px">${eur(ks.saldo_ende)}</b> <span class="hinweis">${esc(ks.iban || "")}</span>` : `<span class="hinweis">Noch kein Kontoauszug mit Kontostand eingelesen.</span>`}
       · <a href="#/op/liquiditaet">Liquiditätsvorschau ›</a>${benutzerIstInhaber() ? ` · <a href="#/einstellungen/service/export" id="bkKp" title="Sachkonten, DATEV-Einstellungen">Kontenplan ›</a>` : ""}</div>
+    ${dateien.length ? `<details id="bkDateien" class="kachel" style="margin-bottom:12px"${BANK_DATEIEN_OFFEN ? " open" : ""}><summary style="cursor:pointer"><b>Eingelesene Dateien</b> <span class="hinweis">${dateien.length}${dateien.length === 30 ? " (die letzten)" : ""} · zuletzt ${esc(dateien[0].datei)} vom ${datum(dateien[0].importiert)}</span></summary>
+      <table class="liste" style="margin-top:8px"><tr><th>eingelesen</th><th>Datei</th><th>Zeitraum</th><th class="r">Umsätze</th><th class="r">davon gebucht</th><th class="r">schon vorhanden</th><th class="r">Kontostand</th><th></th></tr>
+      ${dateien.map(a => `<tr><td class="nw">${datum(a.importiert)} ${esc((a.importiert || "").slice(11, 16))}</td><td>${esc(a.datei)} <span class="hinweis">${esc(a.format)}${a.auszuege > 1 ? ` · ${a.auszuege} Auszüge` : ""}</span></td><td class="nw">${a.von ? `${datum(a.von)} – ${datum(a.bis)}` : ""}</td>
+        <td class="r">${a.umsaetze}</td><td class="r">${a.gebucht || ""}</td><td class="r">${a.doppelt || ""}</td><td class="r nw">${a.saldo_ende != null ? eur(a.saldo_ende) : ""}</td>
+        <td class="r">${benutzerIstInhaber() ? `<button class="btn rot" data-bkweg="${a.id}" title="${a.gebucht ? "Erst die Zuordnungen dieser Umsätze lösen – dann lässt sich der Kontoauszug entfernen" : "Diesen Kontoauszug samt seinen Umsätzen wieder entfernen"}">✕</button>` : ""}</td></tr>`).join("")}</table>
+      <p class="hinweis" style="margin:8px 0 0">✕ entfernt eine eingelesene Datei samt ihren Umsätzen wieder, zum Beispiel nach einem falschen Konto oder Zeitraum. Das geht nur, solange keiner ihrer Umsätze zugeordnet oder auf ein Konto gebucht ist; das Entfernen steht im Protokoll.</p></details>` : ""}
     ${sicher.length && kann && BANK_FILTER.status === "offen" ? `<div class="kachel" style="border-left:4px solid var(--gruen);margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <span><b>${sicher.length}</b> ${sicher.length === 1 ? "Umsatz passt" : "Umsätze passen"} eindeutig zu Rechnung, Zahlungsauftrag oder einer Kontoregel.</span><button class="btn prim" id="bkAlle">Alle sicheren übernehmen</button></div>` : ""}
     <div class="filterleiste" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
@@ -37,11 +45,16 @@ async function ansichtBank() {
     </div>
     ${d.umsaetze.length ? `<table class="liste bk-liste"><tr><th>Buchung</th><th>Auftraggeber / Empfänger · Verwendungszweck</th><th class="r">Betrag</th><th>Zuordnung</th><th></th></tr>${zeilen}</table>`
       : `<div class="leer">${BANK_FILTER.status === "offen" ? "Keine offenen Umsätze." : "Keine Umsätze."}</div>`}
-    ${d.auszuege.length ? `<h3 style="margin-top:22px">Eingelesene Dateien</h3><table class="liste"><tr><th>eingelesen</th><th>Datei</th><th>Zeitraum</th><th class="r">neu</th><th class="r">schon vorhanden</th><th class="r">Kontostand</th></tr>
-      ${d.auszuege.map(a => `<tr><td class="nw">${datum(a.importiert)} ${esc((a.importiert || "").slice(11, 16))}</td><td>${esc(a.datei)} <span class="hinweis">${esc(a.format)}</span></td><td class="nw">${datum(a.von)} – ${datum(a.bis)}</td>
-        <td class="r">${a.neu}</td><td class="r">${a.doppelt}</td><td class="r nw">${a.saldo_ende != null ? eur(a.saldo_ende) : ""}</td></tr>`).join("")}</table>` : ""}
     <div id="bkRegeln"></div>`;
   const neu = () => ansichtBank();
+  if ($("#bkDateien")) $("#bkDateien").addEventListener("toggle", e => { BANK_DATEIEN_OFFEN = e.target.open; });
+  $$("[data-bkweg]", z).forEach(b => b.onclick = async () => {
+    const a = dateien.find(x => x.id === +b.dataset.bkweg); if (!a) return;
+    if (a.gebucht) return toast(`${a.gebucht} ${a.gebucht === 1 ? "Umsatz" : "Umsätze"} aus dieser Datei ${a.gebucht === 1 ? "ist" : "sind"} schon zugeordnet oder auf ein Konto gebucht. Bitte dort zuerst „Zuordnung lösen“ bzw. „Zurückholen“ wählen.`, true);
+    if (!await frage(`Kontoauszug „${a.datei}“ mit ${a.umsaetze} ${a.umsaetze === 1 ? "Umsatz" : "Umsätzen"} wieder entfernen? Gebucht wurde daraus noch nichts. Die Datei lässt sich später erneut einlesen.`, {ok: "Entfernen"})) return;
+    try { const r = await api("bank/auszuege/" + a.id, {method: "DELETE"}); toast(`Kontoauszug entfernt (${r.umsaetze} Umsätze)${r.wieder_angelegt ? ` · ${r.wieder_angelegt} Umsätze stehen auch in einem anderen eingelesenen Auszug und bleiben erhalten` : ""}`); neu(); }
+    catch (x) { toast(x.message, true); }
+  });
   if ($("#bkKp")) $("#bkKp").onclick = () => { try { sessionStorage.setItem("kpOffen", "1"); } catch (e) { /* egal */ } };
   $$("[data-st]", z).forEach(b => b.onclick = () => { BANK_FILTER.status = b.dataset.st; neu(); });
   const s = $("#bkSuche"); let t; s.oninput = () => { clearTimeout(t); t = setTimeout(() => { BANK_FILTER.q = s.value.trim(); neu().then(() => { const x = $("#bkSuche"); if (x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } }); }, 350); };
@@ -52,7 +65,7 @@ async function ansichtBank() {
       catch (x) { toast(`${f.name}: ${x.message}`, true); }
     }
     toast(`${neuN} neue Umsätze eingelesen${dopp ? `, ${dopp} waren schon vorhanden` : ""}`);
-    BANK_FILTER.status = "offen"; neu();
+    BANK_FILTER.status = "offen"; BANK_DATEIEN_OFFEN = true; neu();
   };
   if ($("#bkAlle")) $("#bkAlle").onclick = async () => {
     if (!await frage(`${sicher.length} Umsätze wie vorgeschlagen zuordnen? Kundenzahlungen werden als Zahlungseingang gebucht, Zahlungsaufträge als bezahlt markiert.`, {ok: "Zuordnen"})) return;

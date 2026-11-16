@@ -62,6 +62,7 @@ ARTEN = {
     "as_unterweisung": "Arbeitsschutz: Unterweisung abgeschlossen",
     "unterschrift_monatsbeleg": "Monatsbeleg unterschrieben",
     "bank_import": "Kontoauszug eingelesen",
+    "bank_entfernt": "Kontoauszug entfernt",
     "bank_zuordnung": "Kontoumsatz zugeordnet",
     "bank_loesung": "Zuordnung eines Kontoumsatzes gelöst",
     "preisimport": "Lieferantenpreise übernommen",

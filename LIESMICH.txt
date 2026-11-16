@@ -276,3 +276,6 @@ Intern: Der Preisimport liegt vollständig in einem eigenen Modul.
 
 2026.11.01-142
 Menüleiste: Die Bildlaufleiste und die Pfeile unter dem Menü sind entfernt. Bereiche ohne Platz stehen nur noch unter „Mehr ▾“.
+
+2026.11.01-143
+Kontoauszüge: Der Kasten „Eingelesene Dateien“ steht jetzt oben (nach dem Einlesen aufgeklappt). Mit ✕ entfernt der Inhaber eine eingelesene Datei samt ihren Umsätzen wieder, solange keiner davon zugeordnet oder auf ein Konto gebucht ist. Umsätze, die auch in einem anderen eingelesenen Auszug stehen, bleiben erhalten; das Entfernen steht im Protokoll.
