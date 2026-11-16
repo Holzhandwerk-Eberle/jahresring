@@ -1,6 +1,8 @@
 """Jahresring – gemeinsame Grundfunktionen (Fehlerklasse der Schnittstelle, Datum, Zahlen, Text).
 Ohne Abhängigkeit vom übrigen Programm, damit jedes Modul sie nutzen kann."""
 import json
+import secrets
+import threading
 from datetime import date, datetime
 
 
@@ -8,6 +10,37 @@ class ApiFehler(Exception):
     def __init__(self, text, code=400):
         super().__init__(text)
         self.code = code
+
+
+class Rueckfrage(ApiFehler):
+    """Die Anfrage ist ungewöhnlich und wird erst nach einer Bestätigung ausgeführt: Der Browser zeigt den Text als Frage
+    und schickt die Anfrage bei „Ja“ mit dem Schlüssel im Kopf „X-Bestaetigt“ noch einmal (siehe api() in index.html)."""
+    def __init__(self, schluessel, text, knopf="Trotzdem ausführen"):
+        super().__init__(text, 409)
+        self.schluessel, self.knopf = schluessel, knopf
+
+
+# Inhaltsschutz im Browser (Content-Security-Policy): Skripte laufen nur aus Programmdateien oder mit einer Einmal-Kennung,
+# die der Server je Antwort neu vergibt. In vom Programm erzeugten Seiten steht dafür dieser geheime Platzhalter; „senden“
+# ersetzt ihn. Eingeschleuster Text kann ihn nicht kennen – ein eingeschleustes <script> läuft deshalb nicht.
+NONCE = "JR" + secrets.token_hex(16)
+DRUCKEN_JS = ('document.addEventListener("click",function(e){var b=e.target.closest&&e.target.closest("[data-drucken]");if(b)window.print()});'
+              'if(location.search.includes("drucken"))window.print()')
+
+
+def skript(js):
+    """Skript für eine vom Programm erzeugte Seite (mit Einmal-Kennung)."""
+    return f'<script nonce="{NONCE}">{js}</script>'
+
+
+AKTUELL = threading.local()   # je Anfrage: kann der Aufrufer Rückfragen zeigen, und welche hat er bestätigt (von app.py gesetzt)
+
+
+def rueckfrage(schluessel, text, knopf="Trotzdem ausführen"):
+    """Löst eine Rückfrage aus, solange sie für diese Anfrage nicht bestätigt wurde. Nur wenn der Aufrufer Rückfragen
+    anzeigen kann (Büro-Programm, Kopf „X-Rueckfrage“); Scan-Seite, Stempeluhr und Hintergrundläufe buchen ohne."""
+    if getattr(AKTUELL, "fragen", False) and schluessel not in (getattr(AKTUELL, "bestaetigt", None) or ()):
+        raise Rueckfrage(schluessel, text, knopf)
 
 
 def jetzt():

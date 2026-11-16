@@ -39,7 +39,7 @@ ol.schritte{margin:0 0 3mm;padding-left:6mm}ol.schritte li{margin:1.2mm 0}
 </style>
 </head>
 <body>
-<div class="leiste"><b>Installations- und Betriebsanleitung</b><span style="flex:1"></span><button onclick="window.print()">Drucken / als PDF speichern</button></div>
+<div class="leiste"><b>Installations- und Betriebsanleitung</b><span style="flex:1"></span><button data-drucken>Drucken / als PDF speichern</button></div>
 <div class="blatt">
 <section>
 <h1>Installations- und Betriebsanleitung</h1>
@@ -67,7 +67,7 @@ ol.schritte{margin:0 0 3mm;padding-left:6mm}ol.schritte li{margin:1.2mm 0}
 <li>Auf Wunsch gibt das Setup die Windows-Firewall für Tablets, Handys und weitere PCs frei (Ports 8765 bis 8767, nur private Netzwerke). Nur dafür fragt Windows nach Administratorrechten. Führt Windows das Netzwerk als „Öffentlich“, weist das Setup darauf hin; es ist dann unter Einstellungen › Netzwerk und Internet auf „Privates Netzwerk“ umzustellen.</li>
 <li>Bei einem Umzug bietet das Setup an, den Ordner <i>daten</i> vom bisherigen PC zu übernehmen (siehe Abschnitt 7).</li>
 <li>Das Programm startet. Beim ersten Mal wird ggf. Python eingerichtet (ein bis zwei Minuten, das Fenster dabei offen lassen). Es öffnet sich als eigenes Fenster bzw. im Browser unter <i>http://localhost:8765</i>.</li>
-<li>Den <b>Inhaber-Zugang</b> anlegen (Name, Benutzername, Passwort mit mindestens 6, besser 12 Zeichen).</li>
+<li>Den <b>Inhaber-Zugang</b> anlegen (Name, Benutzername, Passwort mit mindestens 8, besser 12 Zeichen).</li>
 <li><b>Einstellungen › Firma</b>: Firmendaten, Steuernummer, USt-IdNr., Bankverbindung, Logo. <b>Belege &amp; Briefbogen</b>: Briefbogen und AGB als PDF, Unterschrift. <b>Kunden &amp; Aufträge</b>: Pfad zu den Projektordnern, Angaben für die Datenauskunft.</li>
 <li><b>Einstellungen › E-Mail</b>: SMTP- und IMAP-Server des Anbieters, Adresse, Passwort; „Testmail senden“. Das Passwort wird verschlüsselt an das Windows-Konto gebunden gespeichert.</li>
 <li><b>Einstellungen › Service › Datensicherung</b>: externes Sicherungsziel eintragen, Sicherungskennwort setzen und notieren, erste vollständige Sicherung erstellen.</li>

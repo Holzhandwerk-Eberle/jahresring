@@ -240,11 +240,20 @@ def fertigdicke(t, w):
     return f(w.get("fdicke")) or f(t.get("dicke")) or f(w.get("dicke"))
 
 
-def teil_rechnen(t, wks):
-    """Rechnet ein Stücklistenteil: Kosten je Teil und Bezugsgrößen je Teil."""
+def teil_rechnen(t, wks, warnungen=None):
+    """Rechnet ein Stücklistenteil: Kosten je Teil und Bezugsgrößen je Teil. „warnungen“ (Menge) sammelt Stellen,
+    an denen sonst still mit 0 € gerechnet würde."""
     l, b = f(t.get("laenge")) / 1000, f(t.get("breite")) / 1000
     p = wks.get(t.get("werkstoff") or "")
-    dicke = f(p.get("dicke")) if p else f(t.get("dicke"))   # bei Massivholz: Rohdicke (für das Volumen)
+    # bei Massivholz: Rohdicke des Werkstoffs (für das Volumen); fehlt sie dort, die Dicke des Teils
+    dicke = (f(p.get("dicke")) or f(t.get("dicke"))) if p else f(t.get("dicke"))
+    if warnungen is not None:
+        if t.get("werkstoff") and not p:
+            warnungen.add(f"Werkstoff „{t.get('werkstoff')}“ aus der Stückliste fehlt in den Werkstoffen des Auftrags – das Material kostet 0 €")
+        for wo, kz in [("Kante", k_) for k_ in (t.get("kanten") or {}).values()] + [("Furnier", k_) for k_ in (t.get("furnier") or {}).values()] + \
+                [("Oberfläche", k_) for k_ in (t.get("oberflaeche") or {}).values()]:
+            if kz and isinstance(kz, str) and kz not in wks:
+                warnungen.add(f"{wo} „{kz}“ aus der Stückliste fehlt in den Werkstoffen des Auftrags – sie kostet 0 €")
     # Fertigdicke: aus dem Werkstoff (Massivholz), sonst die Dicke des Teils (z. B. aus dem Stücklistenimport), sonst die Werkstoffdicke
     fertig = fertigdicke(t, p)
     flaeche = l * b
@@ -256,6 +265,8 @@ def teil_rechnen(t, wks):
             # Massivholz: Kubikmeter aus Länge × Breite × Rohdicke, Preis je m³ inkl. Verschnitt
             volumen = flaeche * dicke / 1000
             kosten_platte = volumen * wk_kosten(p)
+            if warnungen is not None and not dicke and flaeche:
+                warnungen.add(f"Massivholz „{p.get('name') or p.get('k')}“: weder Rohdicke am Werkstoff noch Dicke am Teil – das Material kostet 0 €")
         elif einheit in ("lfm", "lfm."):
             kosten_platte = l * wk_kosten(p)
         elif einheit in ("Stk.", "St.", "Stk"):
@@ -344,8 +355,9 @@ def position_rechnen(pos, kalk, kinder=()):
     bezug.update({"x_" + str(b["k"]): 0.0 for b in eigene if b.get("k")})
     werkstoffe = oberflaeche = massiv_m3 = 0.0
     teile = []
+    warnungen = set()
     for t in stueck:
-        r = teil_rechnen(t, wks)
+        r = teil_rechnen(t, wks, warnungen)
         n = 1.0 if t.get("stueck") in (None, "") else f(t.get("stueck"))   # leere Stückzahl = 1 Stück
         werkstoffe += r["kosten_werkstoff"] * n
         oberflaeche += r["kosten_oberflaeche"] * n
@@ -365,6 +377,8 @@ def position_rechnen(pos, kalk, kinder=()):
     for b in pos.get("beschlaege") or []:
         stamm = bss.get(b.get("k") or "")
         k = f(stamm.get("preis")) if stamm else 0.0   # Beschläge: Kosten je Stück/Einheit, kein Verschnitt
+        if b.get("k") and not stamm and f(b.get("menge")):
+            warnungen.add(f"Beschlag „{b.get('k')}“ fehlt in den Beschlägen des Auftrags – er kostet 0 €")
         beschlaege += k * f(b.get("menge"))
         bzeilen.append({"kosten_me": round(k, 2), "gesamt": round(k * f(b.get("menge")), 2),
                         "einheit": stamm.get("einheit") if stamm else "", "name": stamm.get("name") if stamm else ""})
@@ -385,7 +399,6 @@ def position_rechnen(pos, kalk, kinder=()):
     # Zeiten
     lohn_kst, stunden_kst = {}, {}
     zzeilen = []
-    warnungen = set()
     helfer_gr, helfer_kst = kalk.get("helfer_gruppe", "Hilfskraft"), kalk.get("helfer_kst", "HELFER")
     sum_bearb = sum_ruest = sum_helfer = 0.0
 
@@ -431,8 +444,11 @@ def position_rechnen(pos, kalk, kinder=()):
                         "h_pos": round((min_anz * menge + ruest + helfer_anz * menge) / 60, 2)})
     # Stunden je Anzahl nicht auf 1/100 h runden: bei großen Mengen gingen sonst Zeiten verloren oder würden aufgebläht
     # (0,004 h × 200 Stück). Gerundet wird nur in der Anzeige.
+    ksts = {k.get("kst") for k in kalk.get("kostenstellen", [])}
     for (kst, gruppe), h in roh.items():
         h = round(h, 6)
+        if h and kst not in ksts:
+            warnungen.add(f"Kostenstelle „{kst or '(leer)'}“ fehlt in den Zuschlägen des Auftrags – ihre Stunden werden ohne Gemeinkosten gerechnet")
         stunden_kst[kst] = round(stunden_kst.get(kst, 0) + h, 6)
         lohn_kst[kst] = lohn_kst.get(kst, 0) + h * lohn_von(kalk, gruppe, warnungen)
     lohn = sum(lohn_kst.values())

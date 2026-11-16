@@ -264,7 +264,10 @@ def lies_cii(root):
     # Summen
     summen = kind(sett, "SpecifiedTradeSettlementHeaderMonetarySummation", "SpecifiedTradeSettlementMonetarySummation")
     r["netto"] = zahl(text(kind(summen, "TaxBasisTotalAmount")))
-    r["ust"] = zahl(text(kind(summen, "TaxTotalAmount")))
+    # Steuerbetrag in der Rechnungswährung (daneben kann einer in einer abweichenden Steuerwährung stehen)
+    steuern = kinder(summen, "TaxTotalAmount")
+    st = next((x for x in steuern if (x.get("currencyID") or r.get("waehrung")) == r.get("waehrung")), steuern[0] if steuern else None)
+    r["ust"] = zahl(text(st))
     r["brutto"] = zahl(text(kind(summen, "GrandTotalAmount")))
     r["vorausbezahlt"] = zahl(text(kind(summen, "TotalPrepaidAmount")))
     zb = kind(summen, "DuePayableAmount")

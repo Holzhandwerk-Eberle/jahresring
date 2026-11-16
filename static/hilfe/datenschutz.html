@@ -38,7 +38,7 @@ tr{break-inside:avoid}
 </style>
 </head>
 <body>
-<div class="leiste"><b>Datenschutz-Dokumentation (DSGVO)</b><span style="flex:1"></span><span id="vdStatus">Gelb markierte Stellen anklicken und ausfüllen – wird automatisch im Programm gespeichert</span><button onclick="window.print()">Drucken / als PDF speichern</button></div>
+<div class="leiste"><b>Datenschutz-Dokumentation (DSGVO)</b><span style="flex:1"></span><span id="vdStatus">Gelb markierte Stellen anklicken und ausfüllen – wird automatisch im Programm gespeichert</span><button data-drucken>Drucken / als PDF speichern</button></div>
 <div class="blatt">
 <section class="deckblatt">
 <div class="titel">
@@ -136,6 +136,7 @@ tr{break-inside:avoid}
 </table>
 
 <h2>5. Technische und organisatorische Maßnahmen (Art. 32 DSGVO)</h2>
+<p><b>Im Programm umgesetzt:</b> persönliche Anmeldung mit Rollen und Rechten; Passwörter mit mindestens 8 Zeichen, nur als Prüfwert gespeichert; Sperre nach Fehlversuchen; Anmeldung im Büro verfällt nach 30 Tagen ohne Benutzung; verschlüsselte Verbindung (https) im eigenen Netz; Inhaltsschutz im Browser (nur Programmcode des Büro-PCs wird ausgeführt, keine Verbindungen zu fremden Adressen); Aufrufe nur über die Adressen des eigenen Netzes; Rückfrage bei abweichender Bankverbindung eines Lieferanten; Hinweis und Rückfrage, wenn zwei Personen denselben Datensatz gleichzeitig bearbeiten; unveränderliches Protokoll; tägliche geprüfte Datensicherung.</p>
 <p>Schutzbedarf: normal (Kontakt-, Auftrags- und Rechnungsdaten); erhöht für Beschäftigtendaten (Arbeitsunfähigkeit, Bankverbindung, Lohnbeträge). „Programm“ = im Jahresring umgesetzt, „Betrieb“ = organisatorisch durch den Inhaber umzusetzen.</p>
 <table>
 <tr><th style="width:20%">Ziel</th><th style="width:48%">Maßnahme</th><th style="width:12%">Umgesetzt durch</th><th>Status</th></tr>
@@ -176,6 +177,7 @@ tr{break-inside:avoid}
 </table>
 <p><b>Altbestand aus früheren Programmen:</b> Kunden, die beim Start des Echtbetriebs schon im Programm sind oder später importiert werden, stammen aus früheren Programmen (z. B. einem anderen Branchenprogramm); ihre Rechnungen und Briefe liegen dort und unterliegen der Aufbewahrung. Das Programm setzt bei ihnen „Aufbewahren bis“ auf das Jahresende + 10 Jahre; bis dahin sind Löschen und Anonymisieren gesperrt. Ist die letzte Rechnung im alten Programm bekannt, trägt der Inhaber beim Kunden das passende Datum ein (Jahr der Rechnung + 10, 31.12.; Kunden ganz ohne frühere Rechnung: + 6 Jahre bei Angeboten/Briefen, sonst sofort möglich). Jede Änderung steht im Protokoll.</p>
 <p>Jährliche Löschprüfung im <span class="ein" data-f="d31">[Januar]</span>: Kundenliste nach letzter Aktivität sichten, Interessenten löschen, Kunden nach Ablauf der Frist anonymisieren, abgelaufene Dokumente im Archiv löschen, manuelles Löschprotokoll führen und archivieren, Ergebnis in Abschnitt 12 vermerken.</p>
+<p><b>Lieferanten und Beschäftigte.</b> Ansprechpartner und Einzelunternehmer unter den Lieferanten sowie ausgeschiedene Beschäftigte werden nach Ablauf der Fristen im Programm anonymisiert (Lieferant bzw. Mitarbeiter öffnen › „Anonymisieren …“, nur Inhaber): Lieferanten 10 Jahre nach Ende des Jahres der letzten Rechnung, Beschäftigte 10 Jahre nach Ende des Jahres des Austritts. Entfernt werden Name, Anschrift, Kontaktdaten, Bankverbindung, Geburtsdatum, Unterschriftsbilder, Nachweise, Korrespondenz und abgelegte Rechnungsdateien; Beträge, Zeiten und Lohnsummen bleiben ohne Personenbezug. Jede Anonymisierung steht im Protokoll. Zwischendateien des Programms (gelesene, aber nicht gebuchte Eingangsrechnungen, Vorschau-PDFs) löscht das Programm nach drei Tagen selbst.</p>
 
 <h2>7. Rechte der betroffenen Personen</h2>
 <table>

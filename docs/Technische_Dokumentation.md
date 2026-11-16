@@ -567,6 +567,24 @@ Werkstatt: `werkstatt.as_links_html()` (Materialsummen je `matnr` über `arbeits
 
 **Start und wiederhergestelltes Fenster (`sw.js`, `app.main`).** Ist der Server nicht erreichbar, liefert der Service Worker bei Seitenaufrufen eine Warteseite, die im Sekundentakt `/api/version?wartet=1` abfragt und bei Erfolg neu lädt. Der Server merkt sich solche Anfragen vom eigenen PC (`FENSTER_WARTET`); kam bis 1,8 s nach dem Start eine, öffnet `main()` kein weiteres Fenster. pdf.js wird überall mit `isEvalSupported: false` aufgerufen (CVE-2024-4367).
 
+**Rückfragen (`kern.Rueckfrage`, `kern.rueckfrage`).** Plausibilitätsprüfungen lösen `kern.rueckfrage(schluessel, text, knopf)` aus. Kann der Aufrufer Rückfragen zeigen (Kopf `X-Rueckfrage: 1`, setzt `api()` in index.html) und hat er den Schlüssel nicht bestätigt (Kopf `X-Bestaetigt`), antwortet der Server mit 409 und `{"fehler", "rueckfrage", "knopf"}`; `api()` zeigt die Frage und wiederholt die Anfrage mit Bestätigung. Aufrufer ohne den Kopf (Stempeluhr, Scan, Skripte) werden nicht gefragt. Schlüssel: `iban`, `rechnungsdatum`, `zahlung`, `lager_negativ`, `stand`. Wichtig: Rückfragen vor Nebenwirkungen auslösen, die die Datenbank-Transaktion nicht zurückrollt (Dateien).
+
+**Gleichzeitiges Bearbeiten (`stand_*` in app.py).** Der Server merkt sich im Arbeitsspeicher je Datensatz (`kunden/12`, `einstellungen`) Zeit, Anmeldung und Name der letzten Änderung (`STAND`) und gibt bei jeder Antwort die Serverzeit als `X-Zeit` mit. `api()` schickt sie bei PUT/DELETE als `X-Stand`. Liegt eine Änderung einer anderen Anmeldung danach, kommt die Rückfrage `stand`.
+
+**Eingangsrechnung.** `iban_abweichung()` (Lieferantenstamm gegen Rechnung, auch bei Zahlungsaufträgen von Hand), `eingang_rechnen()` (rechnerische Prüfung, liefert `warnungen`), Protokolleintrag `eingangsrechnung` mit `datei`, `sha256`; `belege_pruefen()` vergleicht (`eingang_geprueft`) und überspringt Dateien, die eine Anonymisierung entfernt hat.
+
+**Inhaltsschutz (CSP).** `CSP` in app.py; `senden()` vergibt je HTML-Antwort eine Einmal-Kennung und ersetzt den geheimen Platzhalter `kern.NONCE`. Programmdateien bekommen den Platzhalter über `html_kennung()`, vom Programm erzeugte Seiten über `kern.skript(js)`. Keine `onclick="…"`-Angaben mehr: Druckknöpfe tragen `data-drucken` (Skript `kern.DRUCKEN_JS`, wird von `senden()` ergänzt), in der Oberfläche `data-hash`, `data-zurueck`, `data-abmelden`. Neue Seiten: kein eingebettetes Skript ohne `kern.skript`, keine Inline-Handler.
+
+**Host-Prüfung.** `Handler.host_erlaubt()`: localhost, IP-Adressen, einfache Namen, Endungen aus `HOST_ENDUNGEN`, Rechnername, Namen des https-Zertifikats und die Einstellung `netz_adressen`; sonst 403.
+
+**Datenschutz (`datenschutz.py`).** `lieferant()` und `mitarbeiter()` liefern ohne `ausfuehren` die Auskunft (Frist, erlaubt) und anonymisieren sonst; Routen `lieferanten/<id>/anonymisieren`, `mitarbeiter/<id>/anonymisieren` (GET/POST, nur Inhaber); Protokollart `anonymisiert`. `tmp_aufraeumen()` (Start und stündlich, Dateien älter als 3 Tage), `laufprotokoll_kuerzen()` (protokoll.txt ab 2 MB).
+
+**Kalender.** `_wiederholungen()` wertet BYDAY mit Ordnungszahl, BYMONTHDAY (auch negativ), BYMONTH und BYSETPOS aus, springt ohne COUNT in die Nähe des Zeitraums und rechnet Serien mit Beginn in Weltzeit je Termin in Ortszeit um. `arbeitstage()` lässt Feiertage und arbeitsfreie Tage aus.
+
+**Zwischenspeicher.** `personal._vorlauf()` rechnet je Kalenderjahr (`_vorlauf_abschnitt`, Fingerabdruck je Jahr); `beleg_umsatz()` merkt sich den Abschlagsabzug je Beleg und Änderungsstand.
+
+**Prüfungen vor dem Bau.** `entwicklung/t/lauf/tor.sh` (Syntax, `neu/namen.py` gegen doppelte globale Namen und Kennungen, Kalkulation, Kalender, `neu/pruef.py`, Durchlauf, alle Seiten, `neu/csp.js`); `bauen.sh` bricht ab, wenn sie fehlschlägt (`OHNE_TOR=1` umgeht sie). Prüfpakete der E-Rechnung: `pruefregeln/anforderungen.txt` mit Prüfsummen (bei neuer Fassung Versionen und Hashes dort ersetzen).
+
 **Wiedervorlagen (`wiedervorlage.py`).** Tabelle `wiedervorlagen` (auftrag_id, kunde_id, beleg_id, art, datum, text, erledigt, notiz). `nach_rechnung` beim Festschreiben einer Rechnung (art rechnung, nicht Berichtigung) je aktiver Regel aus `wiedervorlage_regeln` (Vorgabe `REGELN`), Datum = Leistungsdatum + Tage, je Auftrag und Art nur einmal offen; `nach_storno` entfernt offene. Startseite `start_daten().wiedervorlagen` (fällig bis heute + 7). Löschen mit Auftrag, Kunde, Anonymisierung und Testdaten (Gruppe Aufträge).
 
 ### Kontenplan und Kontoregeln (2026.11.01-132)

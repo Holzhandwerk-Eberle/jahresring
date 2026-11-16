@@ -139,7 +139,7 @@ async function ansichtMaterialDetail(id, teil = "stamm") {
       ${zeile("Lager führen", `<div class="radio"><label><input type="radio" name="lg" value="1" ${m.lager ? "checked" : ""}> Ja</label><label><input type="radio" name="lg" value="0" ${m.lager ? "" : "checked"}> Nein</label></div>`)}
       ${zeile("Lagerort", `<select data-f="lagerort">${opts(E.lagerorte || [], m.lagerort, "ohne")}</select>`)}
       ${zeile("Mindestbestand", `${zahl("mindestbestand", 2)} <span style="padding-top:5px">${esc(m.einheit)}</span>`)}
-      ${zeile("Lagerbestand", `<span style="padding-top:5px"><b class="${m.lager && m.bestand < m.mindestbestand ? "rot" : ""}">${bestandTxt(m)}</b> · Lagerpreis ${eur(m.lagerpreis)} je ${esc(m.einheit)}${m.kalkpreis && Math.abs(m.kalkpreis - m.lagerpreis) > 0.004 ? ` · Kalkulationspreis ${eur(m.kalkpreis)}` : ""} · Wert ${eur(m.bestand * m.lagerpreis)}</span><a class="btn" href="#/material/lager" style="margin-left:auto">Lager buchen</a>`)}
+      ${zeile("Lagerbestand", `<span style="padding-top:5px"><b class="${m.lager && m.bestand < m.mindestbestand ? "rot" : ""}">${bestandTxt(m)}</b> · Lagerpreis ${eur(m.lagerpreis)} je ${esc(m.einheit)}${m.kalkpreis && Math.abs(m.kalkpreis - m.lagerpreis) > 0.004 ? ` · Kalkulationspreis ${eur(m.kalkpreis)}` : ""} · Wert ${eur(m.bestand * (m.lagerpreis || m.ek_preis || 0))}</span><a class="btn" href="#/material/lager" style="margin-left:auto">Lager buchen</a>`)}
     </div>`;
   const anzeigen = () => {
     const k = $("#kpreis"); if (k) k.innerHTML = beschlag
@@ -169,7 +169,7 @@ async function materialEinzelStatistik(m) {
     <div class="titel"><h2>Statistik ${esc(m.nummer)}</h2></div>
     <div class="st-kacheln" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px">
       <div class="kachel"><div class="hinweis">Auf Aufträge gebucht</div><b style="font-size:20px">${mengeTxt(verbrauch, m.einheit)}</b><div class="hinweis">${eur(wert)} in ${new Set(s.buchungen.map(b => b.auftrag_id)).size} Aufträgen</div></div>
-      <div class="kachel"><div class="hinweis">Lagerbestand</div><b style="font-size:20px">${m.lager ? mengeTxt(m.bestand, m.einheit) : "kein Lagerartikel"}</b><div class="hinweis">${m.lager ? (plattenFl(m) ? plattenTxt(m) + " · " : "") + "Wert " + eur(m.bestand * m.lagerpreis) : ""}</div></div>
+      <div class="kachel"><div class="hinweis">Lagerbestand</div><b style="font-size:20px">${m.lager ? mengeTxt(m.bestand, m.einheit) : "kein Lagerartikel"}</b><div class="hinweis">${m.lager ? (plattenFl(m) ? plattenTxt(m) + " · " : "") + "Wert " + eur(m.bestand * (m.lagerpreis || m.ek_preis || 0)) : ""}</div></div>
       <div class="kachel"><div class="hinweis">In Beschlägesets</div><b style="font-size:20px">${s.sets.length}</b><div class="hinweis">${s.sets.map(x => esc(x.nummer)).join(", ")}</div></div>
     </div>
     <h3>Buchungen auf Aufträge</h3>
@@ -400,7 +400,7 @@ async function lagerBuchen() {
       ${b.length ? `<table class="liste"><tr><th>Nummer</th><th>Bezeichnung</th><th>Lagerort</th><th class="r">Bestand</th><th class="r">Mindestbestand</th><th class="r">Lagerpreis</th><th class="r">Wert</th></tr>
         ${b.map(m => `<tr class="klick" data-lm="${m.id}"><td><a href="#/mat/${m.id}">${esc(m.nummer)}</a></td><td>${ersteZeile(m.bezeichnung)}</td><td>${esc(m.lagerort)}</td>
           <td class="r ${m.bestand < m.mindestbestand ? "rot" : ""}"><b>${mengeTxt(m.bestand, m.einheit)}</b>${plattenFl(m) ? `<div class="hinweis">${plattenTxt(m)}</div>` : ""}</td><td class="r">${m.mindestbestand ? mengeTxt(m.mindestbestand, m.einheit) : ""}</td>
-          <td class="r">${eur(m.lagerpreis)}</td><td class="r">${eur(Math.max(0, m.bestand) * m.lagerpreis)}</td></tr>`).join("")}</table>` : `<div class="leer">Noch keine Lagerartikel. Bei einem Material „Lager führen: Ja“ wählen oder hier einen Zugang buchen.</div>`}
+          <td class="r">${eur(m.lagerpreis || m.ek_preis)}</td><td class="r">${eur(Math.max(0, m.bestand) * (m.lagerpreis || m.ek_preis || 0))}</td></tr>`).join("")}</table>` : `<div class="leer">Noch keine Lagerartikel. Bei einem Material „Lager führen: Ja“ wählen oder hier einen Zugang buchen.</div>`}
       <h3 style="margin-top:14px">Letzte Lagerbewegungen</h3>
       ${bew.length ? `<table class="liste"><tr><th>Datum</th><th>Material</th><th>Art</th><th class="r">Menge</th><th class="r">Preis</th><th>Auftrag</th><th>Bemerkung</th></tr>
         ${bew.slice(0, 60).map(x => `<tr><td>${datum(x.datum)}</td><td><a href="#/mat/${x.material_id}">${esc(x.nummer)}</a> ${ersteZeile(x.bezeichnung)}</td><td>${{zugang: "Zugang", abgang: "Abgang", auftrag: "Auftrag", inventur: "Inventur", rueckbuchung: "Rückbuchung"}[x.art] || x.art}</td>

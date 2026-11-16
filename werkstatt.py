@@ -3,6 +3,7 @@
 Werkstatt:  Werkstattauftrag, Stückliste, Materialsummen, Zuschnittliste (CSV)
 Auswertung: Auftragsstunden, Auftragskosten, Soll/Ist-Vergleich, Lohn- und Materialkosten
 """
+import kern
 import csv
 from kalkulation import fertigdicke, anzahl_verbinden, kostenliste
 import io
@@ -250,7 +251,7 @@ def rahmen(titel, a, k, inhalt, hilfe, opts=None, pdf=False, leiste_extra=""):
     basis = LOGO.get("scan_basis", lambda: "")()
     qr = hilfe["qr"](f"{basis}scan#a{a['id']}" if basis and a.get("id") else f"{a['nummer']} {a['bezeichnung']}")
     leiste = "" if pdf else ('<div class="leiste"><b>' + h(titel) + '</b> · Auftrag ' + h(a["nummer"]) + leiste_extra
-                             + '<span style="flex:1"></span><button onclick="window.print()">Drucken</button></div>')
+                             + '<span style="flex:1"></span><button data-drucken>Drucken</button></div>')
     return f"""<!doctype html><html lang="de"><head><meta charset="utf-8"><title>{h(titel)} {h(a['nummer'])}</title>
 <style>{CSS}</style></head><body>{leiste}<div class="blatt">
 {logo_zeile()}<div class="kopf"><div class="titelblock"><h1>{h(titel.upper())}</h1>

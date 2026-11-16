@@ -667,15 +667,24 @@ const ICON = {
 };
 const ic = n => `<svg viewBox="0 0 24 24">${ICON[n]}</svg>`;
 
+// Stand je Datensatz (Serverzeit der letzten eigenen Abfrage oder Speicherung), damit der Server gleichzeitiges Bearbeiten erkennt
+const API_STAND = {};
+const apiStandSchluessel = pfad => { const m = /^([a-z_]+)\/(\d+)/.exec(pfad); return m ? m[1] + "/" + m[2] : (/^einstellungen(\?|$)/.test(pfad) ? "einstellungen" : ""); };
 async function api(pfad, opt = {}) {
-  const r = await fetch("/api/" + pfad, {
-    method: opt.method || "GET",
-    headers: {"Content-Type": "application/json"},
-    body: opt.body !== undefined ? JSON.stringify(opt.body) : undefined,
-  });
+  const methode = opt.method || "GET", sk = apiStandSchluessel(pfad);
+  const kopf = {"Content-Type": "application/json", "X-Rueckfrage": "1"};
+  if (opt._bestaetigt) kopf["X-Bestaetigt"] = opt._bestaetigt.join(",");
+  if (methode !== "GET" && sk && API_STAND[sk]) kopf["X-Stand"] = API_STAND[sk];
+  const r = await fetch("/api/" + pfad, {method: methode, headers: kopf, body: opt.body !== undefined ? JSON.stringify(opt.body) : undefined});
   const j = await r.json().catch(() => ({}));
   if (r.status === 401 && j.anmelden) { location.reload(); throw new Error("Bitte anmelden."); }
+  if (r.status === 409 && j.rueckfrage && methode !== "GET") {
+    // ungewöhnliche Eingabe oder gleichzeitige Änderung: nachfragen und bei „Ja“ mit Bestätigung wiederholen
+    if (await frage(j.fehler, {ok: j.knopf || "Trotzdem ausführen"})) return api(pfad, {...opt, _bestaetigt: [...(opt._bestaetigt || []), j.rueckfrage]});
+    const f = new Error("Abgebrochen – es wurde nichts gespeichert."); f.status = 409; f.abgebrochen = true; throw f;
+  }
   if (!r.ok) { const f = new Error(j.fehler || r.statusText); f.status = r.status; throw f; }
+  if (sk && r.headers.get("X-Zeit")) API_STAND[sk] = r.headers.get("X-Zeit");
   return j;
 }
 let toastTimer;
@@ -894,6 +903,13 @@ function sucheBinden() {
 // Zurück: zur zuletzt angezeigten Seite im Programm (auch zwischen den Reitern eines Auftrags); ohne Verlauf zum hinterlegten Ziel
 let seitenVerlauf = 0;
 window.addEventListener("hashchange", () => { seitenVerlauf++; });
+// Klicks ohne eingebettete onclick-Angaben (der Inhaltsschutz des Browsers lässt solche nicht zu)
+document.addEventListener("click", e => {
+  const el = e.target.closest && e.target.closest("[data-zurueck], [data-hash]");
+  if (!el) return;
+  if (el.hasAttribute("data-zurueck")) zurueckGehen(e); else location.hash = el.dataset.hash;
+});
+document.addEventListener("change", e => { if (e.target.id === "asAn" || e.target.id === "asFenster") autostartSetzen(); });
 function zurueckGehen(ev) {
   if (seitenVerlauf > 0) { ev.preventDefault(); seitenVerlauf -= 2; history.back(); return false; }
   return true;
@@ -907,7 +923,7 @@ function kopf({krumen = [], kontext = "", reiter = null, zurueck = null, reiter2
     ${krumen.length ? `<div class="krumen">${krumen.map(([l, u]) => `<a href="${u}">${esc(l)}</a>`).join("")}</div>` : ""}
     ${kontext ? `<div class="kontext">${kontext}</div>` : `<div class="kontext" style="display:none"></div>`}
     ${reiter || reiter2 || zurueck ? `<div class="reiter">
-      ${zurueck ? `<a class="zurueck" href="${zurueck}" onclick="return zurueckGehen(event)" title="Zur zuletzt angezeigten Seite">← Zurück</a>` : ""}
+      ${zurueck ? `<a class="zurueck" href="${zurueck}" data-zurueck title="Zur zuletzt angezeigten Seite">← Zurück</a>` : ""}
       ${(reiter || []).map(([l, u, a]) => `<a href="${u}" class="${a ? "aktiv" : ""}">${esc(l)}</a>`).join("")}
       ${reiter2 && reiter2.length ? `<div class="r2">` + reiter2.map(([l, u, a]) => u ? `<a href="${u}" class="grau${a ? " aktiv" : ""}">${esc(l)}</a>` : `<span class="aus">${esc(l)}</span>`).join("") + `</div>` : ""}
     </div>` : ""}`;
@@ -1733,6 +1749,7 @@ function lieferantStamm(l) {
         <button class="ib" id="neu" title="Neuer Lieferant">${ic("neu")}</button>
         <button class="ib" id="kopie" title="Lieferant kopieren">${ic("uebernehmen")}</button>
         <button class="ib" id="loeschen" title="Lieferant löschen">${ic("loeschen")}</button>
+        ${ICH.rechte.inhaber ? `<button class="btn" id="lAnon" title="Nach Ablauf der Aufbewahrungsfristen: Name, Anschrift, Bankverbindung, Korrespondenz und abgelegte Rechnungsdateien entfernen; Beträge bleiben">Anonymisieren …</button>` : ""}
       </div></div>
     <div class="form" id="f">
       ${zeile("Kurzname", inp(l, "kurzname"))}
@@ -1765,6 +1782,14 @@ function lieferantStamm(l) {
     const {id, nummer, angelegt, geaendert, anz_anhaenge, anz_notizen, anz_zahlungen, offen_summe, iban_gueltig, ...rest} = l;
     const n = await api("lieferanten", {method: "POST", body: {...rest, kurzname: l.kurzname + " (Kopie)"}});
     toast("Lieferant kopiert"); location.hash = `#/lieferant/${n.id}`;
+  };
+  if ($("#lAnon")) $("#lAnon").onclick = async () => {
+    try {
+      const i = await api(`lieferanten/${l.id}/anonymisieren`);
+      if (!i.erlaubt) return frage(i.offen ? `Es gibt noch ${i.offen} unbezahlte Zahlungsaufträge.` : `Noch nicht möglich.\n\nLetzter Beleg ${datum(i.letzter_beleg)} – die Aufbewahrungsfrist (10 Jahre ab Jahresende, Geschäftsbriefe 6 Jahre) läuft bis ${datum(i.frist_ende)}. Bis dahin müssen die Rechnungen unverändert bleiben (GoBD).`, {titel: "Anonymisieren", ok: "OK", abbrechen: "Schließen"});
+      if (!await frage(`Lieferant „${l.kurzname}“ anonymisieren?\n\nName, Anschrift, Kontaktdaten, Bankverbindung, Notizen, Korrespondenz, Anhänge und die abgelegten Rechnungsdateien werden endgültig entfernt; Beträge und Buchungen bleiben.${i.material ? `\n\n${i.material} Materialien verweisen noch auf diesen Lieferanten – sie bleiben erhalten.` : ""}`, {ok: "Endgültig anonymisieren"})) return;
+      await api(`lieferanten/${l.id}/anonymisieren`, {method: "POST"}); toast("Lieferant anonymisiert"); ansichtLieferant(l.id, "stamm");
+    } catch (e) { toast(e.message, true); }
   };
   $("#loeschen").onclick = async () => {
     if (!await frage(`Lieferant ${l.nummer} „${l.kurzname}“ wirklich löschen?`)) return;
@@ -2602,7 +2627,7 @@ async function render() {
   }
 }
 window.addEventListener("hashchange", render);
-const VERSION = "2026.11.01-139";
+const VERSION = "2026.11.01-140";
 (async () => {
   try {
     const v = await api("version").catch(() => ({}));

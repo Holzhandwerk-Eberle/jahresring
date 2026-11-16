@@ -14,6 +14,8 @@ Danach gelten die Abläufe aus `docs/Technische_Dokumentation.md` (Abschnitt Tes
     bash /tmp/claude-0/t/lauf/teil2.sh   # Sicherheit, GoBD, Rechte, XSS
     bash /tmp/claude-0/t/lauf/teil3.sh   # Status, Kalender, Export, Fuzzing
     bash /tmp/claude-0/t/lauf/teil4.sh   # Arbeitsschutz, Layout, Dokument-PDFs
-    bash /tmp/claude-0/t/inst/bauen.sh   # Jahresring.zip und Jahresring-Setup.exe
+    bash /tmp/claude-0/t/lauf/teil5.sh   # Bank, DATEV, Preise, Wiedervorlagen, neue Prüfungen (neu/)
+    bash /tmp/claude-0/t/lauf/tor.sh     # Schnellprüfung (etwa zwei Minuten): Syntax, doppelte Namen, Kalkulation, Kalender, Oberfläche
+    bash /tmp/claude-0/t/inst/bauen.sh   # Jahresring.zip und Jahresring-Setup.exe – läuft nur, wenn die Schnellprüfung besteht
 
 Ergebnisse stehen in `/tmp/claude-0/t/lauf/*.txt`.

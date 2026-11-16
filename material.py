@@ -1,5 +1,6 @@
 """Materialstamm und Lager: Holzwerkstoffe, Massivholz, Oberflächenstoffe, Chemisch-technische Produkte,
 Beschläge, Beschlägesets, Artikel, Lager- und Auftragsbuchungen."""
+import kern
 import json
 import sqlite3
 from datetime import date, datetime
@@ -300,6 +301,8 @@ def lager_buchen(con, d, auftrag_id=None, ak_id=None):
             raise Fehler("Bitte den gezählten Bestand eingeben (0 oder mehr).")
     elif not menge:
         raise Fehler("Bitte eine Menge eingeben.")
+    elif art in ("zugang", "abgang") and menge < 0:
+        raise Fehler("Bitte eine positive Menge eingeben – für eine Entnahme „Abgang“ wählen, für eine Korrektur „Inventur“.")
     preis = f(d.get("preis")) if d.get("preis") not in (None, "") else (m["lagerpreis"] or m["ek_preis"] or 0)
     bestand_alt = m["bestand"] or 0
     if art == "inventur":
@@ -311,7 +314,15 @@ def lager_buchen(con, d, auftrag_id=None, ak_id=None):
     else:
         delta = -abs(menge)
     neu_bestand = round(bestand_alt + delta, 4)
+    if delta < 0 and neu_bestand < -1e-9 and art in ("abgang", "auftrag"):
+        # Entnahme über den Bestand hinaus erst nach Rückfrage (nur im Büro-Programm; Scan und Stempeluhr buchen ohne)
+        kern.rueckfrage("lager_negativ", f"Im Lager sind nur {kern.de(bestand_alt, 2)} {m['einheit'] or ''} von {m['nummer']} {(m['bezeichnung'] or '').splitlines()[0]}.\n\n"
+                        f"Nach der Entnahme von {kern.de(-delta, 2)} {m['einheit'] or ''} stünde der Bestand bei {kern.de(neu_bestand, 2)}. "
+                        "Stimmt der Bestand nicht, hilft eine Inventur.", "Trotzdem entnehmen")
     lagerpreis = m["lagerpreis"] or 0
+    if art == "inventur" and not lagerpreis and neu_bestand > 0:
+        # Bestand erstmals per Inventur erfasst: mit dem angegebenen Preis, sonst dem Einkaufspreis bewerten (sonst wäre der Lagerwert 0 €)
+        lagerpreis = round(f(d.get("preis")) if d.get("preis") not in (None, "") else (m["ek_preis"] or 0), 4)
     if art == "zugang":
         # gleitender Durchschnittspreis
         basis = max(bestand_alt, 0)
@@ -472,7 +483,7 @@ def set_speichern(con, sid, d):
 def statistik(con):
     lagerwert = zeilen(con.execute(
         "SELECT kategorie, COUNT(*) AS artikel, SUM(CASE WHEN lager=1 THEN 1 ELSE 0 END) AS gelagert, "
-        "ROUND(SUM(CASE WHEN lager=1 AND bestand>0 THEN bestand*lagerpreis ELSE 0 END),2) AS wert FROM material WHERE aktiv=1 GROUP BY kategorie"))
+        "ROUND(SUM(CASE WHEN lager=1 AND bestand>0 THEN bestand*(CASE WHEN IFNULL(lagerpreis,0)>0 THEN lagerpreis ELSE IFNULL(ek_preis,0) END) ELSE 0 END),2) AS wert FROM material WHERE aktiv=1 GROUP BY kategorie"))
     knapp = zeilen(con.execute("SELECT id, kategorie, nummer, bezeichnung, einheit, bestand, mindestbestand FROM material "
                                "WHERE aktiv=1 AND lager=1 AND bestand < mindestbestand ORDER BY nummer"))
     jahr = str(date.today().year)

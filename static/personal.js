@@ -49,7 +49,7 @@ function anmeldeSeite(status) {
         ${einrichten ? `<label>Firmenname<input name="firma" value="${esc(status.firma || "")}" autocomplete="organization" placeholder="wie im Briefkopf"></label>` : ""}
         ${einrichten ? `<label>Name<input name="name" value="${esc(status.firma_inhaber || "")}" autocomplete="name" required></label>` : ""}
         <label>Benutzername<input name="login" autocomplete="username" autocapitalize="none" required></label>
-        <label>Passwort${einrichten ? " <small>(mindestens 6 Zeichen)</small>" : ""}<input name="passwort" type="password" autocomplete="${einrichten ? "new-password" : "current-password"}" required></label>
+        <label>Passwort${einrichten ? " <small>(mindestens 8 Zeichen)</small>" : ""}<input name="passwort" type="password" autocomplete="${einrichten ? "new-password" : "current-password"}" required></label>
         ${einrichten ? `<label>Passwort wiederholen<input name="passwort2" type="password" autocomplete="new-password" required></label>` : ""}
         <button class="btn prim" type="submit">${einrichten ? "Zugang anlegen und anmelden" : "Anmelden"}</button>
         <div id="anmFehler" class="anm-fehler"></div>
@@ -180,6 +180,9 @@ async function benutzerEinstellungen(z) {
         ? `Stempeluhr fürs Handy: <b style="font-size:1.1em">http://${esc(netz.ip)}:${netz.port}/stempel</b><br>Büro von einem anderen PC: http://${esc(netz.ip)}:${netz.port}`
         : E.netzwerk ? `<span style="color:var(--rot)">Eingeschaltet – wirkt nach dem nächsten Neustart des Programms.</span> Danach steht hier die Adresse fürs Handy.`
         : `<span class="hinweis">ausgeschaltet – das Programm ist nur hier am PC erreichbar.</span>`}</div>`)}
+      ${netz.aktiv && (E.https || "aus") === "aus" ? zeile("", `<div class="kachel" style="border-left:4px solid var(--rot);margin:0"><b>Die Verbindung im WLAN ist unverschlüsselt.</b> Anmeldung und Daten gehen im Klartext durchs Netz; wer im selben WLAN mitliest, kann sie sehen. Empfohlen: unten „https zusätzlich“ wählen, die Geräte einrichten und danach auf „nur https“ stellen.</div>`) : ""}
+      ${zeile("Weitere Adressen", `<div class="spalte"><input id="nzHosts" value="${esc(E.netz_adressen || "")}" placeholder="z. B. buero.meinbetrieb.de" style="max-width:420px">
+        <span class="hinweis" style="margin-top:4px">Nur nötig, wenn das Programm im eigenen Netz unter einem eigenen Namen mit Punkt aufgerufen wird. Ohne Eintrag gelten: localhost, die IP-Adresse, der Name dieses PCs und Namen wie „pc.fritz.box“ oder „pc.local“. Mehrere durch Komma trennen.</span></div>`)}
       ${zeile("Verschlüsselung (https)", `<div class="spalte"><select id="nzHttps" style="max-width:420px" ${E.netzwerk ? "" : "disabled"}>
           <option value="aus" ${(E.https || "aus") === "aus" ? "selected" : ""}>aus – nur http (unverschlüsselt im WLAN)</option>
           <option value="zusaetzlich" ${E.https === "zusaetzlich" ? "selected" : ""}>https zusätzlich – beide Adressen funktionieren (zum Einrichten der Geräte)</option>
@@ -219,10 +222,12 @@ async function benutzerEinstellungen(z) {
     } catch (e) { toast(e.message, true); }
   };
   $("#nzAn").onchange = async e => {
-    if (e.target.checked && !await frage("Programm im Netzwerk erreichbar machen?\n\nDann können sich Handys und andere PCs im selben WLAN anmelden. Jeder braucht einen eigenen Benutzer. Die Änderung wirkt nach einem Neustart des Programms.", {ok: "Einschalten"})) { e.target.checked = false; return; }
-    E = await api("einstellungen", {method: "PUT", body: {netzwerk: e.target.checked}});
+    if (e.target.checked && !await frage("Programm im Netzwerk erreichbar machen?\n\nDann können sich Handys und andere PCs im selben WLAN anmelden. Jeder braucht einen eigenen Benutzer. Dazu wird die verschlüsselte Adresse (https) eingeschaltet; die Geräte werden einmal eingerichtet. Die Änderung wirkt nach einem Neustart des Programms.", {ok: "Einschalten"})) { e.target.checked = false; return; }
+    // beim Einschalten gleich die verschlüsselte Adresse dazu (http bleibt zum Einrichten der Geräte erreichbar)
+    E = await api("einstellungen", {method: "PUT", body: {netzwerk: e.target.checked, ...(e.target.checked && (E.https || "aus") === "aus" ? {https: "zusaetzlich"} : {})}});
     toast("Gespeichert – bitte das Programm neu starten"); benutzerEinstellungen(z);
   };
+  $("#nzHosts").onchange = async e => { E = await api("einstellungen", {method: "PUT", body: {netz_adressen: e.target.value.trim()}}); toast("Gespeichert"); };
   const zertAktion = async (body, text) => {
     try {
       const r = await api("service/zertifikat", {method: "POST", body});
@@ -422,7 +427,7 @@ async function mitarbeiterSeite(id) {
       <div class="sektion">Anmeldung</div>
       <div>${m.benutzer.length ? m.benutzer.map(b => `<span class="tag">${esc(b.login)}</span> `).join("") + ` <a href="#/einstellungen/benutzer">verwalten</a>`
         : `<button class="btn" id="maBen">Benutzer für die Stempeluhr anlegen …</button>`}</div>
-      <div style="margin-top:20px"><button class="btn rot" id="maDel">Mitarbeiter löschen</button></div>
+      <div style="margin-top:20px"><button class="btn rot" id="maDel">Mitarbeiter löschen</button>${ICH.rechte.inhaber ? ` <button class="btn" id="maAnon" title="Für ausgeschiedene Mitarbeiter nach Ablauf der Aufbewahrungsfristen: Name, Anschrift, Geburtsdatum, Bankverbindung, Unterschriften und Qualifikationsnachweise entfernen; Zeiten und Lohnsummen bleiben">Anonymisieren …</button>` : ""}</div>
     </div></div>`;
   autospeichern($("#maF"), "mitarbeiter/" + id);
   autospeichern($("#maK"), "mitarbeiter/" + id, () => mitarbeiterSeite(id));
@@ -478,6 +483,14 @@ async function mitarbeiterSeite(id) {
       ${zeile("Rolle", `<select name="rolle"><option value="mitarbeiter">Mitarbeiter – nur Stempeluhr und eigene Zeiten</option><option value="werkstatt">Werkstatt – zusätzlich Werkstattpapiere der Aufträge</option></select>`)}</div>`, "Anlegen");
     if (!d) return;
     try { await api("benutzer", {method: "POST", body: {...d, name: m.name, mitarbeiter_id: id}}); toast("Benutzer angelegt"); mitarbeiterSeite(id); } catch (e) { toast(e.message, true); }
+  };
+  if ($("#maAnon")) $("#maAnon").onclick = async () => {
+    try {
+      const i = await api(`mitarbeiter/${id}/anonymisieren`);
+      if (!i.erlaubt) return frage(!i.austritt ? "Anonymisiert werden nur ausgeschiedene Mitarbeiter. Bitte zuerst das Austrittsdatum eintragen." : `Noch nicht möglich.\n\nLetzter Eintrag ${datum(i.letzter_eintrag)} – Lohn- und Zeitunterlagen werden 10 Jahre ab Jahresende aufbewahrt, also bis ${datum(i.frist_ende)}.`, {titel: "Anonymisieren", ok: "OK", abbrechen: "Schließen"});
+      if (!await frage(`${m.name} anonymisieren?\n\nName, Anschrift, Geburtsdatum, Kontaktdaten, Bankverbindung, Bemerkungen, Unterschriften, Qualifikationsnachweise und der Zugang zur Stempeluhr werden endgültig entfernt; Zeiten, Abwesenheiten und Lohnsummen bleiben ohne Namen erhalten.`, {ok: "Endgültig anonymisieren"})) return;
+      await api(`mitarbeiter/${id}/anonymisieren`, {method: "POST"}); PMETA = null; toast("Mitarbeiter anonymisiert"); location.hash = "#/personal";
+    } catch (e) { toast(e.message, true); }
   };
   $("#maDel").onclick = async () => {
     if (!await frage(`${m.name} löschen?\n\nGeht nur, solange es keine Zeiten oder Lohndaten gibt. Sonst bitte Austrittsdatum eintragen und auf „ausgetreten“ stellen.`)) return;

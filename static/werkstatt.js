@@ -178,8 +178,8 @@ function programmFensterZeilen() {
     <div class="sektion">Programmfenster</div>
     ${zeile("Fenster", `<div class="spalte"><label><input type="checkbox" name="app_fenster" ${E.app_fenster !== false ? "checked" : ""}> Beim Start als eigenes Programmfenster öffnen (ohne Adressleiste und Lesezeichen)</label><span class="hinweis">Gilt ab dem nächsten Start. Ausgeschaltet öffnet sich ein normaler Browser-Tab.</span></div>`)}
     ${(E._autostart || {}).moeglich ? zeile("Autostart", `<div class="spalte">
-      <label><input type="checkbox" id="asAn" ${E._autostart.aktiv ? "checked" : ""} onchange="autostartSetzen()"> Beim Anmelden an Windows automatisch starten</label>
-      <label style="margin-left:22px"><input type="checkbox" id="asFenster" ${E._autostart.fenster ? "checked" : ""} ${E._autostart.aktiv ? "" : "disabled"} onchange="autostartSetzen()"> dabei auch das Programmfenster öffnen</label>
+      <label><input type="checkbox" id="asAn" ${E._autostart.aktiv ? "checked" : ""}> Beim Anmelden an Windows automatisch starten</label>
+      <label style="margin-left:22px"><input type="checkbox" id="asFenster" ${E._autostart.fenster ? "checked" : ""} ${E._autostart.aktiv ? "" : "disabled"}> dabei auch das Programmfenster öffnen</label>
       <span class="hinweis">Ohne Fenster läuft Jahresring still im Hintergrund (Symbol unten rechts in der Taskleiste) – praktisch, damit die Stempeluhr auf den Handys immer erreichbar ist. Öffnen dann über „Jahresring“ auf dem Desktop oder das Taskleistensymbol.</span></div>`) : ""}`;
 }
 async function autostartSetzen() {

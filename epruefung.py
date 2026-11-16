@@ -20,6 +20,7 @@ import xml.etree.ElementTree as ET
 REGELN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pruefregeln")
 VERSIONEN = {"en16931": "CEN EN 16931 Validierungsartefakte 1.3.17", "xrechnung": "KoSIT XRechnung-Schematron 2.6.0 (mit Peppol BIS 3.0.21)"}
 PAKETE = ["saxonche", "lxml"]
+ANFORDERUNGEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pruefregeln", "anforderungen.txt")
 _sperre = threading.Lock()
 _cache = {}
 EINRICHTUNG = {"laeuft": False, "fertig": False, "fehler": "", "ausgabe": ""}
@@ -59,12 +60,19 @@ def einrichten_starten():
     def lauf():
         EINRICHTUNG.update(laeuft=True, fertig=False, fehler="", ausgabe="")
         try:
-            r = subprocess.run([sys.executable, "-m", "pip", "install", "--user", "--disable-pip-version-check", "--no-input", *PAKETE],
+            # nur die geprüften Fassungen: feste Versionen, Prüfsumme jeder Datei muss stimmen (pruefregeln/anforderungen.txt)
+            r = subprocess.run([sys.executable, "-m", "pip", "install", "--user", "--disable-pip-version-check", "--no-input",
+                                "--only-binary=:all:", "--no-deps", "--require-hashes", "-r", ANFORDERUNGEN],
                                capture_output=True, text=True, timeout=900,
                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             EINRICHTUNG["ausgabe"] = (r.stdout or "")[-2000:] + (r.stderr or "")[-2000:]
             if r.returncode != 0:
-                EINRICHTUNG["fehler"] = "Die Installation ist fehlgeschlagen (Internetverbindung?). " + (r.stderr or "").strip()[-300:]
+                aus = (r.stderr or "") + (r.stdout or "")
+                if "hash" in aus.lower() or "No matching distribution" in aus or "from versions: none" in aus:
+                    EINRICHTUNG["fehler"] = (f"Für dieses Python ({sys.version_info.major}.{sys.version_info.minor}) liegen keine geprüften Pakete vor "
+                                             "(vorgesehen: Windows 64 Bit mit Python 3.12 bis 3.14). Es wurde nichts installiert. " + aus.strip()[-200:])
+                else:
+                    EINRICHTUNG["fehler"] = "Die Installation ist fehlgeschlagen (Internetverbindung?). " + (r.stderr or "").strip()[-300:]
         except Exception as f:  # noqa: BLE001
             EINRICHTUNG["fehler"] = f"Die Installation ist fehlgeschlagen: {f}"
         finally:

@@ -248,3 +248,18 @@ Preise einlesen: Knopf „Datei schließen“ neben dem Dateinamen nimmt die ein
 
 2026.11.01-139
 Start nach dem Hochfahren: Stellt Windows das Jahresring-Fenster wieder her, bevor das Programm läuft, zeigt es jetzt „Jahresring startet …“ und öffnet sich von selbst, sobald das Programm bereit ist (bisher: „nicht erreichbar“). Das Programm öffnet dann kein zweites Fenster. Sicherheit: Die PDF-Anzeige im Programm führt keinen in PDF-Dateien versteckten Programmcode mehr aus.
+
+2026.11.01-140
+Umsetzung des Prüfberichts.
+Rückfragen: Bei ungewöhnlichen Eingaben fragt das Programm nach, bevor es speichert (Abbrechen speichert nichts).
+Eingangsrechnungen: rote Warnung bei einer IBAN, die vom Lieferantenstamm abweicht (Buchen nur nach Bestätigung, ebenso Zahlungsaufträge von Hand); rechnerische Prüfung (Zeilen, Netto, Umsatzsteuer, Brutto, Zahlbetrag); Fingerabdruck der abgelegten Originaldatei im Protokoll, die Belegprüfung vergleicht ihn; eine schon abgelegte Datei wird nie überschrieben; Steuerbetrag bei abweichender Steuerwährung richtig gelesen.
+Kalkulation: Warnung statt stiller 0 €, wenn Werkstoff, Kante, Furnier, Oberfläche oder Beschlag in den Auftragswerten fehlt, Massivholz keine Dicke hat oder eine Kostenstelle in den Zuschlägen fehlt; fehlt nur die Rohdicke des Werkstoffs, gilt die Dicke des Teils.
+Rechnungen: Prüfung des Rechnungsdatums beim Festschreiben (Zukunft, über einen Monat zurück, anderes Jahr, vor der letzten Rechnung: Rückfrage; weit entfernt: abgelehnt).
+Zahlungseingang von Hand: Rückfrage bei Betrag über dem offenen Betrag, negativem Betrag, Datum in der Zukunft oder vor der Rechnung.
+Lager: Erstbestand per Inventur wird mit dem Einkaufspreis bewertet (Lagerwert); Entnahme über den Bestand hinaus nur nach Rückfrage; Zugang verlangt eine positive Menge.
+Kalender: Serien eingebundener Kalender richtig (jeder 2. Dienstag, letzter Freitag, Monatsletzter, alte tägliche Serien, Serien in Weltzeit); Feiertage zählen bei geplanten Stunden nicht mit; Uhrzeit „bis“ muss nach „von“ liegen.
+Gleichzeitiges Bearbeiten: Hinweis mit Name und Uhrzeit, wenn jemand anderes denselben Datensatz inzwischen geändert hat.
+Sicherheit: Inhaltsschutz im Browser (Skripte nur aus dem Programm, keine Verbindungen zu fremden Adressen); Aufruf nur über Adressen des eigenen Netzes (weitere unter Einstellungen › Benutzer & Netzwerk); Passwort mindestens 8 Zeichen, Büro-Anmeldung verfällt nach 30 Tagen ohne Benutzung; beim Einschalten des Netzwerks wird https mit eingeschaltet, Hinweis bei unverschlüsseltem Betrieb; die Version nennt den Programmordner nur noch am Büro-PC; Prüfpakete der E-Rechnung nur in festen, per Prüfsumme geprüften Fassungen; Signaturprüfung des Python-Installationsprogramms.
+Datenschutz: „Anonymisieren …“ für Lieferanten und ausgeschiedene Mitarbeiter nach Ablauf der Fristen (nur Inhaber); Zwischendateien werden nach drei Tagen gelöscht; protokoll.txt wird ab 2 MB gekürzt (älterer Teil in protokoll-alt.txt).
+Geschwindigkeit: Arbeitszeitkonten werden je Jahr zwischengespeichert, Startseite merkt sich die Umsätze festgeschriebener Rechnungen.
+Sonstiges: verständliche Meldung statt Datenbankfehler; doppelte Hilfsfunktion entfernt; vor jedem Bau läuft eine Schnellprüfung.

@@ -1,4 +1,5 @@
 """Mitarbeiter, Zeiterfassung (Stempeluhr), Abwesenheiten, Stunden-/Urlaubskonten, Monatsbeleg und Lohnzahlungen."""
+import kern
 import calendar
 import html
 import json
@@ -709,13 +710,28 @@ _VORLAUF = {}
 
 
 def _vorlauf(con, m, von, bis):
-    """Summe der Tagessalden und genommene Urlaubstage je Jahr von … bis (abgeschlossene Monate), zwischengespeichert."""
+    """Summe der Tagessalden und genommene Urlaubstage je Jahr von … bis (abgeschlossene Monate). Gerechnet und
+    zwischengespeichert wird je Kalenderjahr: Eine nachträgliche Korrektur rechnet nur das betroffene Jahr neu,
+    nicht die ganze Betriebszugehörigkeit."""
+    saldo, urlaub = 0.0, {}
+    for j in range(int(von[:4]), int(bis[:4]) + 1):
+        a, b = max(von, f"{j}-01-01"), min(bis, f"{j}-12-31")
+        if a > b:
+            continue
+        s_, u_ = _vorlauf_abschnitt(con, m, a, b)
+        saldo += s_
+        for k, v in u_.items():
+            urlaub[k] = urlaub.get(k, 0) + v
+    return saldo, urlaub
+
+
+def _vorlauf_abschnitt(con, m, von, bis):
     z = con.execute("SELECT COUNT(*), TOTAL(id), TOTAL(julianday(datum) * (id % 83 + 1)), "
                     "TOTAL((CAST(substr(beginn,1,2) AS INTEGER) * 60 + CAST(substr(beginn,4,2) AS INTEGER)) * (id % 97 + 1)), "
                     "TOTAL((CAST(substr(IFNULL(ende,'99:99'),1,2) AS INTEGER) * 60 + CAST(substr(IFNULL(ende,'99:99'),4,2) AS INTEGER)) * (id % 89 + 1)) "
                     "FROM zeiten WHERE mitarbeiter_id=? AND datum BETWEEN ? AND ?", (m["id"], von, bis)).fetchone()
     a = con.execute("SELECT group_concat(id || art || von || bis || halbtag || IFNULL(status,''), '|') FROM abwesenheiten "
-                    "WHERE mitarbeiter_id=? AND von<=?", (m["id"], bis)).fetchone()[0]
+                    "WHERE mitarbeiter_id=? AND von<=? AND bis>=?", (m["id"], bis, von)).fetchone()[0]
     schluessel = (m["id"], von, bis, json.dumps(dict(m), sort_keys=True, default=str), tuple(z), a or "", date.today().isoformat())
     if schluessel in _VORLAUF:
         return _VORLAUF[schluessel]
@@ -725,7 +741,7 @@ def _vorlauf(con, m, von, bis):
         if t["urlaubstage"]:
             j = int(t["datum"][:4])
             urlaub[j] = urlaub.get(j, 0) + t["urlaubstage"]
-    if len(_VORLAUF) > 200:
+    if len(_VORLAUF) > 3000:
         _VORLAUF.clear()
     _VORLAUF[schluessel] = (saldo, urlaub)
     return saldo, urlaub
@@ -887,7 +903,7 @@ tr.sum td {{ font-weight:700; border-top:.8pt solid #333; border-bottom:.8pt sol
 <tr><td>Urlaub genommen {monat_name}</td><td class="r">{de(s['urlaubstage'], 1)} Tage</td></tr>
 <tr class="ges"><td>Resturlaub</td><td class="r">{de(ke['urlaub_rest'], 1)} Tage</td></tr></table></div></div>
 {sig_html(sig or {})}
-{'' if als_pdf else '<script>if(location.search.includes("drucken"))window.print()</script>'}
+{'' if als_pdf else kern.skript(kern.DRUCKEN_JS)}
 </body></html>"""
 
 

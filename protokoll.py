@@ -32,6 +32,8 @@ ARTEN = {
     "festschreiben": "Rechnung festgeschrieben",
     "storno": "Rechnung storniert",
     "archiv_pdf": "Archiv-PDF erzeugt",
+    "eingangsrechnung": "Eingangsrechnung abgelegt",
+    "anonymisiert": "Lieferant oder Mitarbeiter anonymisiert (Art. 17 DSGVO)",
     "beleg_geloescht": "Beleg gelöscht",
     "zahlungsauftrag_geaendert": "Zahlungsauftrag geändert",
     "zahlungsauftrag_geloescht": "Zahlungsauftrag gelöscht",

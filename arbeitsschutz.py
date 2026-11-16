@@ -6,6 +6,7 @@ Arbeitsplatz/Maschine, Unterweisungsinhalte, Checkliste psychische Belastung. Fr
 Tablet unterschrieben (unterschrift.py); eine freigegebene Fassung bleibt unverändert gespeichert.
 """
 import base64
+import kern
 import hashlib
 import html
 import json
@@ -1357,7 +1358,7 @@ ul { margin:0; padding-left:4.5mm } li { margin:.4mm 0 }
 """
 
 
-DRUCK_SKRIPT = '<script>if(location.search.includes("drucken"))window.print()</script>'
+DRUCK_SKRIPT = kern.skript(kern.DRUCKEN_JS)
 
 
 def seite(titel, kopf_rechts, inhalt, firma, als_pdf, quer=False, extra_css=""):

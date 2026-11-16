@@ -68,7 +68,7 @@ function asDebounce(fn, ms = 600) {
   return f;
 }
 function asSpeicherStatus(t, k = "") { const s = $(".speicher"); if (s) { s.textContent = t; s.className = "speicher " + k; } }
-async function dateiAlsBase64(f) { return await new Promise((ok, err) => { const r = new FileReader(); r.onload = () => ok(r.result.split(",")[1]); r.onerror = err; r.readAsDataURL(f); }); }
+// dateiAlsBase64() steht in eingang.js (gemeinsam genutzt)
 
 async function ansichtArbeitsschutz(teil = "uebersicht", id, sub) {
   if (teil === "gb") return id ? asGbDetail(+id) : asGbListe();

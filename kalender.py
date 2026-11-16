@@ -64,51 +64,104 @@ def _dauer(s):
 WTAGE = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 
 
-def _wiederholungen(start, regel, von, bis, max_n=2000):
-    """Einfache RRULE-Auswertung (DAILY/WEEKLY/MONTHLY/YEARLY, INTERVAL, COUNT, UNTIL, BYDAY bei WEEKLY)."""
+def _monatstage(jahr, monat, tage_regel, monatstage, setpos, vorgabe_tag):
+    """Tage eines Monats laut BYDAY (auch „2TU“, „-1FR“), BYMONTHDAY (auch negativ) und BYSETPOS; sonst der Tag des Serienbeginns."""
+    import calendar
+    letzter = calendar.monthrange(jahr, monat)[1]
+    tage = None
+    if tage_regel:
+        tage = set()
+        for nr, wt in tage_regel:
+            treffer = [t for t in range(1, letzter + 1) if date(jahr, monat, t).weekday() == wt]
+            if nr:
+                if -len(treffer) <= nr <= len(treffer) and nr != 0:
+                    tage.add(treffer[nr - 1 if nr > 0 else nr])
+            else:
+                tage.update(treffer)
+    if monatstage:
+        mt = {t if t > 0 else letzter + 1 + t for t in monatstage}
+        mt = {t for t in mt if 1 <= t <= letzter}
+        tage = mt if tage is None else tage & mt
+    if tage is None:
+        tage = {vorgabe_tag} if vorgabe_tag <= letzter else set()
+    tage = sorted(tage)
+    if setpos:
+        tage = sorted({tage[p - 1 if p > 0 else p] for p in setpos if p != 0 and -len(tage) <= p <= len(tage)})
+    return tage
+
+
+def _wiederholungen(start, regel, von, bis, max_n=20000, lokal=None):
+    """RRULE-Auswertung: DAILY/WEEKLY/MONTHLY/YEARLY mit INTERVAL, COUNT, UNTIL, BYDAY (auch „jeden 2. Dienstag“, „letzter Freitag“),
+    BYMONTHDAY (auch −1 = Monatsletzter), BYMONTH und BYSETPOS. „lokal“ rechnet einen Serientermin in Ortszeit um
+    (Serien, deren Beginn in Weltzeit angegeben ist, wandern mit der Sommerzeit)."""
     r = dict(p.split("=", 1) for p in regel.split(";") if "=" in p)
     freq = r.get("FREQ", "")
-    intervall = int(r.get("INTERVAL", "1") or 1)
-    anzahl = int(r["COUNT"]) if "COUNT" in r else None
+    lokal = lokal or (lambda x: x)
+    try:
+        intervall = max(1, int(r.get("INTERVAL", "1") or 1))
+        anzahl = int(r["COUNT"]) if "COUNT" in r else None
+        tage_regel = []
+        for x in r.get("BYDAY", "").split(","):
+            m = re.fullmatch(r"([+-]?\d+)?(MO|TU|WE|TH|FR|SA|SU)", x.strip())
+            if m:
+                tage_regel.append((int(m.group(1) or 0), WTAGE.index(m.group(2))))
+        zahlen = lambda k: [int(x) for x in r.get(k, "").split(",") if re.fullmatch(r"[+-]?\d+", x.strip())]
+        monatstage, monate, setpos = zahlen("BYMONTHDAY"), [m for m in zahlen("BYMONTH") if 1 <= m <= 12], zahlen("BYSETPOS")
+    except ValueError:
+        return [start]
     bis_regel = None
     if "UNTIL" in r:
         try:
             bis_regel = _zeit(r["UNTIL"], {})[0]
+            if len(r["UNTIL"].strip()) == 8:   # nur Datum: der ganze Tag zählt noch
+                bis_regel = bis_regel.replace(hour=23, minute=59, second=59)
         except ValueError:
             bis_regel = None
-    tage = [WTAGE.index(x[-2:]) for x in r.get("BYDAY", "").split(",") if x[-2:] in WTAGE] if freq == "WEEKLY" else []
-    erg, n, i = [], 0, 0
-    while i < max_n:
+    if freq not in ("DAILY", "WEEKLY", "MONTHLY", "YEARLY"):
+        return [start]
+    zeit = lambda d: datetime(d.year, d.month, d.day, start.hour, start.minute, start.second)
+    wochentage = sorted({wt for _, wt in tage_regel})
+    # Ohne COUNT gleich in die Nähe des gesuchten Zeitraums springen (alte Serien liefen sonst ins Leere)
+    i = 0
+    if anzahl is None:
+        ab = von - timedelta(days=70)
+        if ab > start:
+            tage_ = (ab - start).days
+            i = {"DAILY": tage_ // intervall, "WEEKLY": tage_ // (7 * intervall), "MONTHLY": (tage_ // 31) // intervall, "YEARLY": (tage_ // 366) // intervall}[freq]
+            i = max(0, i - 1)
+    erg, n, schritte = [], 0, 0
+    while schritte < max_n:
+        schritte += 1
         if freq == "DAILY":
-            kandidaten = [start + timedelta(days=i * intervall)]
+            k = start + timedelta(days=i * intervall)
+            kandidaten = [k] if (not wochentage or k.weekday() in wochentage) and (not monate or k.month in monate) else []
         elif freq == "WEEKLY":
             woche = start - timedelta(days=start.weekday()) + timedelta(weeks=i * intervall)
-            kandidaten = [woche + timedelta(days=t) for t in sorted(tage)] if tage else [start + timedelta(weeks=i * intervall)]
-            kandidaten = [k.replace(hour=start.hour, minute=start.minute, second=start.second) for k in kandidaten if k >= start]
+            kandidaten = [zeit(woche + timedelta(days=t)) for t in wochentage] if wochentage else [start + timedelta(weeks=i * intervall)]
         elif freq == "MONTHLY":
             m = start.month - 1 + i * intervall
             j, mo = start.year + m // 12, m % 12 + 1
-            try:
-                kandidaten = [start.replace(year=j, month=mo)]
-            except ValueError:
-                kandidaten = []
-        elif freq == "YEARLY":
-            try:
-                kandidaten = [start.replace(year=start.year + i * intervall)]
-            except ValueError:
-                kandidaten = []
+            kandidaten = [zeit(date(j, mo, t)) for t in _monatstage(j, mo, tage_regel, monatstage, setpos, start.day)]
         else:
-            return [start]
+            j = start.year + i * intervall
+            if j > 9998:
+                return erg
+            kandidaten = []
+            for mo in (sorted(set(monate)) or [start.month]):
+                kandidaten += [zeit(date(j, mo, t)) for t in _monatstage(j, mo, tage_regel, monatstage, setpos, start.day)]
         for k in kandidaten:
-            if bis_regel and k > bis_regel:
+            if k < start:
+                continue
+            kl = lokal(k)
+            if bis_regel and kl > bis_regel:
                 return erg
             if anzahl is not None and n >= anzahl:
                 return erg
             n += 1
-            if k > bis:
+            if kl > bis:
                 return erg
-            if k >= von - timedelta(days=60):
-                erg.append(k)
+            if kl >= von - timedelta(days=60):
+                erg.append(kl)
         i += 1
     return erg
 
@@ -135,6 +188,8 @@ def ics_parsen(text, von, bis):
                 aktuell["ort"] = _unescape(wert)
             elif name == "DTSTART":
                 aktuell["start"], aktuell["ganztags"] = _zeit(wert, params)
+                if wert.strip().endswith("Z") and not aktuell["ganztags"]:
+                    aktuell["start_utc"] = datetime.strptime(wert.strip()[:15], "%Y%m%dT%H%M%S")
             elif name == "DTEND":
                 aktuell["ende"] = _zeit(wert, params)[0]
             elif name == "DURATION":
@@ -160,7 +215,13 @@ def ics_parsen(text, von, bis):
             continue
         start = e["start"]
         dauer = (e["ende"] - start) if "ende" in e else e.get("dauer") or (timedelta(days=1) if e.get("ganztags") else timedelta(hours=1))
-        starts = _wiederholungen(start, e["rrule"], von, bis) if e.get("rrule") and not e.get("recid") else [start]
+        if e.get("rrule") and not e.get("recid"):
+            if e.get("start_utc"):   # Serie in Weltzeit: je Termin in Ortszeit umrechnen (Sommer-/Winterzeit)
+                starts = _wiederholungen(e["start_utc"], e["rrule"], von, bis, lokal=lambda x: x.replace(tzinfo=timezone.utc).astimezone().replace(tzinfo=None))
+            else:
+                starts = _wiederholungen(start, e["rrule"], von, bis)
+        else:
+            starts = [start]
         ausnahmen = set(e["exdate"]) | (overrides.get(e.get("uid"), set()) if e.get("rrule") else set())
         for s in starts:
             if s in ausnahmen:
@@ -220,7 +281,7 @@ def _esc(s):
 
 def ics_export(termine):
     """Eigene Termine als .ics (zum Import in Google Kalender)."""
-    jetzt = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    jetzt = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     z = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Jahresring//DE", "CALSCALE:GREGORIAN",
          "X-WR-CALNAME:Jahresring Planung"]
     for t in termine:
@@ -228,7 +289,11 @@ def ics_export(termine):
         v, b = date.fromisoformat(t["von"]), date.fromisoformat(t["bis"])
         if t.get("zeit_von"):
             z.append(f"DTSTART:{v.strftime('%Y%m%d')}T{t['zeit_von'].replace(':', '')}00")
-            z.append(f"DTEND:{b.strftime('%Y%m%d')}T{(t.get('zeit_bis') or t['zeit_von']).replace(':', '')}00")
+            ende = t.get("zeit_bis") or ""
+            if not ende or (v == b and ende <= t["zeit_von"]):   # ohne (gültiges) Ende: eine Stunde
+                h_, m_ = (int(x) for x in t["zeit_von"].split(":")[:2])
+                ende = f"{min(h_ + 1, 23):02d}:{m_ if h_ < 23 else 59:02d}"
+            z.append(f"DTEND:{b.strftime('%Y%m%d')}T{ende.replace(':', '')}00")
         else:
             z.append(f"DTSTART;VALUE=DATE:{v.strftime('%Y%m%d')}")
             z.append(f"DTEND;VALUE=DATE:{(b + timedelta(days=1)).strftime('%Y%m%d')}")

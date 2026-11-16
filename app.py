@@ -10,6 +10,7 @@ import pdfseiten
 import io
 import uuid
 import hashlib
+import ipaddress
 import json
 import mimetypes
 import os
@@ -51,6 +52,8 @@ import monatsbeleg
 import arbeitsschutz_web
 from monatsbeleg import monatsbeleg_hash, monatsbeleg_hash_v1, monatsbeleg_signaturen, monatsbeleg_unterschreiben, monatsbeleg_sig_bilder  # noqa: F401
 from arbeitsschutz_web import zeichen_liste, arbeitsschutz_api, stempel_arbeitsschutz, as_druck_name, as_druck_html  # noqa: F401
+import kern
+import datenschutz
 from kern import ApiFehler, jetzt, zahl, jl, de, de_datum, h, plus_tage
 from sepa import iban_normal, iban_ok, ibanFormat_py, sepa_xml
 import liquiditaet
@@ -87,7 +90,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-139"
+VERSION = "2026.11.01-140"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -403,6 +406,7 @@ STANDARD_EINSTELLUNGEN = {
     "girocode": True,
     "app_fenster": True,
     "netzwerk": False,
+    "netz_adressen": "",   # weitere Namen, unter denen das Programm im eigenen Netz aufgerufen wird (durch Komma getrennt)
     # Angaben für den Auskunftsbrief nach Art. 15 DSGVO; betriebseigene Systeme ergänzt der Betrieb in den Einstellungen
     "auskunft_speicherorte": "Büroprogramm Jahresring auf dem Rechner des Betriebs, Projektordner des Betriebs, E-Mail-Postfach",
     "auskunft_empfaenger": "Finanzverwaltung (Steuererklärungen, Prüfungen), E-Mail-Anbieter für den Versand, Bank beim Zahlungsverkehr",
@@ -1013,10 +1017,46 @@ def projekt_waechter():
         time.sleep(60)
 
 
+def tmp_aufraeumen(tage=3):
+    """Zwischendateien (gelesene, aber nicht gebuchte Eingangsrechnungen, Vorschau- und Mess-PDFs) nach einigen Tagen löschen."""
+    tmp, n, grenze = os.path.join(DATEN, "tmp"), 0, time.time() - tage * 86400
+    if not os.path.isdir(tmp):
+        return 0
+    for name in os.listdir(tmp):
+        pfad = os.path.join(tmp, name)
+        try:
+            if os.path.isfile(pfad) and os.path.getmtime(pfad) < grenze:
+                os.remove(pfad)
+                n += 1
+        except OSError:
+            pass
+    return n
+
+
+def laufprotokoll_kuerzen(grenze=2 * 1024 * 1024, behalten=512 * 1024):
+    """daten/protokoll.txt (Meldungen des Programms, kein GoBD-Protokoll) nicht endlos wachsen lassen: ab 2 MB den älteren
+    Teil nach protokoll-alt.txt auslagern (eine Vorgängerdatei), das jüngste halbe MB bleibt."""
+    pfad = os.path.join(DATEN, "protokoll.txt")
+    try:
+        if os.path.getsize(pfad) <= grenze:
+            return False
+        with open(pfad, "rb") as f:
+            roh = f.read()
+        schnitt = roh.find(b"\n", len(roh) - behalten) + 1
+        with open(os.path.join(DATEN, "protokoll-alt.txt"), "wb") as f:
+            f.write(roh[:schnitt])
+        with open(pfad, "wb") as f:
+            f.write(roh[schnitt:])
+        return True
+    except OSError:
+        return False
+
+
 def sicherungs_waechter():
     """Läuft das Programm über Nacht oder tagelang durch, entsteht die tägliche Sicherung trotzdem: stündlich prüfen."""
     while True:
         time.sleep(3600)
+        tmp_aufraeumen()
         try:
             backup()
         except Exception as x:  # noqa: BLE001
@@ -1791,6 +1831,44 @@ def ordner_inhalt(basis, rel):
 
 
 ANFRAGE = threading.local()   # Angaben zur laufenden Anfrage (z. B. ob sie vom Büro-PC selbst kommt)
+
+
+# ---------------------------------------------------------------- gleichzeitiges Bearbeiten erkennen
+# Je Datensatz („kunden/12“, „positionen/7“, „einstellungen“) merkt sich der Server, wann und von welcher Anmeldung er zuletzt
+# geändert wurde. Der Browser schickt beim Speichern mit, wann er den Datensatz zuletzt geholt oder gespeichert hat (X-Stand).
+# Hat ihn seitdem eine ANDERE Anmeldung geändert, kommt eine Rückfrage statt stillem Überschreiben. Nur im Arbeitsspeicher.
+STAND = {}
+STAND_SPERRE = threading.Lock()
+
+
+def stand_schluessel(teile):
+    if len(teile) >= 2 and teile[1].isdigit() and teile[0] not in ("stempel", "service"):
+        return f"{teile[0]}/{teile[1]}"
+    return "einstellungen" if teile and teile[0] == "einstellungen" and len(teile) == 1 else ""
+
+
+def stand_pruefen(sk, stand, token):
+    try:
+        stand = float(stand)
+    except (TypeError, ValueError):
+        return   # Seiten ohne Stand (Stempeluhr, Scan) werden nicht geprüft
+    with STAND_SPERRE:
+        a = STAND.get(sk)
+    if a and a[0] > stand and a[1] != benutzer.token_hash(token or ""):
+        kern.rueckfrage("stand", f"{a[2] or 'Jemand anderes'} hat diesen Datensatz um {datetime.fromtimestamp(a[0]):%H:%M} Uhr geändert, während er hier offen war.\n\n"
+                        "Beim Speichern können diese Änderungen überschrieben werden. Um den neuen Stand zu sehen: abbrechen und die Seite neu laden.", "Trotzdem speichern")
+
+
+def stand_merken(sk, methode, token):
+    """Nach einer gelungenen Anfrage: Änderung vermerken und dem Browser die Serverzeit als neuen Stand mitgeben."""
+    zeit = time.time()
+    if sk and methode != "GET":
+        with STAND_SPERRE:
+            if len(STAND) > 5000:
+                for k in sorted(STAND, key=lambda k: STAND[k][0])[:2500]:
+                    STAND.pop(k, None)
+            STAND[sk] = (zeit, benutzer.token_hash(token or ""), ich_name() if benutzer.aktuell() else "")
+    return {"X-Zeit": f"{zeit + 0.001:.3f}"} if sk else None
 # Dateien, die beim „Öffnen“ ein Programm starten würden – nie aus dem Programm heraus öffnen
 AUSFUEHRBAR = {".exe", ".bat", ".cmd", ".com", ".scr", ".pif", ".msi", ".msp", ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
                ".hta", ".jar", ".lnk", ".url", ".reg", ".cpl", ".dll", ".application", ".appref-ms", ".scf", ".inf", ".gadget", ".msc", ".py", ".pyw", ".sh"}
@@ -3189,8 +3267,10 @@ def kapazitaet_daten(con, e, von, bis, termine, auftraege):
 
 
 def arbeitstage(von, bis):
+    """Arbeitstage Montag bis Freitag ohne Feiertage und arbeitsfreie Tage (Einstellungen › Arbeitszeit)."""
     v, b = date.fromisoformat(von), date.fromisoformat(bis)
-    return sum(1 for i in range((b - v).days + 1) if (v + timedelta(days=i)).weekday() < 5)
+    return sum(1 for i in range((b - v).days + 1)
+               if (v + timedelta(days=i)).weekday() < 5 and not personal.frei_oder_feiertag((v + timedelta(days=i)).isoformat()))
 
 
 # ====================== Kundenbelege (Angebot..Rechnung) ======================
@@ -3924,6 +4004,26 @@ def schluss_ohne_linie(b, text):
     return re.sub(r"(?:\s|<br\s*/?>)+$", "", t)
 
 
+def zahlung_plausibel(con, op_id, d):
+    """Rückfrage bei ungewöhnlichen Zahlungseingängen, die von Hand erfasst werden (nicht beim Kontoauszug – dort ist die Zahlung eine Tatsache)."""
+    op = con.execute("SELECT * FROM offene_posten WHERE id=?", (op_id,)).fetchone()
+    if not op:
+        return
+    betrag, skonto = round(zahl(d.get("betrag"), float), 2), round(zahl(d.get("skonto"), float), 2)
+    tag, g = d.get("datum") or date.today().isoformat(), []
+    date.fromisoformat(tag)
+    if betrag < 0:
+        g.append(f"Der Betrag ist negativ ({de(betrag)} €) – das wäre eine Rückzahlung an den Kunden.")
+    elif (op["offen"] or 0) >= 0 and betrag + skonto > (op["offen"] or 0) + (op["mahnkosten"] or 0) + 0.005:
+        g.append(f"Zahlung {de(betrag)} €" + (f" plus Skonto {de(skonto)} €" if skonto else "") + f" ist mehr als der offene Betrag von {de((op['offen'] or 0) + (op['mahnkosten'] or 0))} €.")
+    if tag > date.today().isoformat():
+        g.append(f"Das Zahlungsdatum {de_datum(tag)} liegt in der Zukunft.")
+    elif op["datum"] and tag < op["datum"][:10]:
+        g.append(f"Das Zahlungsdatum {de_datum(tag)} liegt vor dem Rechnungsdatum ({de_datum(op['datum'])}).")
+    if g:
+        kern.rueckfrage("zahlung", f"Zahlung zu {op['nummer']} bitte prüfen\n\n" + "\n".join(g), "Trotzdem buchen")
+
+
 def op_zahlung_buchen(con, op_id, d):
     """Zahlungseingang zu einem offenen Posten buchen (von Hand oder aus dem Kontoauszug). Gibt die neuen IDs zurück."""
     op = con.execute("SELECT * FROM offene_posten WHERE id=?", (op_id,)).fetchone()
@@ -4055,16 +4155,54 @@ def belege_pruefen(con):
                 fehler.append(f"{b['artname']} {b['nummer']}: Archiv-PDF wurde nach der Erzeugung verändert ({a.get('datei')})")
             else:
                 pdf_ok += 1
+    # Eingangsrechnungen: abgelegte Originaldatei gegen den Fingerabdruck aus dem Protokoll
+    ein_ok = 0
+    entfernt = set()   # beim Anonymisieren eines Lieferanten nach Fristablauf gelöschte Dateien
+    for r in con.execute("SELECT daten FROM protokoll WHERE art='anonymisiert'"):
+        entfernt.update(jl(r["daten"], {}).get("dateien") or [])
+    for r in con.execute("SELECT daten FROM protokoll WHERE art='eingangsrechnung' ORDER BY nr"):
+        d = jl(r["daten"], {})
+        if not d.get("datei") or not d.get("sha256") or d["datei"] in entfernt:
+            continue
+        pfad = os.path.normpath(os.path.join(DATEN, d["datei"]))
+        was = f"Eingangsrechnung {d.get('belegnr') or ''} von {d.get('lieferant') or ''} ({d.get('nummer')})"
+        if not os.path.isfile(pfad):
+            fehler.append(f"{was}: Originaldatei fehlt ({d['datei']})")
+        elif datei_sha256(pfad) != d["sha256"]:
+            fehler.append(f"{was}: Originaldatei wurde nach dem Buchen verändert ({d['datei']})")
+        else:
+            ein_ok += 1
     for jahr in sorted({r[0] for r in con.execute("SELECT substr(datum,1,4) FROM belege WHERE status IN ('fest','storniert') AND lfd>0")}):
         lfd = sorted(r[0] for r in con.execute("SELECT lfd FROM belege WHERE status IN ('fest','storniert') AND lfd>0 AND substr(datum,1,4)=?", (jahr,)))
         doppelt = sorted({x for x in lfd if lfd.count(x) > 1})
         if doppelt:
             fehler.append(f"{jahr}: Rechnungsnummer doppelt vergeben (laufende Nr. {', '.join(map(str, doppelt[:5]))})")
     erg = {"ok": not fehler, "fehler": fehler[:30], "geprueft": geprueft, "mit_fingerabdruck": mit_abdruck, "pdf_geprueft": pdf_ok,
-           "ohne_protokoll": ohne, "zeit": jetzt()}
+           "eingang_geprueft": ein_ok, "ohne_protokoll": ohne, "zeit": jetzt()}
     BELEG_PRUEFUNG.update(ergebnis=erg, zeit=erg["zeit"], text="" if erg["ok"] else
-                          "Die Belegprüfung hat Abweichungen bei festgeschriebenen Rechnungen gefunden. Details unter Einstellungen › Service › Protokoll.")
+                          "Die Belegprüfung hat Abweichungen bei festgeschriebenen Rechnungen oder abgelegten Eingangsrechnungen gefunden. Details unter Einstellungen › Service › Protokoll.")
     return erg
+
+
+def rechnungsdatum_pruefen(con, datum):
+    """Vor dem Festschreiben: Ein offensichtlich falsches Rechnungsdatum (Tippfehler im Jahr) wird abgelehnt, ein ungewöhnliches
+    (Zukunft, länger zurück, vor der letzten Rechnung) erst nach Rückfrage angenommen – die Nummer ist danach endgültig."""
+    d, heute = date.fromisoformat(datum[:10]), date.today()
+    if (d - heute).days > 92 or (heute - d).days > 3 * 366:
+        raise ApiFehler(f"Das Rechnungsdatum {de_datum(datum)} liegt zu weit von heute entfernt (Tippfehler im Jahr?). Bitte das Datum im Beleg korrigieren.")
+    g = []
+    if d > heute:
+        g.append("liegt in der Zukunft")
+    elif (heute - d).days > 31:
+        g.append("liegt mehr als einen Monat zurück")
+    if d.year != heute.year:
+        g.append(f"gehört zum Jahr {d.year} – die Rechnung bekommt eine Nummer aus dem Nummernkreis {d.year}")
+    letzte = con.execute("SELECT MAX(datum) FROM belege WHERE status IN ('fest','storniert') AND lfd>0 AND substr(datum,1,4)=?", (datum[:4],)).fetchone()[0]
+    if letzte and datum[:10] < letzte[:10]:
+        g.append(f"liegt vor der zuletzt festgeschriebenen Rechnung dieses Jahres ({de_datum(letzte)})")
+    if g:
+        kern.rueckfrage("rechnungsdatum", f"Das Rechnungsdatum {de_datum(datum)} ist ungewöhnlich: Es " + " und ".join(g) + ".\n\n"
+                        "Nach dem Festschreiben lassen sich Datum und Nummer nicht mehr ändern (nur noch stornieren).", "Mit diesem Datum festschreiben")
 
 
 def beleg_festschreiben(con, bid):
@@ -4079,6 +4217,7 @@ def beleg_festschreiben(con, bid):
     if b["art"] != "storno" and abs(b["brutto"]) < 0.005 and not berichtigung:
         raise ApiFehler("Der Rechnungsbetrag ist 0 €.")
     datum = b["datum"] or date.today().isoformat()
+    rechnungsdatum_pruefen(con, datum)
     # Rechnungsnummer: Jahr-laufende Nummer (4-stellig), gemeinsamer Nummernkreis für Rechnung, Abschlag und Storno
     info = rechnungsnummer_info(con, int(datum[:4]))
     lfd, nummer = info["naechste_lfd"], info["naechste"]
@@ -4512,6 +4651,28 @@ def umzug_offen():
 
 
 FENSTER_WARTET = {"zeit": 0}
+# Namensendungen, die es nur im eigenen Netz gibt (Router, mDNS) – unter solchen Namen ist das Programm ohne Weiteres erreichbar
+HOST_ENDUNGEN = (".local", ".fritz.box", ".lan", ".home", ".home.arpa", ".internal", ".intern", ".localdomain", ".speedport.ip", ".box", ".localhost")
+_HOST_FREI = {"zeit": 0.0, "namen": set()}
+
+
+def host_freigaben():
+    """In den Einstellungen freigegebene weitere Adressen und die Namen des https-Zertifikats (kurz zwischengespeichert)."""
+    if time.time() - _HOST_FREI["zeit"] > 30:
+        namen = {x.strip().lower() for x in re.split(r"[,;\s]+", str(einstellungen_roh("netz_adressen", "") or "")) if x.strip()}
+        try:
+            import socket
+            namen.add(socket.gethostname().lower())
+            namen.add(socket.getfqdn().lower())
+        except OSError:
+            pass
+        try:
+            if HTTPS["aktiv"]:
+                namen |= {str(x).lower() for x in __import__("zert").namen(DATEN)}
+        except Exception:  # noqa: BLE001
+            pass
+        _HOST_FREI.update(zeit=time.time(), namen=namen)
+    return _HOST_FREI["namen"]
 
 
 def app_fenster(url):
@@ -4961,7 +5122,7 @@ def projekt_zeitbericht_html(con, pid, q, pdf=False):
     inhalt = werkstatt.zeitbericht(zeilen, q, hilfe, mehrere_auftraege=True)
     titel = f"Zeitbericht Projekt {p['nummer']}"
     leiste = "" if pdf else (f'<div class="leiste"><b>{h(titel)}</b>{werkstatt.zeitbericht_filter(q, ma, h)}<span style="flex:1"></span>'
-                             '<button onclick="window.print()">Drucken / PDF</button></div>')
+                             '<button data-drucken>Drucken / PDF</button></div>')
     return (f'<!doctype html><html lang="de"><head><meta charset="utf-8"><title>{h(titel)}</title><style>{werkstatt.CSS}</style></head><body>{leiste}<div class="blatt">'
             f'{werkstatt.logo_zeile()}<div class="kopf"><div class="titelblock"><h1>ZEITBERICHT</h1><div class="k2">Projekt <b>{h(p["nummer"])} {h(p["bezeichnung"])}</b>'
             f'{"<br>Kunde <b>" + h(p.get("kundennr")) + " " + h(p.get("kunde")) + "</b>" if p.get("kunde") else ""}'
@@ -5670,7 +5831,7 @@ def briefbogen_html(e, fi, titel, anschrift_html, info_html, inhalt, als_pdf, en
     ]
     brief = vorlage_dateien("brief") if e.get("briefvorlage_aktiv", True) else []
     titel_html = f'<!doctype html><html lang="de"><head><meta charset="utf-8"><title>{h(titel)}</title>'
-    druck_js = '' if als_pdf else '<script>if(location.search.includes("drucken"))window.print()</script>'
+    druck_js = '' if als_pdf else kern.skript(kern.DRUCKEN_JS)
 
     if brief:
         L = {**STANDARD_EINSTELLUNGEN["brief_layout"], **(e.get("brief_layout") or {})}
@@ -6097,6 +6258,38 @@ def zuordnung_schluessel(z):
     return (z.get("artnr") or z.get("ean") or (z.get("bezeichnung") or "").split("\n")[0]).strip().lower()[:120]
 
 
+def iban_abweichung(l, iban):
+    """Text, wenn die IBAN einer Rechnung/Zahlung von der im Lieferantenstamm hinterlegten abweicht (sonst leer)."""
+    neu, stamm = eingangsrechnung.iban_normal(iban), eingangsrechnung.iban_normal(l["iban"] if l else "")
+    if neu and stamm and neu != stamm:
+        return (f"Achtung: Die IBAN weicht vom Lieferantenstamm ab.\n\nRechnung: {ibanFormat_py(neu)}\nIm Stamm von {l['kurzname']}: {ibanFormat_py(stamm)}\n\n"
+                "Eine geänderte Bankverbindung ist ein häufiges Betrugsmuster. Bitte beim Lieferanten unter der bekannten Telefonnummer "
+                "nachfragen, bevor an die neue IBAN gezahlt wird.")
+    return ""
+
+
+def eingang_rechnen(erg):
+    """Rechnerische Prüfung einer gelesenen Eingangsrechnung: Zeilen → Netto, Netto + USt → Brutto, Brutto − Anzahlung → Zahlbetrag."""
+    r, w = erg.get("rechnung") or {}, []
+    zahlw = lambda k: r.get(k) if isinstance(r.get(k), (int, float)) else None
+    netto, ust, brutto, voraus, zb = (zahlw(k) for k in ("netto", "ust", "brutto", "vorausbezahlt", "zahlbetrag"))
+    tol = lambda n: 0.02 + 0.01 * n
+    zeilen = [z for z in erg.get("zeilen") or [] if isinstance(z.get("netto"), (int, float))]
+    if erg.get("format") and zeilen and netto is not None:
+        summe = round(sum(z["netto"] for z in zeilen), 2)
+        if abs(summe - netto) > tol(len(zeilen)):
+            w.append(f"Die Zeilen ergeben netto {de(summe)} €, die Rechnung nennt {de(netto)} €.")
+    if None not in (netto, ust, brutto) and abs(netto + ust - brutto) > 0.02:
+        w.append(f"Netto {de(netto)} € + Umsatzsteuer {de(ust)} € ergibt {de(round(netto + ust, 2))} €, die Rechnung nennt brutto {de(brutto)} €.")
+    satz = zahlw("ust_satz")
+    einheitlich = bool(zeilen) and all(z.get("ust_satz") == satz for z in erg.get("zeilen") or [])   # nicht bei gemischten Steuersätzen
+    if None not in (netto, ust) and satz and einheitlich and (r.get("waehrung") or "EUR") == "EUR" and abs(netto * satz / 100 - ust) > max(0.05, 0.01 * len(zeilen)):
+        w.append(f"{de(satz, 0)} % Umsatzsteuer auf {de(netto)} € wären {de(round(netto * satz / 100, 2))} €, die Rechnung nennt {de(ust)} €.")
+    if None not in (brutto, zb) and abs(brutto - (voraus or 0) - zb) > 0.02:
+        w.append(f"Brutto {de(brutto)} €" + (f" abzüglich Anzahlung {de(voraus)} €" if voraus else "") + f" ergibt {de(round(brutto - (voraus or 0), 2))} €, als Zahlbetrag steht {de(zb)} € in der Rechnung.")
+    return w
+
+
 def lieferant_finden(con, L):
     """Lieferant über USt-IdNr., IBAN oder Namen finden."""
     ust = eingangsrechnung.ustid_normal(L.get("ustid"))
@@ -6150,6 +6343,10 @@ def eingang_lesen(con, d):
     erg["lieferant_id"] = gef["id"] if gef else None
     erg["lieferant_name"] = gef["kurzname"] if gef else ""
     gruppe = gef["gruppe"] if gef else ""
+    # Warnungen (rot, vor dem Buchen zu prüfen): rechnerische Unstimmigkeiten und eine andere IBAN als im Lieferantenstamm
+    erg["warnungen"] = ["Rechnerisch nicht stimmig: " + t for t in eingang_rechnen(erg)]
+    if gef and iban_abweichung(gef, L.get("iban")):
+        erg["warnungen"].append(iban_abweichung(gef, L.get("iban")))
     if gef and r.get("nummer"):
         dop = con.execute("SELECT id, nummer FROM zahlungen WHERE lieferant_id=? AND belegnr=?", (gef["id"], r["nummer"])).fetchone()
         if dop:
@@ -6213,6 +6410,9 @@ def eingang_buchen(con, d):
         l = con.execute("SELECT * FROM lieferanten WHERE id=?", (lid,)).fetchone()
         if not l:
             raise ApiFehler("Lieferant nicht gefunden.")
+        t = iban_abweichung(l, k.get("iban"))
+        if t:   # vor allem anderen fragen: danach wird die Datei abgelegt und gebucht
+            kern.rueckfrage("iban", t, "IBAN ist geprüft – buchen")
         # fehlende Stammdaten ergänzen
         neu = d.get("lieferant_neu") or {}
         for feld in ("ustid", "iban", "bic"):
@@ -6244,7 +6444,11 @@ def eingang_buchen(con, d):
     if token and os.path.exists(tmp):
         ordner = os.path.join(EINGANG_PFAD, belegdatum[:4])
         os.makedirs(ordner, exist_ok=True)
-        datei = os.path.join(ordner, sauber(f"{belegdatum}_{l['kurzname']}_{belegnr or token[:8]}").replace(" ", "_") + os.path.splitext(tmp)[1])
+        stamm_ = os.path.join(ordner, sauber(f"{belegdatum}_{l['kurzname']}_{belegnr or token[:8]}").replace(" ", "_"))
+        datei, n_ = stamm_ + os.path.splitext(tmp)[1], 1
+        while os.path.exists(datei):   # eine schon abgelegte Originaldatei nie überschreiben
+            n_ += 1
+            datei = f"{stamm_}_{n_}{os.path.splitext(tmp)[1]}"
         shutil.move(tmp, datei)
     # Zahlungsauftrag
     betrag = round(zahl(k.get("betrag"), float), 2)
@@ -6258,6 +6462,12 @@ def eingang_buchen(con, d):
              "bezahlung": k.get("bezahlung") or "Überweisung", "datei": datei, "angelegt": jetzt(), "geaendert": jetzt()}
     cur = con.execute(f"INSERT INTO zahlungen ({','.join(werte)}) VALUES ({','.join('?' * len(werte))})", list(werte.values()))
     zid = cur.lastrowid
+    if datei:
+        # GoBD: Fingerabdruck der unveränderten Originaldatei ins Protokoll; die Belegprüfung vergleicht ihn später mit der Datei
+        prot(con, "eingangsrechnung", werte["nummer"], f"Eingangsrechnung {belegnr or '(ohne Nummer)'} von {l['kurzname']} vom {de_datum(belegdatum)} über "
+             f"{de(betrag)} € abgelegt: {os.path.basename(datei)}",
+             {"zahlung_id": zid, "nummer": werte["nummer"], "belegnr": belegnr, "lieferant": l["kurzname"], "betrag": betrag,
+              "datei": os.path.relpath(datei, DATEN).replace(os.sep, "/"), "groesse": os.path.getsize(datei), "sha256": datei_sha256(datei)})
     # Zeilen
     zaehler = {"lager": 0, "auftrag": 0, "werkzeug": 0, "kosten": 0, "neu_material": 0}
     hinweis = f"Rg. {belegnr} {l['kurzname']}".strip()
@@ -6648,7 +6858,7 @@ table.summe tr.ges td {{ font-weight: 700; border-top: .8pt solid #333; border-b
 <table class="l"><colgroup>{breiten}</colgroup><thead><tr>{"".join(f'<th class="{"r" if k in ("Preis netto", "Restwert", "Bestand", "Preis je Einheit", "Wert") else ""}">{k}</th>' for k in kopf)}</tr></thead>
 <tbody>{"".join(zeilen_html) or f'<tr><td colspan="{len(kopf)}">Keine Einträge.</td></tr>'}</tbody></table>
 {fuss}
-{'' if pdf else '<script>if(location.search.includes("drucken"))window.print()</script>'}
+{'' if pdf else kern.skript(kern.DRUCKEN_JS)}
 </body></html>"""
 
 
@@ -6656,10 +6866,26 @@ table.summe tr.ges td {{ font-weight: 700; border-top: .8pt solid #333; border-b
 RECHNUNGSARTEN = ("abschlag", "rechnung", "storno", "gutschrift", "korrektur")
 
 
+_UMSATZ_ABZUG = {}
+
+
 def beleg_umsatz(b):
     """Netto-Umsatz eines festgeschriebenen Rechnungsbelegs ohne doppelt gezählte Abschläge."""
-    d = jl(b["daten"], {})
-    return (b["netto"] or 0) - sum(x.get("netto", 0) for x in d.get("abzuege", []))
+    # Der Abzug der Abschläge steckt im Beleginhalt (JSON). Festgeschriebene Belege ändern sich nicht mehr – das Ergebnis je
+    # Beleg und Änderungsstand merken, statt bei jedem Aufruf der Startseite alle Rechnungen neu zu zerlegen.
+    try:
+        schl = (b["id"], b["geaendert"], b["status"])
+    except (KeyError, IndexError, TypeError):
+        schl = None
+    if schl is None or schl not in _UMSATZ_ABZUG:
+        d = jl(b["daten"], {})
+        abzug = sum(x.get("netto", 0) for x in d.get("abzuege", []))
+        if schl is None:
+            return (b["netto"] or 0) - abzug
+        if len(_UMSATZ_ABZUG) > 200000:
+            _UMSATZ_ABZUG.clear()
+        _UMSATZ_ABZUG[schl] = abzug
+    return (b["netto"] or 0) - _UMSATZ_ABZUG[schl]
 
 
 def start_daten(con, jahr):
@@ -6908,6 +7134,16 @@ def api(methode, teile, q, daten):
             if methode == "POST":
                 d = daten or {}
                 return monatsbeleg_unterschreiben(con, rid, str(d.get("monat") or ""), d.get("rolle") or "mitarbeiter", d, ich_login())
+        if res in ("lieferanten", "mitarbeiter") and rid and unter == "anonymisieren" and methode in ("GET", "POST"):
+            if not benutzer.ist_inhaber():
+                raise ApiFehler("Anonymisieren darf nur der Inhaber.", 403)
+            if res == "lieferanten":
+                return datenschutz.lieferant(con, rid, DATEN, methode == "POST", ich_login(), VERSION)
+            erg_a = datenschutz.mitarbeiter(con, rid, DATEN, methode == "POST", ich_login(), VERSION,
+                                            sig_ordner=(os.path.join(DATEN, "unterschriften"), arbeitsschutz.sig_ordner(DATEN)))
+            if methode == "POST":
+                personal._VORLAUF.clear()
+            return erg_a
         if res in ("mitarbeiter", "zeiten", "abwesenheiten", "konten", "monatsbeleg", "lohn", "stempel"):
             return personal.api(con, methode, teile, q, daten)
         if res == "leitstand":
@@ -7769,6 +8005,18 @@ def api(methode, teile, q, daten):
                         date.fromisoformat(w[k])
                 if w.get("von") and w.get("bis") and w["bis"] < w["von"]:
                     w["von"], w["bis"] = w["bis"], w["von"]
+                if any(k in w for k in ("zeit_von", "zeit_bis", "von", "bis")):
+                    alt_t = con.execute("SELECT * FROM termine WHERE id=?", (rid,)).fetchone() if methode == "PUT" and rid else None
+                    z_ = {**(dict(alt_t) if alt_t else {}), **w}
+                    minuten = {}
+                    for k in ("zeit_von", "zeit_bis"):
+                        if z_.get(k):
+                            mm_ = re.fullmatch(r"(\d{1,2}):(\d{2})", str(z_[k]).strip())
+                            if not mm_ or int(mm_.group(1)) > 23 and (mm_.group(1), mm_.group(2)) != ("24", "00") or int(mm_.group(2)) > 59:
+                                raise ApiFehler("Bitte die Uhrzeit als Stunde:Minute eingeben, z. B. 08:30.")
+                            minuten[k] = int(mm_.group(1)) * 60 + int(mm_.group(2))
+                    if len(minuten) == 2 and (z_.get("bis") or z_.get("von")) == z_.get("von") and minuten["zeit_bis"] <= minuten["zeit_von"]:
+                        raise ApiFehler("Die Uhrzeit „bis“ liegt nicht nach der Uhrzeit „von“.")
             if methode == "POST" and rid is None:
                 if not w.get("von"):
                     raise ApiFehler("Bitte ein Datum angeben.")
@@ -7965,6 +8213,7 @@ def api(methode, teile, q, daten):
             if rid and unter == "mail":
                 return zahlbest_mail(con, rid, methode, q, daten or {})
             if methode == "POST" and rid and unter == "zahlung":
+                zahlung_plausibel(con, rid, daten or {})
                 op_zahlung_buchen(con, rid, daten or {})
                 return {"ok": True}
             if methode == "GET" and rid and unter == "mahnung":
@@ -8524,6 +8773,8 @@ def api(methode, teile, q, daten):
                 if not werte.get("skonto_bis") and werte.get("skonto"):
                     werte["skonto_bis"] = plus_tage(werte["belegdatum"], l["skontotage"])
                 werte.setdefault("bezahlung", "Überweisung")
+                if iban_abweichung(l, werte.get("iban")):
+                    kern.rueckfrage("iban", iban_abweichung(l, werte.get("iban")).replace("Rechnung:", "Zahlungsauftrag:"), "IBAN ist geprüft – speichern")
                 if (werte.get("belegnr") or "").strip() and not (daten or {}).get("trotzdem"):
                     dop = con.execute("SELECT nummer FROM zahlungen WHERE lieferant_id=? AND belegnr=?", (werte["lieferant_id"], werte["belegnr"].strip())).fetchone()
                     if dop:
@@ -8603,6 +8854,10 @@ def api(methode, teile, q, daten):
                         if gesperrt:
                             raise ApiFehler(f"Der Zahlungsauftrag {alt_z['nummer']} ist bezahlt und damit gesperrt. Änderbar sind nur Bemerkung, Auftrag und Zahlart; "
                                             "für alles andere muss der Inhaber „bezahlt“ zuerst zurücknehmen.", 409)
+                    if alt_z and werte.get("iban") and eingangsrechnung.iban_normal(werte["iban"]) != eingangsrechnung.iban_normal(alt_z["iban"]):
+                        l_ = con.execute("SELECT * FROM lieferanten WHERE id=?", (werte.get("lieferant_id") or alt_z["lieferant_id"],)).fetchone()
+                        if iban_abweichung(l_, werte["iban"]):
+                            kern.rueckfrage("iban", iban_abweichung(l_, werte["iban"]).replace("Rechnung:", "Zahlungsauftrag:"), "IBAN ist geprüft – speichern")
                     if alt_z:
                         diff = {k: [alt_z[k], v] for k, v in werte.items() if k in alt_z.keys() and alt_z[k] != v}
                         if diff and (alt_z["bezahlt"] or any(k in diff for k in ("betrag", "belegnr", "belegdatum", "lieferant_id", "iban", "bezahlt", "vorsteuer", "skonto"))):
@@ -8767,7 +9022,8 @@ def api(methode, teile, q, daten):
             return zeilen(con.execute(sql + " ORDER BY t.datum DESC", p))
 
         if res == "version":
-            return {"version": VERSION, "ordner": BASIS}
+            # den Programmordner (enthält meist den Windows-Benutzernamen) nur dem Büro-PC selbst nennen
+            return {"version": VERSION, "ordner": BASIS} if getattr(ANFRAGE, "lokal", False) else {"version": VERSION}
 
         if res == "statistik" and methode == "GET":
             return statistik(con)
@@ -8820,7 +9076,14 @@ class Handler(BaseHTTPRequestHandler):
                "application/xml", "text/xml", "text/calendar", "application/manifest+json"}
 
     def senden(self, code, inhalt, typ, extra=None):
-        csp = "frame-ancestors 'self'"
+        csp = CSP
+        if typ.split(";")[0].strip().lower() == "text/html":
+            kennung = secrets.token_urlsafe(18)
+            if b"data-drucken" in inhalt and b"[data-drucken]" not in inhalt:   # Seite mit Druckknopf: das kleine Druckskript ergänzen
+                sk_ = kern.skript(kern.DRUCKEN_JS).encode()
+                inhalt = inhalt.replace(b"</body>", sk_ + b"</body>", 1) if b"</body>" in inhalt else inhalt + sk_
+            inhalt = inhalt.replace(kern.NONCE.encode(), kennung.encode())
+            csp = CSP.replace("script-src 'self'", f"script-src 'self' 'nonce-{kennung}'")
         if extra and str(extra.get("Content-Disposition", "")).startswith("inline") and typ.split(";")[0].strip().lower() not in self.SICHER_ANZEIGEN:
             extra = {**extra, "Content-Disposition": "attachment" + extra["Content-Disposition"][6:]}
             csp = "sandbox; default-src 'none'; frame-ancestors 'self'"
@@ -8856,6 +9119,22 @@ class Handler(BaseHTTPRequestHandler):
             if k == benutzer.COOKIE:
                 return v
         return ""
+
+    def host_erlaubt(self):
+        host = (self.headers.get("Host") or "").strip().lower()
+        if not host:
+            return True
+        name = host[1:host.index("]")] if host.startswith("[") and "]" in host else host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+        if name == "localhost" or "." not in name and ":" not in name:   # einfacher Name im eigenen Netz, z. B. „buero-pc“
+            return True
+        try:
+            ipaddress.ip_address(name)
+            return True
+        except ValueError:
+            pass
+        if name.endswith(HOST_ENDUNGEN):
+            return True
+        return name in host_freigaben()
 
     def lokal(self):
         """Anfrage direkt von diesem PC."""
@@ -8910,7 +9189,14 @@ class Handler(BaseHTTPRequestHandler):
         pfad = u.path
         benutzer.setze_aktuell(None)
         ANFRAGE.lokal = self.lokal() or self.ip() == lokale_ip()   # am Büro-PC selbst (auch über dessen Netzwerkadresse)
+        if not self.host_erlaubt():
+            # Schutz vor „DNS-Rebinding“: Eine fremde Internetseite kann ihren Namen auf diesen PC zeigen lassen. Angenommen werden
+            # deshalb nur Aufrufe über localhost, eine IP-Adresse, den Namen dieses PCs im eigenen Netz oder eine freigegebene Adresse.
+            return self.senden(403, ("Unter dieser Adresse ist Jahresring nicht freigegeben. Bitte die Adresse aus Einstellungen › Benutzer › "
+                                     "Netzwerk verwenden oder den Namen dort unter „Weitere Adressen“ eintragen.").encode("utf-8"), "text/plain; charset=utf-8")
         self.token = self.cookie()
+        kern.AKTUELL.bestaetigt = {x.strip() for x in (self.headers.get("X-Bestaetigt") or "").split(",") if x.strip()}
+        kern.AKTUELL.fragen = self.headers.get("X-Rueckfrage") == "1"
         if q.get("wartet") == "1" and self.lokal():
             FENSTER_WARTET["zeit"] = time.time()   # ein von Windows wiederhergestelltes Programmfenster wartet schon auf den Start
         if HTTPS["stempel_port"] and methode == "GET" and pfad in ("", "/") and self.server.server_address[1] == HTTPS["stempel_port"]:
@@ -9232,6 +9518,7 @@ class Handler(BaseHTTPRequestHandler):
                 with verbindung() as con_e:
                     ew, eh = etikett_mass(einstellungen(con_e))
                 roh = roh.replace(b"<head>", ('<head><script>window.JAHRESRING={api:"/api/",logo:%s,etikett:{w:%s,h:%s}};</script>' % (logo, ew, eh)).encode(), 1)
+                roh = html_kennung(roh)
                 return self.senden(200, roh, "text/html; charset=utf-8", {"Cache-Control": "no-store"})
             if u.path == "/liste/etiketten" and methode == "GET":
                 with verbindung() as con:
@@ -9431,12 +9718,16 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(daten, dict):
                     raise ApiFehler("Die Anfrage hat nicht den erwarteten Aufbau.")
                 benutzer.pruefen(methode, teile, q, daten)
+            sk = stand_schluessel(teile)
+            if sk and methode in ("PUT", "DELETE"):
+                stand_pruefen(sk, self.headers.get("X-Stand"), self.token)
             if teile and teile[0] == "benutzer":
                 with verbindung() as con:
                     erg = benutzer.api(con, methode, teile, q, daten, self.token)
                     con.commit()
-                return self.json(erg)
+                return self.json(erg, extra=stand_merken(sk, methode, self.token))
             erg = api(methode, teile, q, daten)
+            stand_kopf = stand_merken(sk, methode, self.token)
             rechte = benutzer.aktuelle_rechte()
             if rechte and not rechte["inhaber"]:
                 if teile[0] == "einstellungen" and methode == "GET" and isinstance(erg, dict) and rechte["bereiche"].get("auftraege", 0) < 1 or \
@@ -9452,7 +9743,9 @@ class Handler(BaseHTTPRequestHandler):
                     with verbindung() as con:
                         lohn_ids = {x[0] for x in con.execute("SELECT id FROM lieferanten WHERE gruppe='Mitarbeiter'")}
                     erg = [x for x in erg if (x.get("lieferant_id") if teile[0] == "zahlungen" else x.get("id")) not in lohn_ids]
-            self.json(erg)
+            self.json(erg, extra=stand_kopf)
+        except kern.Rueckfrage as f:
+            self.json({"fehler": str(f), "rueckfrage": f.schluessel, "knopf": f.knopf}, 409)
         except ApiFehler as f:
             self.json({"fehler": str(f)}, f.code)
         except benutzer.Fehler as f:
@@ -9462,7 +9755,14 @@ class Handler(BaseHTTPRequestHandler):
         except (mailversand.MailFehler, erechnung.ERechnungFehler) as f:
             self.json({"fehler": str(f)}, 400)
         except sqlite3.IntegrityError as f:
-            self.json({"fehler": f"Datenbankkonflikt: {f}"}, 409)
+            t = str(f)
+            if "FOREIGN KEY" in t:
+                t = "Ein verknüpfter Datensatz (z. B. Auftrag, Kunde, Lieferant oder Mitarbeiter) ist nicht vorhanden oder wird noch verwendet."
+            elif "UNIQUE" in t:
+                t = "Diesen Eintrag gibt es schon (Nummer oder Bezeichnung ist bereits vergeben)."
+            else:
+                t = f"Die Daten passen nicht zusammen ({t})."
+            self.json({"fehler": t}, 409)
         except ValueError as f:
             # falsch geschriebenes Datum oder eine Zahl, die keine ist: Eingabefehler, kein Programmfehler
             if any(x in str(f) for x in ("isoformat", "must be in", "out of range for month", "invalid literal for int", "could not convert string to float", "padding", "ASCII", "base64")):
@@ -9529,16 +9829,31 @@ class Handler(BaseHTTPRequestHandler):
         if pfad.startswith("/hilfe/") and pfad[7:] in EIGENE_DOKUMENTE and os.path.isfile(os.path.join(DATEN, "dokumente", pfad[7:])):
             voll = os.path.join(DATEN, "dokumente", pfad[7:])   # betriebseigene Fassung statt neutraler Vorlage
             with open(voll, "rb") as f:
-                return self.senden(200, f.read(), "text/html; charset=utf-8")
+                return self.senden(200, html_kennung(f.read()), "text/html; charset=utf-8")   # vom Programm bzw. der Einrichtung abgelegt
         voll = os.path.normpath(os.path.join(STATIC, pfad.lstrip("/")))
         if not voll.startswith(os.path.join(STATIC, "")) or not os.path.isfile(voll):
             return self.senden(404, b"Nicht gefunden", "text/plain; charset=utf-8")
         with open(voll, "rb") as f:
             inhalt = f.read()
         typ = mimetypes.guess_type(voll)[0] or "application/octet-stream"
+        if typ == "text/html":
+            inhalt = html_kennung(inhalt)   # Programmdateien: ihre Skripte bekommen die Einmal-Kennung
         if typ.startswith("text/") or typ.endswith("javascript"):
             typ += "; charset=utf-8"
         self.senden(200, inhalt, typ)
+
+
+# Inhaltsschutz (Content-Security-Policy): alles nur von diesem Programm; Skripte nur aus Programmdateien oder mit Einmal-Kennung
+# (kein eingebettetes Skript, kein onclick="…"); keine Verbindungen und kein Formularversand zu fremden Adressen.
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; "
+       "connect-src 'self'; worker-src 'self' blob:; frame-src 'self' blob: data:; media-src 'self' blob: data:; object-src 'none'; "
+       "base-uri 'self'; form-action 'self'; frame-ancestors 'self'")
+
+
+def html_kennung(roh):
+    """Skripte einer Programmdatei (vertrauenswürdiger Inhalt) mit dem Platzhalter für die Einmal-Kennung versehen."""
+    roh = roh.replace(b'onclick="window.print()"', b"data-drucken")   # ältere betriebseigene Fassungen der Dokumentation
+    return re.sub(rb"<script(?![^>]*\bnonce=)", b'<script nonce="' + kern.NONCE.encode() + b'"', roh)
 
 
 def im_hintergrund_neu_starten():
@@ -9796,7 +10111,7 @@ def projekt_html(con, pid):
     inhalt = projekte.html_inhalt(p, h, lambda z, n=2: de(fl(z), n), de_datum)
     titel = f"Projekt-Nachkalkulation {p['nummer']}"
     return (f'<!doctype html><html lang="de"><head><meta charset="utf-8"><title>{h(titel)}</title><style>{werkstatt.CSS} table.t th.r{{text-align:right}}</style></head><body>'
-            f'<div class="leiste"><b>{h(titel)}</b><span style="flex:1"></span><button onclick="window.print()">Drucken / PDF</button></div><div class="blatt">'
+            f'<div class="leiste"><b>{h(titel)}</b><span style="flex:1"></span><button data-drucken>Drucken / PDF</button></div><div class="blatt">'
             f'{werkstatt.logo_zeile()}<div class="kopf"><div class="titelblock"><h1>PROJEKT-NACHKALKULATION</h1><div class="k2">Projekt <b>{h(p["nummer"])} {h(p["bezeichnung"])}</b>'
             f'{"<br>Kunde <b>" + h(p.get("kundennr")) + " " + h(p.get("kunde")) + "</b>" if p.get("kunde") else ""}</div></div>'
             f'<div class="rechts"><table><tr><td>Nr.</td><td class="nr">{h(p["nummer"])}</td></tr><tr><td>Aufträge</td><td><b>{len(p["auftraege"])}</b></td></tr>'
@@ -9897,11 +10212,13 @@ def main():
     if sys.stdout is None or sys.stderr is None:
         # ohne Konsolenfenster gestartet (pythonw): Ausgaben in daten/protokoll.txt
         os.makedirs(DATEN, exist_ok=True)
+        laufprotokoll_kuerzen()
         log = open(os.path.join(DATEN, "protokoll.txt"), "a", encoding="utf-8", buffering=1)
         sys.stdout = sys.stderr = log
         print(f"\n--- Start {datetime.now():%d.%m.%Y %H:%M} ---")
     datenbank_starten()
     vorlagen_einrichten()
+    tmp_aufraeumen()
     backup()
     threading.Thread(target=protokoll_vollpruefung, daemon=True).start()
     threading.Thread(target=sicherungs_waechter, daemon=True).start()

@@ -45,6 +45,7 @@ function eingangDialog(v, {lieferanten, auftraege, materialien, wzMeta}, danach)
     <h3 style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">Rechnung einlesen <span class="hinweis" style="font-weight:400">${esc(v.dateiname)} · ${esc(v.format)}</span>
       <a class="btn" href="/api/eingang/datei/${v.token}" target="_blank" style="margin-left:auto">📄 Original ansehen</a>${v.format !== "PDF ohne E-Rechnung" ? `<button class="btn" type="button" id="eXml">🔍 XML</button>` : ""}</h3>
     ${v.doppelt ? `<div class="kachel" style="border-left:4px solid var(--rot);margin-bottom:8px">Diese Rechnung ist schon als Zahlungsauftrag <a href="#/zahlung/${v.doppelt.id}">${esc(v.doppelt.nummer)}</a> erfasst.</div>` : ""}
+    ${(v.warnungen || []).map(h => `<div class="kachel" style="border-left:4px solid var(--rot);margin-bottom:8px;color:var(--rot)"><b>⚠</b> ${esc(h).replace(/\n/g, "<br>")}</div>`).join("")}
     ${(v.hinweise || []).map(h => `<div class="hinweis" style="margin-bottom:4px">ℹ ${esc(h)}</div>`).join("")}
     <div class="ein-kopf form" style="grid-template-columns:1fr 1fr">
       <div>

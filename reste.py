@@ -1,6 +1,7 @@
 """Restelager (Holzwerkstoffe) und ganze Platten – gemeinsamer Bestand mit dem Zuschnittprogramm.
 Das Lager wird als ein Dokument im Format der Zuschnitt-App („jahresring-lager“) gespeichert, damit das
 Zuschnittprogramm unverändert damit rechnen kann. Das Büro bearbeitet es über eigene, kleine Funktionen."""
+import kern
 import json
 import os
 import secrets
@@ -375,13 +376,13 @@ def etiketten_html(eintraege, qr, h, format_="70x74", mass=(70, 74)):
               f'<b>{len(eintraege)} Etikett{"en" if len(eintraege) != 1 else ""}</b><span id="zst" style="opacity:.85"></span><span style="flex:1"></span>'
               + ('<button id="zwahl" class="lb" style="background:#5a514a" hidden>Anderen Drucker wählen</button>'
                  '<button id="zdruck" class="lb">Auf Zebra drucken (Bluetooth)</button>' if zebra else "")
-              + '<button onclick="window.print()" class="lb">Drucken</button></div>'
+              + '<button data-drucken class="lb">Drucken</button></div>'
               '<style>.lb{font:inherit;padding:4px 12px;border:0;border-radius:5px;background:#b8834f;color:#fff;cursor:pointer}.lb:disabled{opacity:.5}'
               '@media print{.leiste{display:none}}@media screen{body{background:#999}.bogen .et,.rahmen{background:#fff;margin:6px auto;box-shadow:0 1px 6px rgba(0,0,0,.3)}.bogen{background:#fff;margin:6px auto}}</style>')
     if zebra:
         svgs = [etikett_svg(e, qr, mass) for e in eintraege]
-        leiste += (f"<script>window.ETIKETT={{w:{mass[0]},h:{mass[1]}}};</script>" +'<script type="application/json" id="zsvgs">' + json.dumps(svgs).replace("</", "<\\/") + "</script>"
-                   "<script>" + ZEBRA_JS + "</script>")
+        leiste += (kern.skript(f"window.ETIKETT={{w:{mass[0]},h:{mass[1]}}};" + kern.DRUCKEN_JS.split(";if(location")[0]) +'<script type="application/json" id="zsvgs">' + json.dumps(svgs).replace("</", "<\\/") + "</script>"
+                   + kern.skript(ZEBRA_JS))
     return f'<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Etiketten</title><style>{css}</style></head><body>{leiste}{inhalt}</body></html>'
 
 

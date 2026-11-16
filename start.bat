@@ -35,7 +35,7 @@ if not errorlevel 1 (
 
 rem --- 4. Versuch: Installationsprogramm direkt von python.org laden (nur fuer dieses Benutzerkonto, ohne Administratorrechte) ---
 echo  Python wird von python.org geladen ...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol='Tls12'; $f=Join-Path $env:TEMP 'python-3.13-setup.exe'; Invoke-WebRequest -UseBasicParsing 'https://www.python.org/ftp/python/3.13.3/python-3.13.3-amd64.exe' -OutFile $f; Start-Process -FilePath $f -ArgumentList '/quiet InstallAllUsers=0 PrependPath=0 Include_launcher=0 Include_test=0 Include_doc=0 Shortcuts=0' -Wait"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol='Tls12'; $f=Join-Path $env:TEMP 'python-3.13-setup.exe'; Invoke-WebRequest -UseBasicParsing 'https://www.python.org/ftp/python/3.13.3/python-3.13.3-amd64.exe' -OutFile $f; $sig=Get-AuthenticodeSignature $f; if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Python Software Foundation') { Remove-Item $f -Force; throw 'Die Signatur des Python-Installationsprogramms ist ungueltig - nichts installiert.' }; Start-Process -FilePath $f -ArgumentList '/quiet InstallAllUsers=0 PrependPath=0 Include_launcher=0 Include_test=0 Include_doc=0 Shortcuts=0' -Wait"
 if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
   set "PY=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
   goto fertig

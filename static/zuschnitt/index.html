@@ -272,7 +272,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 15px; font-varian
 
 
 <header class="bar">
-  <img class="logo" id="logo" alt="" onerror="this.removeAttribute('src')">
+  <img class="logo" id="logo" alt="">
   <div class="marke"><img src="ring-hell.svg" alt=""><div><b>Zuschnitt</b><small>Jahresring</small></div></div>
   <div class="proj"><b id="projName"></b><span id="projMeta"></span></div>
   <div class="total" id="total" aria-live="polite"></div>
@@ -3741,6 +3741,7 @@ var qrcode = function() {
 
   // In Jahresring: das Lager liegt in der Büro-Datenbank, gespeichert wird automatisch
   const BUERO = window.JAHRESRING || null;
+  document.getElementById("logo").addEventListener("error", e => e.target.removeAttribute("src"));
   if (BUERO && BUERO.logo) document.getElementById("logo").src = "/api/logo";   // Firmenlogo aus Jahresring für PDF und Etiketten
   let bueroTimer = null;
   async function bueroLaden(meldung) {

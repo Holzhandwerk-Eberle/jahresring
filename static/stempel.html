@@ -73,6 +73,7 @@ if ("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWor
 const BASIS = "";   // die Stempeluhr läuft direkt unter http://<PC-Adresse>:8765/stempel
 const $ = (s, w = document) => w.querySelector(s), $$ = (s, w = document) => [...w.querySelectorAll(s)];
 // Bildtafeln (PDF) direkt in der Seite zeigen: Handy-Browser laden PDFs sonst nur herunter
+document.addEventListener("click", e => { if (e.target.closest && e.target.closest("[data-abmelden]")) abmelden(); });
 document.addEventListener("click", async e => {
   const a = e.target.closest && e.target.closest("a[data-tafel]");
   if (!a) return;
@@ -258,7 +259,7 @@ async function aktualisieren(mitListen = false) {
     try { AS = await holen("stempel/unterschriften"); } catch (e) { AS = null; }
   } catch (e) {
     if (e.anmelden) return anmeldung();
-    if (e.server) { $("#app").innerHTML = `<div class="karte">${esc(e.message)}</div><button class="leise" onclick="abmelden()">Abmelden</button>`; return; }
+    if (e.server) { $("#app").innerHTML = `<div class="karte">${esc(e.message)}</div><button class="leise" data-abmelden>Abmelden</button>`; return; }
     online = false;
   }
   zeichnen();
@@ -556,7 +557,7 @@ async function start() {
     const r = await fetch(BASIS + "/api/anmeldung", {cache: "no-store"}); const j = await r.json();
     if (!j.benutzer) return anmeldung();
     ICH = j.benutzer;
-    if (!ICH.mitarbeiter_id) { $("#app").innerHTML = `<div class="karte">Der Benutzer <b>${esc(ICH.login)}</b> ist keinem Mitarbeiter zugeordnet. Bitte im Büro unter Einstellungen › Benutzer verknüpfen lassen.</div><button class="leise" onclick="abmelden()">Abmelden</button>`; return; }
+    if (!ICH.mitarbeiter_id) { $("#app").innerHTML = `<div class="karte">Der Benutzer <b>${esc(ICH.login)}</b> ist keinem Mitarbeiter zugeordnet. Bitte im Büro unter Einstellungen › Benutzer verknüpfen lassen.</div><button class="leise" data-abmelden>Abmelden</button>`; return; }
     if (ST && ST.mitarbeiter && ST.mitarbeiter.id !== ICH.mitarbeiter_id) { ST = null; LISTEN = null; lokal = {}; speicher.schreiben("lokal", lokal); }
     online = true;
   } catch (e) {

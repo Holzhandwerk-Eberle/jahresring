@@ -199,7 +199,7 @@ async function ansichtStatistik() {
     ${statKachel("Zahlungsdauer", s.zahlungsdauer != null ? n2(s.zahlungsdauer, 0) + " Tage" : "–", "Ø vom Rechnungsdatum bis zur Zahlung")}
     ${statKachel("Offene Forderungen", eur(s.offen))}
     <div class="kachel" style="grid-column:span 2"><h4>Top-Kunden nach Umsatz</h4>${s.top_kunden.length ? `<table class="liste"><tr><th>Kunde</th><th class="r">Umsatz</th><th class="r">Anteil</th></tr>
-      ${s.top_kunden.map(t => `<tr class="klick" onclick="location.hash='#/kunde/${t.id}/statistik'"><td>${esc(t.nummer)} ${esc(t.kurzname)}</td><td class="r">${eur(t.umsatz)}</td><td class="r">${n2(t.anteil, 1)} %</td></tr>`).join("")}</table>` : `<span class="hinweis">noch keine Rechnungen</span>`}</div>
+      ${s.top_kunden.map(t => `<tr class="klick" data-hash="#/kunde/${t.id}/statistik"><td>${esc(t.nummer)} ${esc(t.kurzname)}</td><td class="r">${eur(t.umsatz)}</td><td class="r">${n2(t.anteil, 1)} %</td></tr>`).join("")}</table>` : `<span class="hinweis">noch keine Rechnungen</span>`}</div>
     ${umsatzBalken("Umsatz je Jahr (netto)", s.umsatz_jahr, "jahr")}${umsatzBalken("Umsatz nach Kundengruppe", s.umsatz_gruppe, "gruppe")}
     ${balken("Kunden nach Gruppe", s.kunden_gruppe, "gruppe")}${balken("Neukunden je Jahr", s.neukunden_jahr, "jahr")}
     ${balken("Aufträge nach Status", s.auftraege_status, "status")}${balken("Aufträge nach Jahr", s.auftraege_jahr, "jahr")}</div>

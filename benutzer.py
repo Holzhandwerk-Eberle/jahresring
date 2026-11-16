@@ -67,7 +67,12 @@ def kalender_sicht(rolle, eigen):
     return {"typen": [str(t) for t in k["typen"] or []], "nur_eigene": bool(k["nur_eigene"]), "extern": bool(k["extern"]), "abwesenheit": bool(k["abwesenheit"])}
 
 
-SITZUNG_TAGE = 120
+SITZUNG_TAGE = 120   # Stempeluhr am Handy (Rolle Mitarbeiter): Anmeldung bleibt lange erhalten
+SITZUNG_TAGE_BUERO = 30   # alle anderen Rollen: Anmeldung verfällt nach 30 Tagen ohne Benutzung
+
+
+def sitzung_tage(rolle):
+    return SITZUNG_TAGE if rolle == "mitarbeiter" else SITZUNG_TAGE_BUERO
 COOKIE = "jr_sitzung"
 
 _fehlversuche = {}
@@ -212,8 +217,10 @@ def pw_regeln(pw, rolle):
     if rolle == "mitarbeiter":
         if len(pw) < 4:
             raise Fehler("Die PIN bzw. das Passwort muss mindestens 4 Zeichen haben.")
-    elif len(pw) < 6:
-        raise Fehler("Das Passwort muss mindestens 6 Zeichen haben.")
+    elif len(pw) < 8:
+        raise Fehler("Das Passwort muss mindestens 8 Zeichen haben.")
+    elif pw.lower() in ("passwort", "password", "12345678", "123456789", "qwertzui", "jahresring", "schreiner", "11111111", "00000000"):
+        raise Fehler("Dieses Passwort ist zu leicht zu erraten. Bitte ein anderes wählen.")
 
 
 # ---------------------------------------------------------------- Rechte
@@ -304,7 +311,7 @@ def sitzung_benutzer(con, token):
     # gleitend verlängern, höchstens einmal je Stunde schreiben
     if (s["zuletzt"] or "") < (datetime.now() - timedelta(hours=1)).isoformat(timespec="seconds"):
         con.execute("UPDATE sitzungen SET zuletzt=?, ablauf=? WHERE token=?",
-                    (jetzt(), (datetime.now() + timedelta(days=SITZUNG_TAGE)).isoformat(timespec="seconds"), token))
+                    (jetzt(), (datetime.now() + timedelta(days=sitzung_tage(b["rolle"]))).isoformat(timespec="seconds"), token))
     return b
 
 
@@ -335,7 +342,7 @@ def anmelden(con, login, pw, geraet="", ip=""):
         _fehlversuche.pop(schluessel, None)
     token = secrets.token_urlsafe(32)
     con.execute("INSERT INTO sitzungen (token, benutzer_id, angelegt, zuletzt, ablauf, geraet) VALUES (?,?,?,?,?,?)",
-                (token_hash(token), b["id"], jetzt(), jetzt(), (datetime.now() + timedelta(days=SITZUNG_TAGE)).isoformat(timespec="seconds"),
+                (token_hash(token), b["id"], jetzt(), jetzt(), (datetime.now() + timedelta(days=sitzung_tage(b["rolle"]))).isoformat(timespec="seconds"),
                  (geraet or "")[:200]))
     con.execute("UPDATE benutzer SET letzter_login=? WHERE id=?", (jetzt(), b["id"]))
     con.execute("DELETE FROM sitzungen WHERE ablauf<?", (jetzt(),))
