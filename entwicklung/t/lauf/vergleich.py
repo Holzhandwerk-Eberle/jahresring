@@ -9,7 +9,7 @@ def glatt(t):
     t = re.sub(r"\b[0-9a-f]{12,64}\b", "<HEX>", t)
     t = re.sub(r"\b\d+(\.\d+)? ?(ms|s|Byte|KB|MB)\b", "<MASS>", t)
     t = re.sub(r"'Date': '[^']*'", "'Date': '<D>'", t)
-    t = re.sub(r"2026\.11\.01-14\d", "<VERSION>", t)
+    t = re.sub(r"2026\.11\.01-1[45]\d", "<VERSION>", t)
     return t
 nur = sys.argv[1:] or namen
 for n in nur:

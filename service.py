@@ -8,6 +8,7 @@ import sys
 import tempfile
 import zipfile
 
+import protokoll
 import tresor
 from datetime import datetime
 
@@ -308,12 +309,15 @@ def _kennwort_noetig(cfg, pfad):
     return not (s and s[1] == salz)
 
 
-def ruecksichern(cfg, name, nach_db, kennwort=None, ort=""):
+def ruecksichern(cfg, name, nach_db, kennwort=None, ort="", echtbetrieb=False):
     """Stellt eine Sicherung wieder her. Vorher wird der aktuelle Stand als „vor Rücksicherung“ gesichert.
-    Verschlüsselte Sicherungen (.jrs) werden mit dem Schlüssel dieses PCs oder dem angegebenen Kennwort entschlüsselt."""
+    Verschlüsselte Sicherungen (.jrs) werden mit dem Schlüssel dieses PCs oder dem angegebenen Kennwort entschlüsselt.
+    Das Journal dieses PCs bleibt, wie es ist – außer die Sicherung gehört zu einem anderen Protokoll (Sicherung eines anderen
+    PCs auf einem frisch eingerichteten): Dann wird es unter anderem Namen aufbewahrt und das Journal der Sicherung tritt an
+    seine Stelle. Im Echtbetrieb (echtbetrieb=True) wird eine solche Sicherung abgelehnt."""
     pfad = sicherung_pfad(cfg, name, ort)
     tmp = tempfile.mkdtemp(prefix="jr-rueck-")
-    dateien = 0
+    dateien, journal_alt, n_alt = 0, "", 0
     try:
         if name.endswith(tresor.ENDUNG):
             try:
@@ -327,36 +331,63 @@ def ruecksichern(cfg, name, nach_db, kennwort=None, ort=""):
         ok, _ = _zip_pruefen(pfad) if name.endswith(".zip") else _db_pruefen(pfad)
         if not ok:
             raise Fehler("Diese Sicherung ist beschädigt und kann nicht zurückgesichert werden.")
-        vorher = sicherung_erstellen({**cfg, "ziel": ""}, "vor-Ruecksicherung")
+        quelle = os.path.join(tmp, "buero.db")   # Arbeitskopie: die Sicherung selbst wird nur gelesen
         if name.endswith(".zip"):
             with zipfile.ZipFile(pfad) as z:
                 z.extract("buero.db", tmp)
-                quelle = os.path.join(tmp, "buero.db")
+        else:
+            shutil.copyfile(pfad, quelle)
+        try:
+            c = sqlite3.connect(quelle)
+            try:
+                fremd = protokoll.fremd(c)
+            finally:
+                c.close()
+        except sqlite3.Error:
+            fremd = False
+        if fremd and echtbetrieb:
+            raise Fehler("Diese Sicherung gehört zu einem anderen Datenbestand: Ihr Protokoll passt nicht zum Protokoll dieses PCs, "
+                         "der im Echtbetrieb läuft. Sie wird deshalb nicht zurückgesichert.")
+        vorher = sicherung_erstellen({**cfg, "ziel": ""}, "vor-Ruecksicherung")
+        journal_neu = ""
+        if name.endswith(".zip"):
+            with zipfile.ZipFile(pfad) as z:
                 for m in z.namelist():
                     if not m.startswith("dateien/") or m.endswith("/"):
                         continue
                     rel = m[len("dateien/"):]
-                    if rel.startswith("protokoll/"):
-                        continue   # das Journal wird nie zurückgesetzt (GoBD)
                     ziel = os.path.normpath(os.path.join(cfg["daten"], rel))
-                    if not ziel.startswith(os.path.normpath(cfg["daten"]) + os.sep):
+                    if rel.startswith("protokoll/"):
+                        if not (fremd and rel == "protokoll/journal.jsonl"):
+                            continue   # das Journal desselben Protokolls wird nie zurückgesetzt (GoBD)
+                        ziel = journal_neu = os.path.join(tmp, "journal.jsonl")
+                    elif not ziel.startswith(os.path.normpath(cfg["daten"]) + os.sep):
                         continue
                     os.makedirs(os.path.dirname(ziel), exist_ok=True)
                     with z.open(m) as q, open(ziel, "wb") as w:
                         shutil.copyfileobj(q, w)
-                    dateien += 1
-        else:
-            quelle = pfad
+                    dateien += 0 if ziel == journal_neu else 1
+        if fremd:
+            try:
+                journal_alt, n_alt = protokoll.journal_ersetzen(journal_neu or None, "vor_ruecksicherung")
+            except OSError as f:
+                raise Fehler(f"Das Protokoll dieses PCs ließ sich nicht beiseitelegen ({f.strerror or f}). Die Datenbank dieses PCs ist unverändert.")
         src = sqlite3.connect(quelle)
         dst = sqlite3.connect(cfg["db"], timeout=30)
-        with dst:
-            src.backup(dst)   # ersetzt den Inhalt der laufenden Datenbank
-        src.close()
-        dst.close()
+        try:
+            with dst:
+                src.backup(dst)   # ersetzt den Inhalt der laufenden Datenbank
+        except sqlite3.Error as f:
+            if fremd:
+                protokoll.journal_zurueck(journal_alt)
+            raise Fehler(f"Die Datenbank ließ sich nicht ersetzen ({f}). Die Datenbank dieses PCs ist unverändert.")
+        finally:
+            src.close()
+            dst.close()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     nach_db()  # Datenbank auf die aktuelle Programmversion bringen
-    return {"ok": True, "vorher": vorher["name"], "dateien": dateien}
+    return {"ok": True, "vorher": vorher["name"], "dateien": dateien, "journal_alt": journal_alt, "journal_alt_eintraege": n_alt}
 
 
 # ---------------------------------------------------------------- Relationencheck
@@ -449,7 +480,6 @@ def relationen(con, cfg):
     ergebnis.append({"text": "Positionsbilder, deren Datei fehlt", "anzahl": len(fehl_b), "beispiele": fehl_b[:5]})
     # Unveränderbares Protokoll (Hash-Kette)
     try:
-        import protokoll
         pr = protokoll.pruefen(con)
         ergebnis.append({"text": "Protokoll/Journal: Hash-Kette und Abgleich Datenbank ↔ Journaldatei", "anzahl": 0 if pr["ok"] else len(pr["fehler"]),
                          "beispiele": pr["fehler"][:5]})

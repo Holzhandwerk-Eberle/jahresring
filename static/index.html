@@ -480,6 +480,17 @@ body.anmelde-body{display:grid;place-items:center;min-height:100vh;background:va
 .anm-box h2{margin:6px 0 10px;font-size:20px}.anm-box label{display:block;margin:10px 0;font-size:14px;color:var(--leise)}
 .anm-box input{display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:9px 10px;font-size:16px;border:1px solid var(--linie);border-radius:6px}
 .anm-box .btn{width:100%;padding:10px;font-size:16px;margin-top:8px}.anm-fehler{color:var(--rot);margin-top:10px;min-height:1.2em}
+.anm-box.anm-breit{width:min(680px,94vw)}.anm-oder{display:flex;align-items:center;gap:10px;margin:18px 0 6px;color:var(--leise);font-size:13px}
+.anm-oder::before,.anm-oder::after{content:"";flex:1;border-top:1px solid var(--linie)}
+.anm-fund,.ub-karte{border:1px solid var(--linie);border-radius:8px;padding:10px 12px;margin:8px 0;background:var(--hell)}
+.anm-fund{border-left:4px solid var(--akzent)}.anm-fund b,.anm-fund span,.ub-karte b,.ub-karte span{display:block}
+.ub-karte{display:flex;gap:12px;align-items:center}.ub-karte>div{flex:1;min-width:0}.ub-pfad{font-size:13px;word-break:break-all}
+.anm-box .ub-karte .btn{width:auto;margin:0;flex:0 0 auto;padding:8px 14px;font-size:15px}
+.ub-titel{font-weight:600;margin:16px 0 4px;display:flex;justify-content:space-between;align-items:baseline;gap:12px}.ub-titel a{font-weight:400;font-size:13px}
+.anm-box .ub-knoepfe{display:flex;gap:8px;flex-wrap:wrap}.anm-box .ub-knoepfe .btn{width:auto;flex:1 1 auto}
+.ub-balken{height:8px;border-radius:4px;background:var(--zeile2);overflow:hidden;margin:14px 0 8px}.ub-balken i{display:block;height:100%;width:0;background:var(--akzent);transition:width .4s}
+.ub-hinweise{margin:4px 0 14px;font-size:14px}ol.ub-hinweise{padding-left:20px}.ub-hinweise li{margin:6px 0}
+.anm-box .anm-fund .btn{margin-top:10px}.anm-schon{border-left:4px solid var(--akzent);padding:2px 0 2px 10px;margin:0 0 12px;color:var(--text)}
 .lb-ich{position:relative;flex:0 0 auto}.lb-ichb{background:rgba(255,255,255,.08);border:0;color:#e9e1d6;border-radius:16px;padding:5px 12px;cursor:pointer;font:inherit;font-size:13px}
 .lb-ichb:hover{background:rgba(255,255,255,.16)}
 .lb-ichm{display:none;position:absolute;right:0;top:38px;background:#fff;color:var(--text);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.2);min-width:210px;z-index:60;padding:4px 0}
@@ -2740,7 +2751,7 @@ async function render() {
   }
 }
 window.addEventListener("hashchange", render);
-const VERSION = "2026.11.01-149";
+const VERSION = "2026.11.01-150";
 (async () => {
   try {
     const v = await api("version").catch(() => ({}));

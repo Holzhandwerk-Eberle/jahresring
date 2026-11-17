@@ -7,11 +7,16 @@ Die Einträge bilden eine Hash-Kette (SHA-256 über Inhalt + Hash des Vorgänger
 Änderung, Löschung oder Umsortierung bricht die Kette und wird bei der Prüfung angezeigt.
 Die Journaldatei wird weder von der Rücksicherung noch von „Testdaten löschen“ verändert; fehlen nach
 einer Rücksicherung Einträge in der Datenbank, werden sie beim Start aus der Journaldatei nachgetragen.
+Einzige Ausnahme: Wird ein Datenbestand mit eigenem Protokoll auf einem frisch eingerichteten PC eingespielt
+(Umzug, Wiederherstellung nach Ausfall), tritt dessen Journal an die Stelle des Journals dieses PCs; das wird
+nicht gelöscht, sondern unter anderem Namen aufbewahrt (journal_ersetzen), und der Vorgang steht im Protokoll.
 """
 import hashlib
 import json
 import os
+import shutil
 import threading
+import time
 from datetime import datetime
 
 SCHEMA = """
@@ -73,6 +78,7 @@ ARTEN = {
     "einstellung": "Einstellung geändert",
     "beleg_versandt": "Beleg versandt (Fassung festgehalten)",
     "bank_auszug_geloescht": "Kontoauszug nach Fristablauf gelöscht",
+    "uebernahme": "Datenbestand übernommen (Umzug, Wiederherstellung)",
 }
 START = "0" * 64
 _sperre = threading.Lock()
@@ -186,6 +192,69 @@ def einrichten(con, daten_ordner, version):
     if fehlend:
         eintragen(con, "journal", "", f"{len(fehlend)} Einträge fehlten in der Journaldatei und wurden aus der Datenbank wiederhergestellt.",
                   {"anzahl": len(fehlend)}, benutzer="Programm", version=version)
+
+
+def fremd(con_quelle):
+    """Gehört die Journaldatei dieses PCs zu einem anderen Protokoll als dem der Datenbank hinter con_quelle?
+    So ist es, wenn ein Datenbestand auf einem frisch eingerichteten PC eingespielt wird: dessen Journal beginnt mit eigenen
+    Einträgen (Erstinstallation, erster Zugang). Verglichen werden die Prüfsummen der Einträge, die es unter derselben
+    Nummer in beiden gibt; spätere Einträge derselben Kette (nach dem Zeitpunkt einer Sicherung) sind kein Unterschied."""
+    with _sperre:
+        eigene = {e.get("nr"): e.get("hash") for e in datei_lesen() if "_kaputt" not in e}
+    if not eigene:
+        return False
+    try:
+        andere = {r[0]: r[1] for r in con_quelle.execute("SELECT nr, hash FROM protokoll")}
+    except Exception:  # noqa: BLE001  Datenbank ohne Protokolltabelle
+        return False
+    return any(nr in andere and andere[nr] != h for nr, h in eigene.items())
+
+
+def journal_ersetzen(neu=None, kennung="ersetzt"):
+    """Legt die Journaldatei dieses PCs unter anderem Namen beiseite (gelöscht wird sie nie) und setzt, falls angegeben,
+    die Datei neu an ihre Stelle. Nur für das Einspielen eines Datenbestands mit eigenem Protokoll auf einem frisch
+    eingerichteten PC; der Aufrufer prüft die Voraussetzungen und trägt den Vorgang ins Protokoll ein.
+    Liefert (Name der beiseitegelegten Datei, Zahl ihrer Einträge)."""
+    with _sperre:
+        p = _pfad["datei"]
+        name, n = "", 0
+        if p and os.path.exists(p):
+            n = len(datei_lesen())
+            name = f"journal_{kennung}_{datetime.now():%Y-%m-%d_%H%M%S}.jsonl"
+            for versuch in range(6):   # ein Virenscanner kann die Datei für einen Augenblick festhalten
+                try:
+                    os.replace(p, os.path.join(os.path.dirname(p), name))
+                    break
+                except OSError:
+                    if versuch == 5:
+                        raise
+                    time.sleep(0.3)
+        if p and neu and os.path.exists(neu):
+            try:
+                shutil.copyfile(neu, p)
+            except OSError:   # nichts halb Getauschtes hinterlassen: das bisherige Journal kommt an seinen Platz zurück
+                if name:
+                    os.replace(os.path.join(os.path.dirname(p), name), p)
+                elif os.path.exists(p):
+                    os.remove(p)
+                raise
+        _STAND.clear()
+    return name, n
+
+
+def journal_zurueck(name):
+    """Nimmt journal_ersetzen zurück, wenn der Datenbestand danach doch nicht eingespielt werden konnte: Die beiseitegelegte
+    Datei name wird wieder das Journal dieses PCs (gab es vorher keines, verschwindet die eingesetzte Kopie)."""
+    with _sperre:
+        p = _pfad["datei"]
+        if not p:
+            return
+        alt = os.path.join(os.path.dirname(p), name) if name else ""
+        if alt and os.path.exists(alt):
+            os.replace(alt, p)
+        elif not name and os.path.exists(p):
+            os.remove(p)
+        _STAND.clear()
 
 
 def neu_beginnen(con):

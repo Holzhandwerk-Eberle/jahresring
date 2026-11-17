@@ -153,6 +153,18 @@ def setzen(daten_ordner, kennwort):
     return k, salz
 
 
+def vormerken(daten_ordner):
+    """Der Datenbestand kommt von einem PC, auf dem ein Sicherungskennwort gesetzt war, der Schlüssel liegt hier aber nicht vor
+    (Übernahme aus einer unverschlüsselten Sicherung). Als „gesetzt, auf diesem PC nicht lesbar“ vermerken: Bis das Kennwort
+    neu gesetzt ist, legt das Programm nichts unverschlüsselt auf dem externen Sicherungsziel ab."""
+    p = _datei(daten_ordner)
+    if os.path.exists(p):
+        return False
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump({"salz": "", "schluessel": "", "hinweis": "Sicherungskennwort auf diesem PC neu setzen (Einstellungen › Service › Datensicherung)"}, f, ensure_ascii=False)
+    return True
+
+
 def kennwort_stimmt(daten_ordner, kennwort):
     s = laden(daten_ordner)
     if not s:

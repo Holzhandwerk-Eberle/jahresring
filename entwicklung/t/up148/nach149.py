@@ -1,4 +1,4 @@
-# Nach dem Update auf 149 mit dem Datenbestand aus 148: läuft alles, stimmt die Prüfung, greifen die neuen Regeln ohne Fehlalarm?
+# Nach dem Update auf den aktuellen Stand (zuerst 149) mit dem Datenbestand aus 148: läuft alles, stimmt die Prüfung, greifen die neuen Regeln ohne Fehlalarm?
 import sys, json, base64, sqlite3, urllib.request, http.cookiejar
 from datetime import datetime, timedelta
 U = "http://127.0.0.1:8799"; fehler = []
@@ -17,7 +17,9 @@ def A(o, m, p, d=None, h=None):
         except Exception: d = {}
         d["_s"] = e.code; return d
 o = sitzung(); r = A(o, "POST", "anmeldung/anmelden", {"login": "jonas", "passwort": "geheim123"}); ok("Inhaber meldet sich mit dem bisherigen Passwort an", r.get("ok"), r)
-ok("Version 149 läuft", A(o, "GET", "version").get("version") == "2026.11.01-149")
+import re
+NEU = re.search(r'^VERSION = "([^"]+)"', open("/home/claude/eberle-buero/app.py", encoding="utf-8").read(), re.M).group(1)   # der aktuelle Programmstand
+ok(f"Version {NEU} läuft", A(o, "GET", "version").get("version") == NEU)
 con = sqlite3.connect("/tmp/claude-0/t/v25/eberle-buero/daten/buero.db"); con.row_factory = sqlite3.Row
 ph = con.execute("SELECT pw_hash FROM benutzer WHERE login='jonas'").fetchone()[0]
 ok("Passwort-Prüfwert beim Anmelden auf 600.000 Runden erneuert", ph.startswith("pbkdf2$600000$"), ph[:40])
@@ -30,7 +32,7 @@ ok("Protokoll unverändert (Hash-Kette in Ordnung)", pr.get("pruefung", {}).get(
 ok("Belegprüfung ohne Fehlalarm (Rechnungen aus 148, auch im Echtbetrieb festgeschriebene)", b.get("ok") is True and not b.get("fehler"), b)
 arten = [e["art"] for e in pr.get("eintraege", [])][:12]; alle = A(o, "GET", "service/protokoll?limit=200")
 texte = [e.get("text", "") for e in (alle.get("eintraege") or pr.get("eintraege") or [])]
-ok("Versionswechsel 148 → 149 steht im Protokoll", any("2026.11.01-149" in t for t in texte), texte[:5])
+ok("Versionswechsel von 148 auf den aktuellen Stand steht im Protokoll", any(f"2026.11.01-148 → {NEU}" in t for t in texte), texte[:5])
 bel = A(o, "GET", "belege"); ang = [x for x in bel if x["art"] == "angebot"]; rech = [x for x in bel if x["nummer"] == "2026-0050"]
 ok("Belege aus 148 vorhanden (Angebot, Rechnung 2026-0050)", ang and rech, [(x["art"], x["nummer"], x["status"]) for x in bel])
 bd = A(o, "GET", f"belege/{ang[0]['id']}"); ok("in 148 versandtes Angebot: öffnet, ohne festgehaltene Fassung (die gab es noch nicht)", bd["_s"] == 200 and bd.get("versand") == [], (bd.get("_s"), bd.get("versand")))

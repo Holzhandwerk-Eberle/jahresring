@@ -73,6 +73,7 @@ import bautagebuch
 import korrespondenz
 import arbeitsschutz
 import unterschrift
+import uebernahme
 import secrets
 
 from kalkulation import (KALK_VORGABEN, TAETIGKEITEN_VORGABE, TAETIGKEITEN_KATALOG, TAETIGKEITEN_KATALOG_STAND, WERKSTOFF_TYPEN, LOHNGRUPPEN,
@@ -92,7 +93,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-149"
+VERSION = "2026.11.01-150"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -647,6 +648,13 @@ def init_db():
         for k, v in STANDARD_EINSTELLUNGEN.items():
             con.execute("INSERT OR IGNORE INTO einstellungen VALUES (?, ?)", (k, json.dumps(v, ensure_ascii=False)))
         eigene_dokumente_uebernehmen(bool(alt_v))
+        # Der Datenbestand kommt von einem anderen Ort (anderer PC, anderer Ordner): mit vollem Pfad gespeicherte Dateien umstellen
+        um = uebernahme.pfade_anpassen(con, DATEN)
+        if um:
+            protokoll.eintragen(con, "uebernahme", "", "Der Datenordner liegt an einem anderen Ort als bisher. Gespeicherte Dateipfade wurden auf "
+                                f"{DATEN} umgestellt: {uebernahme.mz(um.get('anhaenge', 0), 'Anhang', 'Anhänge')}, "
+                                f"{uebernahme.mz(um.get('zahlungen', 0), 'Eingangsrechnung', 'Eingangsrechnungen')}.",
+                                um, benutzer="Programm", version=VERSION)
         # Echtbetrieb lief schon vor dieser Version: Altbestand einmalig sperren (Kunden, die bis zum Start angelegt waren)
         eb = protokoll.echtbetrieb(con)
         if eb and not con.execute("SELECT 1 FROM einstellungen WHERE schluessel='_altbestand_gesetzt'").fetchone():
@@ -4626,6 +4634,116 @@ def service_cfg(con):
             "ziel": (e.get("sicherung_ziel") or "").strip()}
 
 
+# ---------- Datenbestand vom bisherigen PC übernehmen (Seite „Ersten Zugang anlegen“, uebernahme.py) ----------
+def daten_uebernehmen(cfg, pfad, kennwort):
+    """Spielt den Datenbestand ein, hält den Vorgang im Protokoll fest und sagt, was an diesem PC noch einzurichten ist."""
+    erg = uebernahme.uebernehmen(cfg, pfad, init_db, kennwort or None)
+    kennwort_gilt = False
+    if erg["verschluesselt"] and kennwort and not tresor.laden(DATEN):
+        try:   # die Sicherungen dieses Bestands waren verschlüsselt: mit demselben Kennwort geht es an diesem PC weiter
+            tresor.setzen(DATEN, kennwort)
+            kennwort_gilt = True
+        except (tresor.Fehler, OSError):
+            pass
+    woher = {"ordner": "dem Ordner", "sicherung": "der Sicherung", "datenbank": "der Datenbanksicherung"}[erg["art"]]
+    mz = uebernahme.mz
+    text = (f"Datenbestand auf diesen PC übernommen aus {woher} {erg['quelle']}: {erg['benutzer']} Benutzer, {mz(erg['kunden'], 'Kunde', 'Kunden')}, "
+            f"{mz(erg['belege'], 'Beleg', 'Belege')}, {mz(erg['dateien'], 'Datei', 'Dateien')} kopiert.")
+    if erg["journal_alt"]:
+        text += (f" Das bisherige Journal dieses PCs ({mz(erg['journal_alt_eintraege'], 'Eintrag', 'Einträge')}) liegt als {erg['journal_alt']} "
+                 "im Ordner daten/protokoll.")
+    if kennwort_gilt:
+        text += " Das Sicherungskennwort dieser Sicherung gilt auf diesem PC weiter."
+    with verbindung() as con:
+        prot(con, "uebernahme", "", text, {k: erg[k] for k in ("art", "quelle", "dateien", "journal_alt", "journal_alt_eintraege", "version", "protokoll")})
+        con.commit()
+        kennwort_vormerken(con)
+        erg["hinweise"] = uebernahme_hinweise(con, erg, kennwort_gilt)
+    # Die Sicherungen von heute zeigen noch den leeren Anfangsbestand dieses PCs: mit dem übernommenen Bestand überschreiben
+    try:
+        heute = os.path.join(BACKUP_PFAD, f"buero_{date.today().isoformat()}.db")
+        with SICHERUNG_LOCK:
+            if os.path.exists(heute):
+                c = sqlite3.connect(heute)
+                try:
+                    anfang = uebernahme.leer(c)
+                finally:
+                    c.close()
+                if anfang:
+                    src, dst = sqlite3.connect(DB_PFAD, timeout=30), sqlite3.connect(heute)
+                    try:
+                        with dst:
+                            src.backup(dst)
+                        dst.execute("PRAGMA journal_mode=DELETE")
+                    finally:
+                        src.close()
+                        dst.close()
+        backup()
+        stunden_sicherung()
+    except Exception as f:  # noqa: BLE001  die Übernahme selbst ist gelungen
+        print("Sicherung nach der Übernahme:", f)
+    PROTOKOLL_PRUEFUNG["text"] = ""
+    threading.Thread(target=protokoll_vollpruefung, daemon=True).start()
+    return erg
+
+
+def kennwort_vormerken(con):
+    """Nach dem Einspielen eines Bestands von einem anderen PC: War dort ein Sicherungskennwort gesetzt (letzter Eintrag dazu im
+    Protokoll) und liegt hier kein Schlüssel, gilt es als „gesetzt, nicht lesbar“. Bis es neu gesetzt ist, geht dann nichts
+    unverschlüsselt auf das externe Sicherungsziel."""
+    if tresor.aktiv(DATEN):
+        return False
+    r = con.execute("SELECT text FROM protokoll WHERE art='sicherung_kennwort' ORDER BY nr DESC LIMIT 1").fetchone()
+    if not r or "entfernt" in r["text"]:
+        return False
+    try:
+        return tresor.vormerken(DATEN)
+    except OSError:
+        return False
+
+
+def uebernahme_hinweise(con, erg, kennwort_gilt=False):
+    """Was nach der Übernahme an diesem PC noch zu tun ist – nur das, was auf diesen Bestand zutrifft."""
+    e = einstellungen(con)
+    aus = []
+    if erg["art"] == "datenbank":
+        aus.append("Übernommen wurde nur die Datenbank, ohne Dateien. Anhänge, archivierte Belege, Eingangsrechnungen und Bilder fehlen, bis sie "
+                   "aus dem Ordner „daten“ des bisherigen PCs oder aus einer vollständigen Sicherung nachgetragen sind. Die Belegprüfung unter "
+                   "Einstellungen › Service › Protokoll zeigt, was fehlt.")
+
+    def gebunden(wert):   # unter Windows an den bisherigen PC gebunden gespeichert und hier nicht lesbar
+        return str(wert or "").startswith(geheim.PRAEFIX) and not geheim.entschluesseln(wert)
+    roh = {r["schluessel"]: r["wert"] for r in con.execute("SELECT schluessel, wert FROM einstellungen WHERE schluessel IN ('mail', 'update')")}
+    try:
+        if gebunden((json.loads(roh.get("mail") or "{}") or {}).get("passwort")):
+            aus.append("Das Passwort für den E-Mail-Versand ist an den bisherigen PC gebunden und fehlt hier. Bitte unter Einstellungen › E-Mail neu eingeben.")
+        if gebunden((json.loads(roh.get("update") or "{}") or {}).get("schluessel")):
+            aus.append("Der Zugangsschlüssel für den Update-Hinweis ist an den bisherigen PC gebunden und fehlt hier. Bitte unter Einstellungen › Programm neu eintragen.")
+    except (ValueError, AttributeError):
+        pass
+    if kennwort_gilt:
+        aus.append("Das Sicherungskennwort gilt auf diesem PC weiter; Kopien auf dem externen Sicherungsziel bleiben verschlüsselt.")
+    elif tresor.aktiv(DATEN) and not tresor.laden(DATEN):
+        aus.append("Das Sicherungskennwort ist an den bisherigen PC gebunden. Bitte unter Einstellungen › Service › Datensicherung neu setzen; "
+                   "bis dahin werden keine Kopien auf das externe Sicherungsziel geschrieben.")
+    ziel, projekt = str(e.get("sicherung_ziel") or "").strip(), str(e.get("projektpfad") or "").strip()
+    if ziel and not os.path.isdir(ziel):
+        aus.append(f"Das externe Sicherungsziel {ziel} ist an diesem PC nicht erreichbar. Bitte das Laufwerk anschließen oder das Ziel unter "
+                   "Einstellungen › Service › Datensicherung anpassen.")
+    if projekt and not os.path.isdir(projekt):
+        aus.append(f"Der Projektordner {projekt} ist an diesem PC nicht vorhanden. Bitte den Ordner bereitstellen oder den Pfad unter Einstellungen › Kunden & Aufträge anpassen.")
+    if e.get("netzwerk") is True:
+        aus.append("Im übernommenen Bestand ist das Programm für andere Geräte im Netzwerk freigegeben. An diesem PC gilt das nach dem nächsten "
+                   "Programmstart (Symbol neben der Uhr › Beenden, dann neu starten). Der PC hat eine eigene Adresse, und die Freigabe in der "
+                   "Windows-Firewall ist einmal neu einzurichten (Handy-Freigabe.bat im Programmordner)."
+                   + (" Für https stellt dieser PC ein eigenes Zertifikat aus; Handys und Tablets richten es einmal neu ein."
+                      if str(e.get("https") or "aus") != "aus" else ""))
+    if erg.get("innen"):
+        aus.append(f"Der Ordner {erg['quelle']} wird jetzt nicht mehr gebraucht und kann gelöscht werden; das Programm löscht ihn nicht selbst.")
+    aus.append("Am bisherigen PC bitte nicht mehr mit Jahresring weiterarbeiten, sonst entstehen zwei verschiedene Stände.")
+    return aus
+
+
 # ---------- Service: Testdaten löschen (vor dem Echtbetrieb) ----------
 def _anzahl(con, sql, *a):
     try:
@@ -7984,12 +8102,19 @@ def api(methode, teile, q, daten):
                     prot(con, "ruecksicherung", name, f"Rücksicherung von {name} gestartet" + (f". Grund: {grund}" if grund else ""), {"sicherung": name, "grund": grund})
                     con.commit()
                     try:
-                        erg = service.ruecksichern(cfg, name, init_db, kennwort or None, ort)
+                        erg = service.ruecksichern(cfg, name, init_db, kennwort or None, ort, echtbetrieb=bool(protokoll.echtbetrieb(con)))
                     except service.Fehler as f:
+                        prot(con, "ruecksicherung", name, f"Rücksicherung von {name} nicht ausgeführt: {f}", {"sicherung": name})
+                        con.commit()
                         raise ApiFehler(str(f))
                     with verbindung() as c2:
                         protokoll.einrichten(c2, DATEN, VERSION)   # Einträge nach dem Sicherungszeitpunkt aus dem Journal nachtragen
-                        prot(c2, "ruecksicherung", name, f"Rücksicherung von {name} abgeschlossen; der Stand vorher liegt in {erg['vorher']}", erg)
+                        if erg["journal_alt"]:
+                            kennwort_vormerken(c2)   # Bestand eines anderen PCs: ein dort gesetztes Sicherungskennwort bleibt verlangt
+                        prot(c2, "ruecksicherung", name, f"Rücksicherung von {name} abgeschlossen; der Stand vorher liegt in {erg['vorher']}"
+                             + (". Die Sicherung stammt aus einem anderen Datenbestand: Das bisherige Journal dieses PCs "
+                                f"({uebernahme.mz(erg['journal_alt_eintraege'], 'Eintrag', 'Einträge')}) liegt als {erg['journal_alt']} "
+                                "im Ordner daten/protokoll" if erg["journal_alt"] else ""), erg)
                     return erg
                 if methode == "GET" and teile[1:] == ["relationen"]:
                     return service.relationen(con, cfg)
@@ -9851,6 +9976,8 @@ class Handler(BaseHTTPRequestHandler):
                 b = benutzer.sitzung_benutzer(con, self.token)
                 con.commit()
                 aus = {"eingerichtet": benutzer.anzahl(con) > 0, "benutzer": benutzer.oeffentlich(b), "firma": einstellungen(con).get("firma")}
+                if not aus["eingerichtet"] and self.lokal() and uebernahme.leer(con):
+                    aus["uebernahme"] = True   # noch nichts erfasst: statt des ersten Zugangs lässt sich der Bestand vom bisherigen PC einspielen
                 if b and b["mitarbeiter_id"]:
                     m = con.execute("SELECT id, vorname, nachname, kuerzel FROM mitarbeiter WHERE id=?", (b["mitarbeiter_id"],)).fetchone()
                     aus["mitarbeiter"] = dict(m) if m else None
@@ -9869,6 +9996,28 @@ class Handler(BaseHTTPRequestHandler):
                 token, b = benutzer.anmelden(con, d.get("login"), d.get("passwort"), self.headers.get("User-Agent", ""), self.ip())
                 con.commit()
                 return self.json({"ok": True}, extra={"Set-Cookie": self.setze_cookie(token)})
+            if teil in ("uebernahme", "uebernahme/stand") and methode in ("GET", "POST"):
+                # Datenbestand vom bisherigen PC einspielen: nur direkt am PC und nur, solange hier noch nichts erfasst ist
+                if not self.lokal():
+                    raise benutzer.Fehler("Die Daten bitte direkt am Büro-PC übernehmen.", 403)
+                if methode == "GET" and teil == "uebernahme/stand":
+                    return self.json(dict(uebernahme.STAND))
+                if benutzer.anzahl(con) > 0 or not uebernahme.leer(con):
+                    raise benutzer.Fehler("Auf diesem PC sind schon Daten erfasst. Eine Sicherung spielt der Inhaber unter "
+                                          "Einstellungen › Service › Datensicherung zurück.", 403)
+                cfg = service_cfg(con)
+                con.commit()
+                try:
+                    if methode == "GET":
+                        return self.json({"daten": DATEN, "kandidaten": uebernahme.kandidaten(BASIS, DATEN), "dialog": uebernahme.dialog_moeglich()})
+                    if d.get("waehlen"):   # Auswahlfenster von Windows am PC öffnen (Ordner oder Sicherungsdatei)
+                        gewaehlt = uebernahme.auswahl_dialog(str(d["waehlen"]))
+                        return self.json({"pfad": gewaehlt or "", **({"dialog": False} if gewaehlt is None else {})})
+                    if d.get("nur_pruefen"):
+                        return self.json(uebernahme.beschreiben(d.get("pfad"), DATEN))
+                    return self.json(daten_uebernehmen(cfg, str(d.get("pfad") or ""), str(d.get("kennwort") or "")))
+                except uebernahme.Fehler as f:
+                    raise benutzer.Fehler(str(f), f.code)
             if methode == "POST" and teil == "anmelden":
                 token, b = benutzer.anmelden(con, d.get("login"), d.get("passwort"), self.headers.get("User-Agent", ""), self.ip())
                 con.commit()

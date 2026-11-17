@@ -1,5 +1,5 @@
 #!/bin/bash
-# Schnellprüfung vor jedem Bau (etwa sechs Minuten): Syntax, doppelte Namen, Kalkulation, Kalender, neue Prüfungen,
+# Schnellprüfung vor jedem Bau (etwa neun Minuten): Syntax, doppelte Namen, Kalkulation, Kalender, neue Prüfungen,
 # Bedienoberfläche (Durchlauf, alle Seiten, Inhaltsschutz). Bricht mit Fehlercode ab, wenn etwas nicht stimmt.
 Q=/home/claude/eberle-buero; O=/tmp/claude-0/t/lauf; T=/tmp/claude-0/t; rc=0
 schritt() { name="$1"; shift; if "$@" > $O/tor_$name.txt 2>&1; then echo "ok     $name"; else echo "FEHLER $name  (siehe $O/tor_$name.txt)"; rc=1; fi; }
@@ -29,6 +29,9 @@ for n in sicher149 rechnen149 bank149 import149 nachweis149 datenschutz149 perso
   bash $T/v25/neu.sh >/dev/null 2>&1
   schritt $n bash -c "python3 $T/neu/$n.py > $O/tor_aus_$n.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_$n.txt"
 done
+# Version 150: Datenbestand vom bisherigen PC übernehmen (eigene Instanzen auf den Ports 8796 bis 8798), danach dieselben Seiten im Browser
+schritt uebernahme150 bash -c "timeout 900 python3 $T/neu/uebernahme150.py > $O/tor_aus_uebernahme150.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_uebernahme150.txt"
+schritt uebernahme_ui bash -c "cd $T/v25 && cp $T/neu/uebernahme_ui.js s/uebernahme_ui.js && timeout 400 node s/uebernahme_ui.js > $O/tor_aus_uebernahme_ui.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_uebernahme_ui.txt"
 bash $T/v25/neu.sh >/dev/null 2>&1
 schritt durchlauf bash -c "cd $T/v25 && timeout 600 node s/t10.js > $O/tor_t10.txt 2>&1; tail -1 $O/tor_t10.txt | grep -q 'fehler \[\]'"
 schritt seiten bash -c "cd $T/v25 && timeout 600 node s/crawl.js > $O/tor_crawl.txt 2>&1; grep -q '^Fehler: 0' $O/tor_crawl.txt && grep -q '^Auffällige Texte: 0' $O/tor_crawl.txt"

@@ -43,6 +43,7 @@ function anmeldeSeite(status) {
     <div class="anm-box">
       <div class="anm-marke"><img src="jahresring.svg" alt=""><div><b>Jahresring</b>${status.firma ? `<small>${esc(status.firma)}</small>` : ""}</div></div>
       ${einrichten ? `<h2>Ersten Zugang anlegen</h2>
+        <div id="anmFund">${status.uebernahme ? `<p class="hinweis anm-schon">Wurde bisher schon mit Jahresring gearbeitet? Dann keinen neuen Zugang anlegen, sondern die <a href="#" id="anmUebOben">Daten vom bisherigen PC übernehmen</a>.</p>` : ""}</div>
         <p class="hinweis">Zuerst den Inhaber-Zugang anlegen. Er darf alles, auch weitere Benutzer und Rechte verwalten. Angemeldet wird sich danach immer mit Benutzername und Passwort.</p>`
         : `<h2>Anmelden</h2>`}
       <form id="anmForm" autocomplete="on">
@@ -55,9 +56,27 @@ function anmeldeSeite(status) {
         <div id="anmFehler" class="anm-fehler"></div>
       </form>
       ${!einrichten ? `<p style="margin-top:18px"><a href="#" id="anmVergessen">Passwort vergessen?</a></p>` : ""}
+      ${einrichten && status.uebernahme ? `<div class="anm-oder"><span>oder</span></div>
+        <button class="btn" type="button" id="anmUeb">Daten vom bisherigen PC übernehmen …</button>
+        <p class="hinweis" style="margin:8px 0 0">Für den Umzug auf einen neuen PC und für die Wiederherstellung aus einer Sicherung. Es gelten danach die bisherigen Benutzer und Passwörter.</p>` : ""}
     </div>`;
   const f = $("#anmForm");
   if ($("#anmVergessen")) $("#anmVergessen").onclick = e => { e.preventDefault(); passwortVergessen($(".anm-box"), f.login.value, () => anmeldeSeite(status)); };
+  if ($("#anmUeb")) {
+    let fund = null;
+    $("#anmUeb").onclick = () => datenUebernahme(status, fund);
+    $("#anmUebOben").onclick = e => { e.preventDefault(); datenUebernahme(status, fund); };
+    // schon beim Öffnen nachsehen, ob der bisherige Bestand irgendwo bereitliegt (USB-Stick, Desktop, zu tief kopierter Ordner)
+    fetch("/api/anmeldung/uebernahme").then(r => r.ok ? r.json() : null).then(j => {
+      const k = j && (j.kandidaten || []).find(x => x.art === "ordner");
+      if (!k || !$("#anmFund")) return;
+      fund = j;
+      $("#anmFund").innerHTML = `<div class="anm-fund"><b>Bisheriger Datenbestand gefunden${k.firma ? ": " + esc(k.firma) : ""}</b>
+        <span class="ub-pfad">${esc(k.pfad)}</span><span class="hinweis">Wurde bisher schon mit Jahresring gearbeitet, keinen neuen Zugang anlegen, sondern diesen Bestand übernehmen.</span>
+        <button class="btn prim" type="button" id="anmFundKnopf">Diesen Bestand übernehmen …</button></div>`;
+      $("#anmFundKnopf").onclick = () => datenUebernahme(status, fund, k);
+    }).catch(() => {});
+  }
   f.login.focus();
   if (!einrichten && f.login.value === "") setTimeout(() => f.login.focus(), 50);
   f.onsubmit = async e => {
@@ -71,6 +90,115 @@ function anmeldeSeite(status) {
       location.reload();
     } catch (x) { $("#anmFehler").textContent = x.message; f.passwort.select(); }
   };
+}
+// Seite „Ersten Zugang anlegen“: statt eines neuen Zugangs den Datenbestand vom bisherigen PC einspielen (Umzug auf einen
+// neuen PC, Wiederherstellung aus einer Sicherung). Geht nur direkt am PC und nur, solange hier noch nichts erfasst ist.
+function datenUebernahme(status, vorab = null, direkt = null) {
+  const box = $(".anm-box");
+  box.classList.add("anm-breit");
+  const ruf = async body => {
+    const r = await fetch("/api/anmeldung/uebernahme", body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const x = new Error(j.fehler || r.statusText); x.status = r.status; throw x; }
+    return j;
+  };
+  const zeit = s => s ? datum(s) + (s.length > 10 ? `, ${s.slice(11, 16)} Uhr` : "") : "";
+  const mz = (n, ein, mehr) => `${n} ${n === 1 ? ein : mehr}`;
+  const titel = k => k.art === "ordner" ? (k.firma || "Datenbestand") : k.art === "sicherung" ? "Vollständige Sicherung" : "Datenbanksicherung (ohne Dateien)";
+  const angaben = k => [k.art === "ordner" ? `Stand ${zeit(k.stand)}` : `vom ${zeit(k.stand)}`, k.art !== "ordner" && k.firma ? k.firma : "",
+    k.benutzer ? `${k.benutzer} Benutzer` : "", k.benutzer ? mz(k.kunden, "Kunde", "Kunden") : "", k.benutzer ? mz(k.belege, "Beleg", "Belege") : "",
+    k.groesse ? groesse(k.groesse) : "", k.rechner ? `PC ${k.rechner}` : "", k.version ? `Version ${k.version}` : "",
+    k.verschluesselt ? "verschlüsselt" : ""].filter(Boolean).join(" · ");
+  const karte = (k, knopf = "") => `<div class="ub-karte"><div><b>${esc(titel(k))}</b><span class="ub-pfad">${esc(k.pfad)}</span>
+    <span class="hinweis">${esc(angaben(k))}</span></div>${knopf}</div>`;
+  let funde = vorab ? vorab.kandidaten : null, dialog = !!(vorab && vorab.dialog), pfadEingabe = "";
+
+  const auswahl = (meldung = "") => {
+    box.innerHTML = `<h2>Daten vom bisherigen PC übernehmen</h2>
+      <p class="hinweis">Auf diesem PC ist noch nichts erfasst. Hier lässt sich der bisherige Datenbestand einspielen: der Ordner „daten“ aus dem Jahresring-Ordner des bisherigen PCs (zum Beispiel auf einem USB-Stick) oder eine vollständige Sicherung (Datei Sicherung_….zip).</p>
+      <div class="ub-titel">Gefundene Datenbestände <a href="#" id="ubSuchen">erneut suchen</a></div>
+      <div id="ubListe">${funde === null ? `<p class="hinweis">Suche auf diesem PC und den angeschlossenen Datenträgern …</p>`
+        : funde.length ? funde.map((k, i) => karte(k, `<button class="btn prim" type="button" data-i="${i}">Übernehmen …</button>`)).join("")
+        : `<p class="hinweis">Nichts gefunden. Den Datenträger anstecken und „erneut suchen“ wählen oder den Ort unten angeben.</p>`}</div>
+      <div class="ub-titel">Anderer Ort</div>
+      <form id="ubForm" autocomplete="off">
+        <label>Ordner „daten“ oder Sicherungsdatei<input name="pfad" value="${esc(pfadEingabe)}" placeholder="z. B. E:\\daten oder E:\\Sicherung_2026-11-17_18-00-00.zip" spellcheck="false" autocapitalize="none"></label>
+        <div class="ub-knoepfe">${dialog ? `<button class="btn" type="button" id="ubOrdner">Ordner wählen …</button><button class="btn" type="button" id="ubDatei">Sicherungsdatei wählen …</button>` : ""}
+          <button class="btn prim" type="submit">Prüfen</button></div>
+      </form>
+      <div class="anm-fehler" id="ubFehler">${esc(meldung)}</div>
+      <p style="margin-top:6px"><a href="#" id="ubZu">Zurück: neuen Zugang anlegen</a></p>`;
+    const f = $("#ubForm", box);
+    $$("#ubListe button", box).forEach(b => b.onclick = () => bestaetigen(funde[+b.dataset.i]));
+    $("#ubSuchen", box).onclick = e => { e.preventDefault(); funde = null; pfadEingabe = f.pfad.value; auswahl(); suchen(); };
+    $("#ubZu", box).onclick = e => { e.preventDefault(); box.classList.remove("anm-breit"); anmeldeSeite(status); };
+    const pruefen = async () => {
+      pfadEingabe = f.pfad.value.trim();
+      if (!pfadEingabe) { $("#ubFehler", box).textContent = "Bitte den Ordner oder die Sicherungsdatei angeben."; return; }
+      try { bestaetigen(await ruf({pfad: pfadEingabe, nur_pruefen: true})); }
+      catch (x) { $("#ubFehler", box).textContent = x.message; }
+    };
+    f.onsubmit = e => { e.preventDefault(); pruefen(); };
+    for (const [id, art] of [["#ubOrdner", "ordner"], ["#ubDatei", "datei"]]) {
+      if ($(id, box)) $(id, box).onclick = async () => {
+        $("#ubFehler", box).textContent = "";
+        try {
+          const j = await ruf({waehlen: art});
+          if (j.pfad) { f.pfad.value = j.pfad; pruefen(); }
+          else if (j.dialog === false) $("#ubFehler", box).textContent = "Das Auswahlfenster ließ sich nicht öffnen. Bitte den Pfad eintippen oder im Explorer kopieren (Rechtsklick › „Als Pfad kopieren“).";
+        } catch (x) { $("#ubFehler", box).textContent = x.message; }
+      };
+    }
+  };
+  const suchen = async () => {
+    try { const j = await ruf(); funde = j.kandidaten || []; dialog = !!j.dialog; }
+    catch (x) { funde = []; if ($("#ubListe", box)) return auswahl(x.message); }
+    if ($("#ubListe", box)) auswahl();
+  };
+
+  const bestaetigen = (k, meldung = "") => {
+    box.innerHTML = `<h2>Diesen Datenbestand übernehmen?</h2>
+      ${karte(k)}
+      ${k.verschluesselt ? `<label>Sicherungskennwort<input id="ubKw" type="password" autocomplete="off"></label>` : ""}
+      <p class="hinweis">Der Bestand wird auf diesen PC kopiert; ${k.art === "ordner" ? "der Ordner" : "die Datei"} selbst bleibt unverändert. Je nach Umfang dauert das einige Minuten. Angemeldet wird sich danach mit den bisherigen Benutzernamen und Passwörtern.</p>
+      ${k.art === "datenbank" ? `<p class="hinweis"><b>Nur die Datenbank:</b> Anhänge, archivierte Belege, Eingangsrechnungen und Bilder sind in dieser Sicherung nicht enthalten. Liegt der Ordner „daten“ vom bisherigen PC oder eine vollständige Sicherung vor, besser diese übernehmen.</p>` : ""}
+      <div class="ub-knoepfe"><button class="btn" type="button" id="ubAb">Abbrechen</button><button class="btn prim" type="button" id="ubLos">Jetzt übernehmen</button></div>
+      <div class="anm-fehler" id="ubFehler2">${esc(meldung)}</div>`;
+    if ($("#ubKw", box)) $("#ubKw", box).focus();
+    $("#ubAb", box).onclick = () => auswahl();
+    $("#ubLos", box).onclick = async () => {
+      const kennwort = $("#ubKw", box) ? $("#ubKw", box).value : "";
+      if (k.verschluesselt && !kennwort) { $("#ubFehler2", box).textContent = "Bitte das Sicherungskennwort eingeben."; return; }
+      box.innerHTML = `<h2>Die Daten werden übernommen …</h2>
+        <p class="hinweis">Bitte dieses Fenster geöffnet lassen und den Datenträger nicht abziehen.</p>
+        <div class="ub-balken"><i id="ubBalken"></i></div><p id="ubStand" class="hinweis">Der Datenbestand wird geprüft …</p>`;
+      const uhr = setInterval(async () => {
+        try {
+          const st = await (await fetch("/api/anmeldung/uebernahme/stand")).json();
+          if (!st.laeuft || !$("#ubStand", box)) return;
+          $("#ubStand", box).textContent = st.schritt + (st.von ? ` … ${st.dateien} von ${st.von} Dateien (${groesse(st.bytes)} von ${groesse(st.von_bytes)})` : " …");
+          $("#ubBalken", box).style.width = (st.von_bytes ? Math.round(st.bytes / st.von_bytes * 100) : 0) + "%";
+        } catch (x) { /* nur Anzeige */ }
+      }, 700);
+      try { fertig(await ruf({pfad: k.pfad, kennwort})); }
+      catch (x) { bestaetigen(k, x.message); }
+      finally { clearInterval(uhr); }
+    };
+  };
+
+  const fertig = r => {
+    box.innerHTML = `<h2>Die Daten sind übernommen</h2>
+      <p>${r.firma ? `<b>${esc(r.firma)}</b>: ` : ""}${r.benutzer} Benutzer, ${mz(r.kunden, "Kunde", "Kunden")}, ${mz(r.belege, "Beleg", "Belege")}${r.dateien ? `, ${mz(r.dateien, "Datei", "Dateien")} kopiert` : ""}.</p>
+      <p>Angemeldet wird sich jetzt mit den bisherigen Benutzernamen und Passwörtern.</p>
+      ${(r.hinweise || []).length > 1 ? `<div class="ub-titel">Noch zu beachten</div><ol class="ub-hinweise">${r.hinweise.map(h => `<li>${esc(h)}</li>`).join("")}</ol>`
+        : (r.hinweise || []).length ? `<p class="ub-hinweise">${esc(r.hinweise[0])}</p>` : ""}
+      <button class="btn prim" type="button" id="ubFertig">Zur Anmeldung</button>`;
+    $("#ubFertig", box).onclick = () => location.reload();
+    $("#ubFertig", box).focus();
+  };
+
+  if (direkt) bestaetigen(direkt); else auswahl();
+  if (funde === null) suchen();
 }
 // „Passwort vergessen?“: Code per E-Mail anfordern, dann mit Code (oder als Inhaber mit dem Notfallschlüssel) neu setzen.
 // Wird auch von der Stempeluhr benutzt (dort mit eigener Basisadresse).

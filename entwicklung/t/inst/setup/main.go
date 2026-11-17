@@ -183,7 +183,7 @@ func datenUebernehmen(ziel string) string {
 	}
 	if !frage("Sollen die Daten vom bisherigen PC übernommen werden?\n\nDazu wird der Ordner „daten“ aus dem alten Jahresring-Ordner gebraucht, z. B. auf einem USB-Stick " +
 		"(auf dem alten PC vorher Jahresring beenden und den ganzen Ordner „Jahresring“ oder nur „daten“ kopieren).\n\n" +
-		"Ja = Ordner jetzt auswählen\nNein = ohne Daten starten (lässt sich später nachholen)") {
+		"Ja = Ordner jetzt auswählen\nNein = ohne Daten starten (lässt sich beim ersten Start im Programm nachholen, auch aus einer Sicherung)") {
 		return ""
 	}
 	for {
@@ -281,7 +281,8 @@ func main() {
 	} else {
 		fertig += uebernommen + "Beim ersten Start richtet sich das Programm einmalig ein (Python, ein bis zwei Minuten, Internet nötig) – das schwarze Fenster dabei bitte offen lassen.\n\n"
 		if uebernommen == "" {
-			fertig += "Daten vom bisherigen PC später übernehmen: Jahresring beenden und den Ordner „daten“ vom alten PC nach\n" + ziel + "\nkopieren.\n\n"
+			fertig += "Daten vom bisherigen PC später übernehmen: Jahresring zeigt beim ersten Start die Seite „Ersten Zugang anlegen“. Dort keinen neuen Zugang anlegen, " +
+				"sondern „Daten vom bisherigen PC übernehmen“ wählen und den Ordner „daten“ vom alten PC oder eine Sicherung angeben.\n\n"
 		}
 	}
 	fertig += netz + "Gestartet wird künftig über „Jahresring“ auf dem Desktop."
