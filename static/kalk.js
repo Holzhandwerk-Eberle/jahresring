@@ -1667,6 +1667,7 @@ function druckEinstellungen(b, dis) {
     ${zeile("Platz optimieren", `<div class="radio" style="flex-wrap:wrap"><label><input type="radio" name="dr_kompakt" value="1" ${b.kompakt ? "checked" : ""} ${dis}> Ja</label><label><input type="radio" name="dr_kompakt" value="0" ${b.kompakt ? "" : "checked"} ${dis}> Nein</label><span class="hinweis" style="padding-top:2px">lange Positionen dürfen auf zwei Seiten aufgeteilt werden</span></div>`)}
     ${zeile("Bilder der Positionen", rg("bilder", JN, `<span class="hinweis" style="padding-top:2px">Vorgabe: nur in Angebot, Kostenvoranschlag und Auftragsbestätigung</span>`))}
     ${zeile("Letzte Position + Summen auf einer Seite", rg("zusammen", JN))}
+    ${re || dr.preise ? zeile("Übertrag", rg("uebertrag", JN, `<span class="hinweis" style="padding-top:2px">bei mehrseitigen Belegen: Zwischensumme der Positionen am Seitenende und oben auf der nächsten Seite</span>`)) : ""}
     ${zeile("Letzte Seite unten bündig", rg("unten_buendig", JN, `<span class="hinweis" style="padding-top:2px">Summen, Konditionen, Schlusstext und Gruß stehen unten auf der letzten Seite (PDF und Drucken)</span>`))}
     ${zeile("Briefbogen", rg("briefbogen", [[true, "Mit Briefbogen"], [false, "Ohne Briefbogen"]], `<span class="hinweis" style="padding-top:2px">ohne: für vorgedrucktes Papier</span>`))}
     ${zeile("Unterschrift", rg("unterschrift", JN, `<span class="hinweis" style="padding-top:2px">${E._unterschrift ? "über dem Namen unter dem Gruß" : "noch keine hinterlegt (Einstellungen > Belege & Briefbogen)"}</span>`))}`;

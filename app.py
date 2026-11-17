@@ -91,7 +91,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-147"
+VERSION = "2026.11.01-148"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -1052,7 +1052,7 @@ def update_pruefen():
             text = r.read(200_000).decode("utf-8", "replace")
         gefunden = sorted({v for v in re.findall(r"\b\d{4}\.\d{2}\.\d{2}-\d+\b", text)}, key=_version_zahl)
         if not gefunden:
-            raise ValueError("unter der Adresse steht keine Versionsnummer (erwartet z. B. 2026.11.01-147)")
+            raise ValueError("unter der Adresse steht keine Versionsnummer (erwartet z. B. 2026.11.01-148)")
         neueste = gefunden[-1]
         UPDATE.update(neu=neueste if _version_zahl(neueste) > _version_zahl(VERSION) else "", geprueft=jetzt(), fehler="")
     except Exception as f:  # noqa: BLE001  keine Verbindung, falsche Adresse, Schlüssel abgelaufen …
@@ -3677,7 +3677,8 @@ def druck_standard(art, e=None):
            "konditionen": rechnung and art not in ("storno", "gutschrift"), "qr": rechnung and art not in ("storno", "gutschrift"), "zusammen": True,
            "briefbogen": True, "unterschrift": True, "ab_positionen": "nein", "ab_summe": True,
            "bilder": art in ("angebot", "kv", "ab"),   # Positionsbilder standardmäßig nur in Angebot, KV und AB
-           "unten_buendig": bool((e or {}).get("unten_buendig", True))}
+           "unten_buendig": bool((e or {}).get("unten_buendig", True)),
+           "uebertrag": bool(preise)}   # mehrseitige Belege: Zwischensumme am Seitenende und am Anfang der Folgeseite
     return {**std, **(((e or {}).get("druck_vorgaben") or {}).get(art) or {})}
 
 
@@ -3686,6 +3687,8 @@ def druck_einstellung(b, e=None):
     d = {**druck_standard(b["art"], e), **roh}
     if b.get("status") in ("fest", "storniert") and "unten_buendig" not in roh:
         d["unten_buendig"] = False   # festgeschriebene Belege behalten ihr bisheriges Druckbild
+    if b.get("status") in ("fest", "storniert") and "uebertrag" not in roh:
+        d["uebertrag"] = False
     if BELEGARTEN.get(b["art"], {}).get("rechnung"):
         d["preise"], d["nummer"] = True, "ja"  # Rechnungen brauchen Preise, Summen und die volle Nummer
         if d["summen"] == "nein":
@@ -4276,9 +4279,10 @@ def beleg_festschreiben(con, bid):
     lfd, nummer = info["naechste_lfd"], info["naechste"]
     zaehler_setzen(con, "rechnung", lfd, int(datum[:4]))
     faellig = plus_tage(datum, b["zahlungsziel"])
-    # Druckbild einfrieren: „unten bündig“ gilt für diese Rechnung so, wie es beim Festschreiben eingestellt war
+    # Druckbild einfrieren: „unten bündig“ und „Übertrag“ gelten für diese Rechnung so, wie sie beim Festschreiben eingestellt waren
     roh = jl(con.execute("SELECT druck FROM belege WHERE id=?", (bid,)).fetchone()["druck"], {}) or {}
     roh["unten_buendig"] = bool(b["druck"].get("unten_buendig"))
+    roh["uebertrag"] = bool(b["druck"].get("uebertrag"))
     con.execute("UPDATE belege SET druck=? WHERE id=?", (json.dumps(roh, ensure_ascii=False), bid))
     con.execute("UPDATE belege SET nummer=?, lfd=?, status='fest', datum=?, faellig=?, geaendert=? WHERE id=?",
                 (nummer, lfd, datum, faellig, jetzt(), bid))
@@ -4770,7 +4774,8 @@ UB_MARKE = '<div style="height:0;overflow:visible;font:1px/1px Arial,sans-serif;
 
 
 def _ub_marken_lesen(pdf_pfad):
-    """Liefert {marke: (seite, y_mm von unten)} und die Seitenzahl aus einem Mess-PDF."""
+    """Liefert {marke: (seite, y_mm von unten, seitenhöhe_mm)} und die Seitenzahl aus einem Mess-PDF.
+    Marken sind unsichtbare Wörter „JR…“ (JRUBANFANG, JRUBENDE, JRTABENDE, JRP<nr> je Position)."""
     import logging
     from pypdf import PdfReader
     logging.getLogger("pypdf").setLevel(logging.ERROR)
@@ -4781,8 +4786,8 @@ def _ub_marken_lesen(pdf_pfad):
         unten_pt = float(seite.mediabox.bottom)
 
         def besucher(text, cm, tm, *_):
-            for m in ("JRUBANFANG", "JRUBENDE"):
-                if m in (text or ""):
+            for m in re.findall(r"JR[A-Z]+\d*", text or ""):
+                if m not in gefunden:   # eine über den Seitenwechsel geteilte Zeile zählt dort, wo sie beginnt
                     y = tm[4] * cm[1] + tm[5] * cm[3] + cm[5]   # Textmatrix mit der aktuellen Transformation verrechnen
                     gefunden[m] = (nr, (y - unten_pt) / 72 * 25.4, hoehe_pt / 72 * 25.4)
         try:
@@ -4792,35 +4797,111 @@ def _ub_marken_lesen(pdf_pfad):
     return gefunden, len(r.pages)
 
 
-def unten_abstand(bid, e):
-    """Misst, wie viel Platz unter dem Gruß auf der letzten Seite frei ist (mm), damit der Schlussblock
-    (Summen, Konditionen, Schlusstext, Gruß) unten bündig steht. 0 = nichts zu verschieben."""
+UE_HOEHE = 6.0     # mm: Platz für die Zeile „Übertrag“ oben (ab Seite 2) und unten auf jeder Seite
+UE_PLAN = {}       # Kennung → Zeilen [(seite, "oben"|"unten", text)] für den endgültigen Lauf (nur im Arbeitsspeicher)
+
+
+def _druck_messen(bid, zusatz=""):
+    """Ein Messlauf: Beleg mit unsichtbaren Marken als PDF erzeugen und die Marken lesen. None = nicht möglich."""
     tmp = os.path.join(DATEN, "tmp")
     os.makedirs(tmp, exist_ok=True)
     mess = os.path.join(tmp, f"messung-{bid}-{threading.get_ident()}.pdf")
     try:
-        pdf_url_rendern(f"http://127.0.0.1:{PORT}/druck/{bid}?pdf=1&marken=1", mess)
-        m, seiten = _ub_marken_lesen(mess)
+        pdf_url_rendern(f"http://127.0.0.1:{PORT}/druck/{bid}?pdf=1&marken=1{zusatz}", mess)
+        return _ub_marken_lesen(mess)
     except Exception as f:  # noqa: BLE001
-        print("Unten bündig: Messung nicht möglich:", f)
-        return 0.0, 0
+        print("Beleg-Messung nicht möglich:", f)
+        return None
     finally:
         try:
             os.remove(mess)
         except OSError:
             pass
+
+
+def _ub_abstand(m, e, uebertrag=False):
+    """Freier Platz (mm) unter dem Gruß auf der letzten Seite, damit der Schlussblock unten bündig steht. 0 = nichts verschieben."""
     if "JRUBANFANG" not in m or "JRUBENDE" not in m:
-        return 0.0, seiten
+        return 0.0
     s_a, (s_e, y_e) = m["JRUBANFANG"][0], m["JRUBENDE"][:2]
     if s_a != s_e:
-        return 0.0, seiten   # der Schlussblock geht schon über zwei Seiten – nichts verschieben
+        return 0.0   # der Schlussblock geht schon über zwei Seiten – nichts verschieben
     if vorlage_dateien("brief") and e.get("briefvorlage_aktiv", True):
         L = {**STANDARD_EINSTELLUNGEN["brief_layout"], **(e.get("brief_layout") or {})}
         unten = float(L["unten"])
     else:
         unten = 10 + 22   # Seitenrand unten + Platz für die Fußzeile
-    frei = y_e - unten - 3   # 3 mm Reserve gegen Rundung und Schriftunterlängen
-    return (round(frei, 1) if frei >= 3 else 0.0), seiten
+    frei = y_e - unten - (UE_HOEHE if uebertrag else 0) - 3   # 3 mm Reserve gegen Rundung und Schriftunterlängen
+    return round(frei, 1) if frei >= 3 else 0.0
+
+
+def unten_abstand(bid, e):
+    """Misst, wie viel Platz unter dem Gruß auf der letzten Seite frei ist (mm). Liefert (abstand, seitenzahl)."""
+    erg = _druck_messen(bid)
+    if not erg:
+        return 0.0, 0
+    return _ub_abstand(erg[0], e), erg[1]
+
+
+def uebertrag_werte(b):
+    """Je Position des Belegs (in Druckreihenfolge) der Betrag, der in die Summe eingeht – oder None, wenn kein Übertrag
+    gedruckt werden soll (ohne Preise, ohne Summen, oder die Positionen ergeben nicht die Summe des Belegs)."""
+    d, dr = b["daten"], b["druck"]
+    if not dr.get("uebertrag") or not dr.get("preise", d.get("preise", True)) or dr.get("summen") == "nein":
+        return None
+    s = d.get("summen", {})
+    faktor = 1 + (s.get("ust_satz", 19) / 100) if d.get("brutto_anzeige") else 1
+    pos = [z for z in d.get("zeilen", []) if z.get("typ") == "pos"]
+    netto = [round(fl(z.get("gp")), 2) if z.get("zaehlt", True) and not z.get("info") and z.get("zeige", {}).get("gp", 1) else 0.0 for z in pos]
+    if len(pos) < 2 or abs(sum(netto) - fl(s.get("netto_positionen", s.get("netto", 0)))) > 0.02:
+        return None   # nie einen Übertrag drucken, der nicht zur Summe des Belegs passt
+    return [round(v * faktor, 2) for v in netto]
+
+
+def uebertrag_zeilen(werte, m):
+    """Aus den Marken eines Messlaufs: [(seite, "unten"|"oben", text)] für jeden Seitenwechsel innerhalb der Positionen."""
+    seite_von = [m.get(f"JRP{i}", (None,))[0] for i in range(len(werte))]
+    if None in seite_von or "JRTABENDE" not in m:
+        return []
+    erste, letzte = min(seite_von), m["JRTABENDE"][0]
+    zeilen = []
+    for p in range(erste, letzte):
+        summe = round(sum(v for v, sv in zip(werte, seite_von) if sv <= p), 2)
+        if not any(v and sv <= p for v, sv in zip(werte, seite_von)):
+            continue   # bis hierher nur Textpositionen: nichts zu übertragen
+        zeilen += [(p, "unten", de(summe)), (p + 1, "oben", de(summe))]
+    return zeilen
+
+
+def druck_plan(bid, b, e):
+    """Messläufe vor dem endgültigen PDF: Abstand für „letzte Seite unten bündig“ und die Zeilen für den Übertrag.
+    Liefert {"abstand", "seiten", "ue"}; ue = Kennung der Übertrag-Zeilen oder "" (kein Übertrag nötig)."""
+    plan = {"abstand": 0.0, "seiten": 0, "ue": ""}
+    buendig, werte = bool(b["druck"].get("unten_buendig")), uebertrag_werte(b)
+    if not buendig and werte is None:
+        return plan
+    erg = _druck_messen(bid)
+    if not erg:
+        return plan
+    m, seiten = erg
+    mit_ue = False
+    if werte is not None and uebertrag_zeilen(werte, m):
+        # die Positionen gehen über mehr als eine Seite: noch einmal mit dem Platz für die Übertrag-Zeilen messen
+        erg2 = _druck_messen(bid, "&ue=platz")
+        zeilen = uebertrag_zeilen(werte, erg2[0]) if erg2 else []
+        if zeilen:
+            m, seiten, mit_ue = erg2[0], erg2[1], True
+            plan["ue"] = secrets.token_hex(8)
+            UE_PLAN[plan["ue"]] = zeilen
+            while len(UE_PLAN) > 40:
+                UE_PLAN.pop(next(iter(UE_PLAN)))
+    if buendig:
+        plan["abstand"], plan["seiten"] = _ub_abstand(m, e, mit_ue), seiten
+    return plan
+
+
+def druck_zusatz(plan, mit_abstand=True):
+    return (f"&abstand={plan['abstand']}" if mit_abstand and plan["abstand"] else "") + (f"&ue={plan['ue']}" if plan["ue"] else "")
 
 
 def pdf_rendern(bid, ziel):
@@ -4830,13 +4911,14 @@ def pdf_rendern(bid, ziel):
         e = einstellungen(con)
     finally:
         con.close()
-    abstand, seiten = unten_abstand(bid, e) if b["druck"].get("unten_buendig") else (0.0, 0)
-    pdf_url_rendern(f"http://127.0.0.1:{PORT}/druck/{bid}?pdf=1" + (f"&abstand={abstand}" if abstand else ""), ziel)
+    plan = druck_plan(bid, b, e)
+    abstand, seiten = plan["abstand"], plan["seiten"]
+    pdf_url_rendern(f"http://127.0.0.1:{PORT}/druck/{bid}?pdf=1" + druck_zusatz(plan), ziel)
     if abstand and seiten:
         try:
             from pypdf import PdfReader
             if len(PdfReader(ziel).pages) != seiten:   # Seite übergelaufen: lieber ohne Verschieben
-                pdf_url_rendern(f"http://127.0.0.1:{PORT}/druck/{bid}?pdf=1", ziel)
+                pdf_url_rendern(f"http://127.0.0.1:{PORT}/druck/{bid}?pdf=1" + druck_zusatz(plan, mit_abstand=False), ziel)
         except Exception as f:  # noqa: BLE001
             print("Unten bündig: Prüfung nicht möglich:", f)
     ku = b["daten"].get("kunde", {})
@@ -5731,8 +5813,9 @@ def zahlungsplan_text(e, dr, s):
     return h(text.strip())
 
 
-def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False):
-    """abstand: Leerraum in mm vor dem Schlussblock (letzte Seite unten bündig), marken: unsichtbare Messpunkte für die Berechnung."""
+def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False, ue=None):
+    """abstand: Leerraum in mm vor dem Schlussblock (letzte Seite unten bündig), marken: unsichtbare Messpunkte für die Berechnung,
+    ue: {"zeilen": [(seite, "oben"|"unten", text)]} = Platz für den Übertrag freihalten und die Zeilen einsetzen."""
     b = beleg_laden(con, bid)
     d = b["daten"]
     e = einstellungen(con)
@@ -5764,6 +5847,7 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False):
 
     rows, zusammen = [], []
     gruppen_start, titel_vorher = [], None
+    pos_nr = -1   # laufende Nummer der Position für die Messmarke (Übertrag)
     for z in d.get("zeilen", []):
         if z["typ"] == "titel":
             titel_vorher = len(rows)
@@ -5786,7 +5870,8 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False):
                        '<div class="klein">Bedarfs-/Alternativposition, nicht in der Summe enthalten</div>')
             gruppen_start.append(titel_vorher if titel_vorher is not None else len(rows))
             titel_vorher = None
-            rows.append(f'<tr class="pos{" textpos" if ist_text else ""}"><td>{h(z["posnr"]) if zg.get("posnr") else ""}{'<div class="alt">ALT</div>' if z.get("alternativ") else ""}</td><td class="r nw">{menge}</td>'
+            pos_nr += 1
+            rows.append(f'<tr class="pos{" textpos" if ist_text else ""}"><td>{UB_MARKE.format(f"JRP{pos_nr}") if marken else ""}{h(z["posnr"]) if zg.get("posnr") else ""}{'<div class="alt">ALT</div>' if z.get("alternativ") else ""}</td><td class="r nw">{menge}</td>'
                         f'<td>{text_html(z["text"], not ist_text)}{hinweis}</td><td class="r nw">{ep}</td><td class="r nw">{gp}</td></tr>')
             pos_bilder = bilder_html(z.get("bilder")) if dr.get("bilder", True) else ""
             if z.get("unter") and z.get("unterdruck") != "verdeckt":
@@ -5928,7 +6013,7 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False):
 <div class="betreff">{h(b["betreff"])}</div>
 {f'<div class="einl rt">{rich_html(text_einsetzen(b["einleitung"], beleg_platzhalter(b)))}</div>' if dr.get("anrede", True) else ""}
 {tabelle_oben}
-{ende_block_start}
+{ende_block_start}{UB_MARKE.format("JRTABENDE") if marken else ''}
 {'<style>table.pos tr.pos, table.pos tr.unter { page-break-inside: auto !important; break-inside: auto !important; } table.pos td { padding-top: 1.4mm; padding-bottom: 1.4mm; }</style>' if b.get("kompakt") else ''}
 {f'<div class="ub-abstand" style="height:{abstand:.2f}mm"></div>' if abstand > 0 else ''}{UB_MARKE.format("JRUBANFANG") if marken else ''}
 {zusammen_html}
@@ -5949,7 +6034,7 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False):
     if als_pdf and agb_original(beleg_agb_art(e, b, ku)):
         agb_seiten = []   # im PDF wird das Original-AGB-PDF angehängt (klein und gestochen scharf)
     agb_html = "".join(f'<div class="agb"><img class="voll" src="{u}"></div>' for u in agb_seiten)
-    return briefbogen_html(e, fi, beleg_titel(b), anschrift_html, info_html, inhalt, als_pdf, entwurf=entwurf, agb_html=agb_html)
+    return briefbogen_html(e, fi, beleg_titel(b), anschrift_html, info_html, inhalt, als_pdf, entwurf=entwurf, agb_html=agb_html, ue=ue)
 
 
 # Bildschirmansicht eines Belegs auf dem Briefbogen: Ist der Inhalt länger als eine Seite, würde die Fußzeile des Briefbogens mitten
@@ -5958,8 +6043,20 @@ LANG_JS = """addEventListener("load", () => { const bg = document.querySelector(
   if (bg && s && s.offsetHeight > bg.offsetHeight + 4) document.documentElement.classList.add("lang"); });"""
 
 
-def briefbogen_html(e, fi, titel, anschrift_html, info_html, inhalt, als_pdf, entwurf=False, agb_html=""):
-    """Seitenrahmen auf dem Briefbogen (Vorlage) oder mit einfachem Kopf/Fuß – für Belege, Mahnungen usw."""
+def briefbogen_html(e, fi, titel, anschrift_html, info_html, inhalt, als_pdf, entwurf=False, agb_html="", ue=None):
+    """Seitenrahmen auf dem Briefbogen (Vorlage) oder mit einfachem Kopf/Fuß – für Belege, Mahnungen usw.
+    ue: Übertrag – oben (ab Seite 2) und unten auf jeder Seite werden UE_HOEHE mm freigehalten; die Zeilen stehen als
+    absolut gesetzte Kästen genau in diesem Platz (Seite n beginnt bei n × Seitenhöhe)."""
+    uh = UE_HOEHE if ue else 0
+
+    def ue_html(seitenhoehe, oben, unten_ab, links, rechts):
+        if not ue:
+            return ""
+        css = (f"<style>.ue{{position:absolute;left:{links}mm;right:{rechts}mm;height:{UE_HOEHE}mm;z-index:3;display:flex;justify-content:flex-end;"
+               "align-items:center;gap:6mm;font-size:9pt;color:#333;white-space:nowrap}.ue i{font-style:normal;color:#555}"
+               ".ue b{min-width:24mm;text-align:right;padding-right:1.5mm;font-weight:600}@media screen{.ue{display:none}}</style>")
+        return css + "".join(f'<div class="ue ue-{wo}" style="top:calc({seite} * ({seitenhoehe}) + {oben if wo == "oben" else unten_ab}mm)"><i>Übertrag</i><b>{h(text)}</b></div>'
+                             for seite, wo, text in ue["zeilen"])
     logo = os.path.exists(os.path.join(DATEN, "logo.png")) or os.path.exists(os.path.join(DATEN, "logo.jpg"))
     absender = fi.get("absenderzeile") or " · ".join(x for x in [fi.get("firma")] + (fi.get("firma_anschrift") or "").split("\n") if x)
     fuss = [
@@ -5992,12 +6089,12 @@ body {{ font: 10pt/1.38 Calibri, "Segoe UI", Arial, sans-serif; color: #222; mar
 .bg-erste {{ position: absolute; top: 0; left: 0; width: 210mm; height: 297mm; background: #fff; z-index: 1; }}
 img.voll {{ width: 100%; height: 100%; display: block; }}
 table.seite {{ position: relative; z-index: 2; width: 100%; border-collapse: collapse; }}
-table.seite > thead td {{ height: {L["oben"]}mm; padding: 0; }}
-table.seite > tfoot td {{ height: {L["unten"]}mm; padding: 0; }}
+table.seite > thead td {{ height: {L["oben"] + uh}mm; padding: 0; }}
+table.seite > tfoot td {{ height: {L["unten"] + uh}mm; padding: 0; }}
 table.seite > tbody > tr > td {{ padding: 0 {L["rechts"]}mm 0 {L["links"]}mm; }}
-.bb-kopf {{ position: relative; height: {max(0, L["inhalt_start"] - L["oben"])}mm; }}
-.bb-adresse {{ position: absolute; top: {L["adresse_oben"] - L["oben"]}mm; left: 0; width: 85mm; font-size: 10.5pt; line-height: 1.35; }}
-.bb-info {{ position: absolute; top: {L["info_oben"] - L["oben"]}mm; left: {L["info_links"] - L["links"]}mm; }}
+.bb-kopf {{ position: relative; height: {max(0, L["inhalt_start"] - L["oben"] - uh)}mm; }}
+.bb-adresse {{ position: absolute; top: {L["adresse_oben"] - L["oben"] - uh}mm; left: 0; width: 85mm; font-size: 10.5pt; line-height: 1.35; }}
+.bb-info {{ position: absolute; top: {L["info_oben"] - L["oben"] - uh}mm; left: {L["info_links"] - L["links"]}mm; }}
 .agb {{ break-before: page; position: relative; z-index: 3; width: 210mm; height: 297mm; background: #fff; }}
 {bildschirm}
 </style></head><body>
@@ -6009,6 +6106,7 @@ table.seite > tbody > tr > td {{ padding: 0 {L["rechts"]}mm 0 {L["links"]}mm; }}
 <div class="bb-kopf"><div class="bb-adresse">{anschrift_html}</div><table class="info bb-info">{info_html}</table></div>
 {inhalt}
 </td></tr></tbody></table>
+{ue_html("1123px", L["oben"], 297 - L["unten"] - UE_HOEHE, L["links"], L["rechts"])}
 {agb_html}
 {druck_js}{'' if als_pdf else kern.skript(LANG_JS)}
 </body></html>"""
@@ -6022,9 +6120,9 @@ body {{ font: 10pt/1.38 "Segoe UI", Arial, sans-serif; color: #222; margin: 0; }
 {'' if als_pdf else 'html{background:#888} body{background:#fff;width:210mm;margin:10mm auto;padding:12mm 18mm 10mm 24mm;box-shadow:0 2px 12px rgba(0,0,0,.3)} .fuss{position:static!important;margin-top:20mm}'}
 table.seite {{ width: 100%; border-collapse: collapse; }}
 table.seite > thead td, table.seite > tfoot td {{ padding: 0; }}
-.fussplatz {{ height: 22mm; }}
+.fussplatz {{ height: {22 + uh}mm; }} .ue-platz {{ height: {uh}mm; }}
 .fuss {{ position: fixed; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; font-size: 7pt; color: #555; border-top: .3pt solid #999; padding-top: 2mm; }}
-.kopf {{ display: flex; justify-content: space-between; align-items: flex-start; min-height: 30mm; }}
+.kopf {{ display: flex; justify-content: space-between; align-items: flex-start; min-height: 30mm; margin-top: -{uh}mm; }}
 .kopf .logo img {{ max-height: 26mm; max-width: 70mm; }}
 .kopf .firmenname {{ font-size: 15pt; font-weight: 600; letter-spacing: .3pt; text-align: right; }}
 .adresse {{ display: flex; justify-content: space-between; align-items: flex-start; margin-top: 6mm; min-height: 45mm; }}
@@ -6035,7 +6133,7 @@ table.seite > thead td, table.seite > tfoot td {{ padding: 0; }}
 img.voll {{ width: 100%; height: 100%; display: block; }}
 </style></head><body>
 {'<div class="wasser">ENTWURF</div>' if entwurf else ''}
-<table class="seite"><tfoot><tr><td><div class="fussplatz"></div></td></tr></tfoot><tbody><tr><td>
+<table class="seite">{'<thead><tr><td><div class="ue-platz"></div></td></tr></thead>' if ue else ''}<tfoot><tr><td><div class="fussplatz"></div></td></tr></tfoot><tbody><tr><td>
 <div class="kopf"><div></div>{'<div class="logo"><img src="/api/logo"></div>' if logo else f'<div class="firmenname">{h(fi.get("firma"))}</div>'}</div>
 <div class="adresse">
   <div class="empf"><div class="absender">{h(absender)}</div><div class="anschrift">{anschrift_html}</div></div>
@@ -6043,6 +6141,7 @@ img.voll {{ width: 100%; height: 100%; display: block; }}
 </div>
 {inhalt}
 </td></tr></tbody></table>
+{ue_html("1123px - 22mm", 0.3, 275 - 22 - UE_HOEHE, 0, 0)}
 <div class="fuss">{"".join(f"<div>{x}</div>" for x in fuss)}</div>
 {agb_html}
 {druck_js}
@@ -9724,15 +9823,16 @@ class Handler(BaseHTTPRequestHandler):
                     abstand = max(0.0, min(250.0, float(q.get("abstand") or 0)))
                 except ValueError:
                     pass
-                if "drucken" in q and not abstand:
-                    # Drucken aus dem Browser: Abstand für „letzte Seite unten bündig“ vorher messen
+                ue = {"zeilen": []} if q.get("ue") == "platz" else {"zeilen": UE_PLAN[q["ue"]]} if q.get("ue") in UE_PLAN else None
+                if "drucken" in q and not abstand and ue is None:
+                    # Drucken aus dem Browser: Abstand für „letzte Seite unten bündig“ und den Übertrag vorher messen
                     with verbindung() as con:
                         bd = beleg_laden(con, bid)
                         e = einstellungen(con)
-                    if bd["druck"].get("unten_buendig"):
-                        abstand = unten_abstand(bid, e)[0]
+                    plan = druck_plan(bid, bd, e)
+                    abstand, ue = plan["abstand"], ({"zeilen": UE_PLAN[plan["ue"]]} if plan["ue"] else None)
                 with verbindung() as con:
-                    html_text = druck_html(con, bid, als_pdf=q.get("pdf") == "1", abstand=abstand, marken=q.get("marken") == "1")
+                    html_text = druck_html(con, bid, als_pdf=q.get("pdf") == "1", abstand=abstand, marken=q.get("marken") == "1", ue=ue)
                 return self.senden(200, html_text.encode("utf-8"), "text/html; charset=utf-8")
             m = re.fullmatch(r"/api/service/export/([A-Za-z0-9_.\-]+\.zip)", u.path)
             if m and methode == "GET":

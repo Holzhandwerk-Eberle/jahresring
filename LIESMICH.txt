@@ -291,3 +291,6 @@ Projektordner: Einträge springen beim Überfahren mit der Maus nicht mehr in di
 
 2026.11.01-147
 Arbeitsschutz: Die Fundstelle des Expositionsverzeichnisses ist berichtigt. Es steht seit der Neufassung der Gefahrstoffverordnung in § 10a (bisher genannt: § 14 Abs. 3). An den Fristen (40 Jahre nach Ende der Exposition) und am Verhalten des Programms ändert sich nichts.
+
+2026.11.01-148
+Belege: Übertrag bei mehrseitigen Belegen. Unten auf der Seite steht die Summe der bis dahin aufgeführten Positionen, oben auf der nächsten Seite derselbe Wert (netto oder brutto wie in der Spalte Gesamt; Alternativ- und Bedarfspositionen zählen nicht mit). Einseitige Belege bleiben unverändert. Abschaltbar je Beleg unter Druckeinstellungen › Gestaltung › Übertrag. Schon festgeschriebene Rechnungen behalten ihr bisheriges Druckbild.

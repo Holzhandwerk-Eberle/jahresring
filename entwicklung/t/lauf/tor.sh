@@ -21,6 +21,8 @@ bash $T/v25/neu.sh >/dev/null 2>&1
 schritt zahlungsplan python3 $T/neu/plan_wochen.py
 bash $T/v25/neu.sh >/dev/null 2>&1
 schritt dateiname python3 $T/neu/dateiname.py
+bash $T/v25/neu.sh >/dev/null 2>&1
+schritt uebertrag bash -c "python3 $T/neu/uebertrag.py > $O/tor_uebertrag.txt 2>&1"
 schritt preisimport bash -c "bash $T/v25/neu.sh >/dev/null 2>&1; python3 $T/bank/preise.py | grep -q 'FEHLER: \[\]'"
 bash $T/v25/neu.sh >/dev/null 2>&1
 schritt durchlauf bash -c "cd $T/v25 && timeout 600 node s/t10.js > $O/tor_t10.txt 2>&1; tail -1 $O/tor_t10.txt | grep -q 'fehler \[\]'"
