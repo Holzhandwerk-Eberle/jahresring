@@ -440,6 +440,10 @@ table.sl td{white-space:nowrap}
 .pb-ic{font-size:18px;width:22px;text-align:center;flex:0 0 auto}
 .pb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pb-name small{display:block;color:var(--leise);font-size:11.5px}
+/* Projektordner: festes Raster, damit beim Überfahren nichts verrutscht; die Knöpfe liegen über dem Ende des Namens */
+#pbListe{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:2px 8px;align-content:start;margin-bottom:0}
+#pbListe .pb-zeile{min-width:0;position:relative}
+#pbListe .pb-akt{position:absolute;right:3px;top:50%;transform:translateY(-50%);background:inherit;border-radius:5px;padding-left:4px}
 .pb-akt{display:none;gap:2px;flex:0 0 auto}
 .pb-zeile:hover .pb-akt,.pb-zeile.gew .pb-akt{display:flex}
 .pb-akt button{border:0;background:transparent;border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:14px}
@@ -2635,7 +2639,7 @@ async function render() {
   }
 }
 window.addEventListener("hashchange", render);
-const VERSION = "2026.11.01-145";
+const VERSION = "2026.11.01-146";
 (async () => {
   try {
     const v = await api("version").catch(() => ({}));

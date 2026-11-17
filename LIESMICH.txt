@@ -285,3 +285,6 @@ Zahlungsplan: Die Lieferzeit darf eine Spanne sein („4-6“ oder „4 bis 6“
 
 2026.11.01-145
 Dateiname der Belege: Das PDF heißt nur noch wie die Belegnummer (z. B. 2026-0031-A01.pdf) – als Anhang der E-Mail, im Projektordner und im Archiv; die XRechnung entsprechend 2026-0012_XRechnung.xml. Eine Fassung unter dem früheren Namen (Nummer_Belegart_Kunde) im Projektordner wird beim nächsten Erzeugen umbenannt. Archiv-PDFs festgeschriebener Rechnungen bleiben unverändert unter ihrem bisherigen Namen, der Kunde bekommt sie trotzdem unter der Nummer. Mahnungen behalten ihren Namen.
+
+2026.11.01-146
+Projektordner: Einträge springen beim Überfahren mit der Maus nicht mehr in die nächste Zeile. Die Liste hat jetzt ein festes Raster, die Knöpfe (Umbenennen, Papierkorb, Weitere) liegen über dem Ende des Namens.
