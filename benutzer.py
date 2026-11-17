@@ -69,10 +69,31 @@ def kalender_sicht(rolle, eigen):
 
 SITZUNG_TAGE = 120   # Stempeluhr am Handy (Rolle Mitarbeiter): Anmeldung bleibt lange erhalten
 SITZUNG_TAGE_BUERO = 30   # alle anderen Rollen: Anmeldung verfällt nach 30 Tagen ohne Benutzung
+# Beides lässt sich unter Einstellungen › Benutzer anpassen (app.py trägt die eingestellten Werte hier ein).
+SITZUNG = {"mitarbeiter": SITZUNG_TAGE, "buero": SITZUNG_TAGE_BUERO}
+MELDEN = {"fn": None}   # Rückruf fürs Protokoll: fn(con, art, login, text) – von app.py gesetzt
 
 
 def sitzung_tage(rolle):
-    return SITZUNG_TAGE if rolle == "mitarbeiter" else SITZUNG_TAGE_BUERO
+    return SITZUNG["mitarbeiter"] if rolle == "mitarbeiter" else SITZUNG["buero"]
+
+
+def sitzung_einstellen(mitarbeiter=None, buero=None):
+    """Dauer der Anmeldung in Tagen (1 bis 365); ungültige Werte lassen die Vorgabe stehen."""
+    for k, v, std in (("mitarbeiter", mitarbeiter, SITZUNG_TAGE), ("buero", buero, SITZUNG_TAGE_BUERO)):
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            n = std
+        SITZUNG[k] = n if 1 <= n <= 365 else std
+
+
+def _melden(con, art, login, text):
+    if MELDEN["fn"]:
+        try:
+            MELDEN["fn"](con, art, login, text)
+        except Exception as f:  # noqa: BLE001  das Protokoll darf die Anmeldung nicht verhindern
+            print("Protokoll der Anmeldung:", f)
 COOKIE = "jr_sitzung"
 
 _fehlversuche = {}
@@ -118,14 +139,11 @@ def maskieren(adr):
 
 
 def reset_adresse(con, b, firmen_adresse=""):
-    """Mailadresse für „Passwort vergessen“: am Benutzer hinterlegt, sonst die des verknüpften Mitarbeiters,
-    beim Inhaber zuletzt die Absenderadresse des Betriebs."""
+    """Mailadresse für „Passwort vergessen“: nur die am Benutzerkonto selbst hinterlegte, beim Inhaber ersatzweise die
+    Absenderadresse des Betriebs. Die Adresse aus dem Mitarbeiterstamm zählt bewusst nicht: Sonst könnte jeder, der
+    Mitarbeiterdaten bearbeiten darf, den Code auf seine eigene Adresse lenken und so ein fremdes Konto übernehmen."""
     if (b["email"] or "").strip():
         return b["email"].strip()
-    if b["mitarbeiter_id"]:
-        m = con.execute("SELECT email FROM mitarbeiter WHERE id=?", (b["mitarbeiter_id"],)).fetchone()
-        if m and (m["email"] or "").strip():
-            return m["email"].strip()
     if b["rolle"] == "inhaber":
         return (firmen_adresse or "").strip()
     return ""
@@ -197,26 +215,48 @@ def notfallschluessel_erzeugen(con, bid):
 
 
 # ---------------------------------------------------------------- Passwörter
+PIN_LAENGE = 6          # Rolle Mitarbeiter (Stempeluhr); früher vergebene kürzere PINs gelten weiter, bis sie geändert werden
+PW_RUNDEN = 600_000     # PBKDF2-HMAC-SHA256; ältere Hashes (200.000 Runden) werden bei der nächsten Anmeldung erneuert
+
+
 def pw_hash(pw):
     salz = secrets.token_hex(16)
-    h = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), bytes.fromhex(salz), 200_000).hex()
-    return f"pbkdf2${salz}${h}"
+    h = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), bytes.fromhex(salz), PW_RUNDEN).hex()
+    return f"pbkdf2${PW_RUNDEN}${salz}${h}"
+
+
+def _pw_teile(gespeichert):
+    """(Runden, Salz, Hash) – das frühere Format „pbkdf2$Salz$Hash“ hatte 200.000 Runden."""
+    t = (gespeichert or "").split("$")
+    if len(t) == 3 and t[0] == "pbkdf2":
+        return 200_000, t[1], t[2]
+    if len(t) == 4 and t[0] == "pbkdf2" and t[1].isdigit() and 1000 <= int(t[1]) <= 10_000_000:
+        return int(t[1]), t[2], t[3]
+    raise ValueError("unbekanntes Format")
 
 
 def pw_pruefen(pw, gespeichert):
     try:
-        _, salz, h = gespeichert.split("$")
+        runden, salz, h = _pw_teile(gespeichert)
+        neu = hashlib.pbkdf2_hmac("sha256", (pw or "").encode("utf-8"), bytes.fromhex(salz), runden).hex()
     except (ValueError, AttributeError):
         return False
-    neu = hashlib.pbkdf2_hmac("sha256", (pw or "").encode("utf-8"), bytes.fromhex(salz), 200_000).hex()
     return hmac.compare_digest(neu, h)
+
+
+def pw_veraltet(gespeichert):
+    """True, wenn der Hash mit weniger Runden gebildet wurde als heute üblich (wird bei der Anmeldung erneuert)."""
+    try:
+        return _pw_teile(gespeichert)[0] < PW_RUNDEN
+    except (ValueError, AttributeError):
+        return False
 
 
 def pw_regeln(pw, rolle):
     pw = pw or ""
     if rolle == "mitarbeiter":
-        if len(pw) < 4:
-            raise Fehler("Die PIN bzw. das Passwort muss mindestens 4 Zeichen haben.")
+        if len(pw) < PIN_LAENGE:
+            raise Fehler(f"Die PIN bzw. das Passwort muss mindestens {PIN_LAENGE} Zeichen haben.")
     elif len(pw) < 8:
         raise Fehler("Das Passwort muss mindestens 8 Zeichen haben.")
     elif pw.lower() in ("passwort", "password", "12345678", "123456789", "qwertzui", "jahresring", "schreiner", "11111111", "00000000"):
@@ -322,10 +362,12 @@ def _gesperrt(schluessel):
 
 
 def _fehlversuch(schluessel):
+    """Zählt einen Fehlversuch und gibt die neue Anzahl zurück."""
     with _sperre:
         n, bis = _fehlversuche.get(schluessel, (0, 0))
         n += 1
         _fehlversuche[schluessel] = (n, time.time() + min(300, 5 * 2 ** (n - 4)) if n >= 5 else 0)
+        return n
 
 
 def anmelden(con, login, pw, geraet="", ip=""):
@@ -335,17 +377,22 @@ def anmelden(con, login, pw, geraet="", ip=""):
         raise Fehler("Zu viele Fehlversuche. Bitte kurz warten und dann erneut versuchen.", 429)
     b = con.execute("SELECT * FROM benutzer WHERE lower(login)=? AND aktiv=1", (login,)).fetchone()
     if not b or not pw_pruefen(pw, b["pw_hash"]):
-        _fehlversuch(schluessel)
+        if _fehlversuch(schluessel) == 5:   # einmal je Sperre festhalten, nicht jeden Versuch (sonst ließe sich das Protokoll fluten)
+            _melden(con, "anmeldung", login[:60], f"Anmeldung für „{login[:60]}“ nach fünf Fehlversuchen vorübergehend gesperrt (von {ip})")
+            con.commit()
         time.sleep(0.4)
         raise Fehler("Benutzername oder Passwort stimmt nicht.", 401)
     with _sperre:
         _fehlversuche.pop(schluessel, None)
+    if pw_veraltet(b["pw_hash"]):   # mit der heute üblichen Rundenzahl neu ablegen
+        con.execute("UPDATE benutzer SET pw_hash=? WHERE id=?", (pw_hash(pw), b["id"]))
     token = secrets.token_urlsafe(32)
     con.execute("INSERT INTO sitzungen (token, benutzer_id, angelegt, zuletzt, ablauf, geraet) VALUES (?,?,?,?,?,?)",
                 (token_hash(token), b["id"], jetzt(), jetzt(), (datetime.now() + timedelta(days=sitzung_tage(b["rolle"]))).isoformat(timespec="seconds"),
                  (geraet or "")[:200]))
     con.execute("UPDATE benutzer SET letzter_login=? WHERE id=?", (jetzt(), b["id"]))
     con.execute("DELETE FROM sitzungen WHERE ablauf<?", (jetzt(),))
+    _melden(con, "anmeldung", b["login"], f"{b['login']} angemeldet (von {ip or 'diesem PC'}; {str(geraet or '')[:60] or 'Gerät unbekannt'})")
     return token, b
 
 
@@ -354,6 +401,57 @@ def abmelden(con, token):
 
 
 # ---------------------------------------------------------------- Verwaltung
+def _rechte_text(roh):
+    """Eigene Rechte in Worten: „Aufträge bearbeiten, Kunden lesen, ohne Preise“."""
+    try:
+        r = json.loads(roh or "{}")
+    except ValueError:
+        return "Rechte nicht lesbar"
+    namen = dict(BEREICHE)
+    teile = [f"{namen.get(k, k).split(' (')[0]} {'bearbeiten' if v == 2 else 'lesen'}" for k, v in (r.get("bereiche") or {}).items() if v]
+    if r.get("auftrag_reiter") == "werkstatt":
+        teile.append("im Auftrag nur Werkstatt")
+    if r.get("preise") is False:
+        teile.append("ohne Preise")
+    return ", ".join(teile) or "keine Bereiche"
+
+
+def _aenderungen(alt, werte):
+    """Was sich an einem Benutzer ändert – für das Protokoll (ohne Passwort und ohne volle E-Mail-Adresse)."""
+    aus = []
+    if "login" in werte and werte["login"] != alt["login"]:
+        aus.append(f"Benutzername jetzt „{werte['login']}“")
+    if "name" in werte and werte["name"] != (alt["name"] or ""):
+        aus.append("Name geändert")
+    if "rolle" in werte and werte["rolle"] != alt["rolle"]:
+        aus.append(f"Rolle {ROLLEN.get(alt['rolle'], {}).get('name', alt['rolle'])} → {ROLLEN[werte['rolle']]['name']}")
+    rolle = werte.get("rolle", alt["rolle"])
+    if "rechte" in werte and rolle == "eigen":
+        try:
+            vorher, nachher = json.loads(alt["rechte"] or "{}"), json.loads(werte["rechte"] or "{}")
+        except ValueError:
+            vorher, nachher = {}, {"_": 1}
+        if {k: vorher.get(k) for k in ("bereiche", "auftrag_reiter", "preise")} != {k: nachher.get(k) for k in ("bereiche", "auftrag_reiter", "preise")} or alt["rolle"] != "eigen":
+            aus.append(f"eigene Rechte: {_rechte_text(werte['rechte'])}")
+        if vorher.get("kalender") != nachher.get("kalender"):
+            aus.append("Kalenderrechte geändert")
+    elif "rechte" in werte:
+        try:
+            if json.loads(alt["rechte"] or "{}").get("kalender") != json.loads(werte["rechte"] or "{}").get("kalender"):
+                aus.append("Kalenderrechte geändert")
+        except ValueError:
+            pass
+    if "aktiv" in werte and int(werte["aktiv"]) != int(alt["aktiv"] if alt["aktiv"] is not None else 1):
+        aus.append("gesperrt" if not werte["aktiv"] else "wieder freigegeben")
+    if "mitarbeiter_id" in werte and werte["mitarbeiter_id"] != alt["mitarbeiter_id"]:
+        aus.append("Verknüpfung mit dem Mitarbeiterstamm " + ("gesetzt" if werte["mitarbeiter_id"] else "gelöst"))
+    if "email" in werte and werte["email"] != (alt["email"] if "email" in alt.keys() else "") and (werte["email"] or (alt["email"] if "email" in alt.keys() else "")):
+        aus.append("E-Mail-Adresse für „Passwort vergessen“ geändert")
+    if "pw_hash" in werte:
+        aus.append("Passwort bzw. PIN neu gesetzt")
+    return aus
+
+
 def _daten(con, d, alt=None):
     werte = {}
     if "login" in d:
@@ -436,6 +534,8 @@ def api(con, methode, teile, q, daten, token=None):
             raise Fehler("Bitte einen Benutzernamen angeben.")
         werte["angelegt"] = werte["geaendert"] = jetzt()
         cur = con.execute(f"INSERT INTO benutzer ({','.join(werte)}) VALUES ({','.join('?' * len(werte))})", list(werte.values()))
+        _melden(con, "benutzer", werte["login"], f"Benutzer „{werte['login']}“ angelegt (Rolle {ROLLEN[werte['rolle']]['name']}"
+                + (f", {_rechte_text(werte.get('rechte'))}" if werte["rolle"] == "eigen" else "") + ")")
         return oeffentlich(con.execute("SELECT * FROM benutzer WHERE id=?", (cur.lastrowid,)).fetchone())
     alt = con.execute("SELECT * FROM benutzer WHERE id=?", (rid,)).fetchone() if rid else None
     if rid and not alt:
@@ -450,8 +550,11 @@ def api(con, methode, teile, q, daten, token=None):
                 # sich selbst die Inhaber-Rechte zu nehmen, wäre nicht rückgängig zu machen, sobald man die Seite verlässt
                 raise Fehler("Die eigene Inhaber-Rolle lässt sich nicht selbst abgeben oder sperren. Das kann nur ein anderer Inhaber tun.")
         if werte:
+            aend = _aenderungen(alt, werte)
             werte["geaendert"] = jetzt()
             con.execute(f"UPDATE benutzer SET {','.join(k + '=?' for k in werte)} WHERE id=?", list(werte.values()) + [rid])
+            if aend:
+                _melden(con, "benutzer", alt["login"], f"Benutzer „{alt['login']}“ geändert: " + "; ".join(aend))
         if "pw_hash" in werte or werte.get("aktiv") == 0:  # andere Geräte abmelden
             con.execute("DELETE FROM sitzungen WHERE benutzer_id=? AND token<>?", (rid, token_hash(token or "")))
         return oeffentlich(con.execute("SELECT * FROM benutzer WHERE id=?", (rid,)).fetchone())
@@ -467,6 +570,7 @@ def api(con, methode, teile, q, daten, token=None):
             raise Fehler("Der eigene Zugang kann nicht gelöscht werden.")
         con.execute("DELETE FROM sitzungen WHERE benutzer_id=?", (rid,))
         con.execute("DELETE FROM benutzer WHERE id=?", (rid,))
+        _melden(con, "benutzer", alt["login"], f"Benutzer „{alt['login']}“ gelöscht (Rolle {ROLLEN.get(alt['rolle'], {}).get('name', alt['rolle'])})")
         return {"ok": True}
     raise Fehler("Unbekannte Anfrage", 404)
 

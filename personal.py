@@ -37,7 +37,11 @@ CREATE TABLE IF NOT EXISTS zeiten (
     quelle TEXT DEFAULT 'pc',
     angelegt TEXT, geaendert TEXT, geaendert_von TEXT DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS zeiten_ma ON zeiten(mitarbeiter_id, datum);
+DROP INDEX IF EXISTS zeiten_ma;
+-- Zeitkonten: Die Prüfsumme je Mitarbeiter und Jahr liest nur diesen Index (alle nötigen Spalten stehen darin), nicht die Tabelle
+CREATE INDEX IF NOT EXISTS zeiten_ma_zeit ON zeiten(mitarbeiter_id, datum, beginn, ende);
+-- laufende (noch nicht beendete) Abschnitte: für Stempeluhr und Personalübersicht ohne Durchsuchen aller Zeiten
+CREATE INDEX IF NOT EXISTS zeiten_offen ON zeiten(mitarbeiter_id) WHERE ende IS NULL;
 CREATE TABLE IF NOT EXISTS stempel_ereignisse (
     client_id TEXT PRIMARY KEY, mitarbeiter_id INTEGER, zeit TEXT, aktion TEXT, daten TEXT, ergebnis TEXT, angelegt TEXT
 );
@@ -64,6 +68,43 @@ ABWESENHEIT = {
     "urlaub": ("Urlaub", True), "krank": ("Krank", True), "kind_krank": ("Kind krank", True), "schule": ("Berufsschule", True),
     "sonder": ("Sonderurlaub", True), "ueberstunden": ("Überstunden frei", False), "unbezahlt": ("Unbezahlt frei", False),
 }
+RUHEZEIT_STUNDEN = 11   # § 5 ArbZG: ununterbrochene Ruhezeit nach dem Ende der täglichen Arbeitszeit
+
+# Gesetzlicher Mindestlohn je Stunde ab dem genannten Tag (Mindestlohngesetz, Anpassungsverordnungen). Die Minijob-Grenze folgt
+# daraus: 130 Stunden im Vierteljahr zum Mindestlohn, auf volle Euro aufgerundet (§ 8 Abs. 1a SGB IV).
+MINDESTLOHN = [("2024-01-01", 12.41), ("2025-01-01", 12.82), ("2026-01-01", 13.90), ("2027-01-01", 14.60)]
+
+
+def mindestlohn(tag_iso):
+    """Mindestlohn am genannten Tag (für spätere Jahre gilt der letzte bekannte Satz weiter)."""
+    return next((w for ab, w in reversed(MINDESTLOHN) if ab <= str(tag_iso)[:10]), MINDESTLOHN[0][1])
+
+
+def minijob_grenze(tag_iso):
+    import math
+    return math.ceil(round(mindestlohn(tag_iso) * 130 / 3, 4))
+
+
+def lohn_hinweise(m, monat, ist_stunden, soll_stunden):
+    """Hinweise zu Mindestlohn und Minijob-Grenze für einen Monat – nur Hinweise, gerechnet aus den Angaben im Mitarbeiterstamm."""
+    aus = []
+    stichtag = f"{monat}-01"
+    ml = mindestlohn(stichtag)
+    art = m["lohnart"]
+    geld = lambda v: f"{v:,.2f}".replace(",", "#").replace(".", ",").replace("#", ".") + " €"   # noqa: E731
+    if art in ("stunde", "minijob") and 0 < (m["stundenlohn"] or 0) < ml - 0.004:
+        aus.append(f"Stundenlohn {geld(m['stundenlohn'])} liegt unter dem gesetzlichen Mindestlohn von {geld(ml)}")
+    if art == "gehalt" and (m["gehalt"] or 0) > 0 and soll_stunden > 0 and m["gehalt"] / soll_stunden < ml - 0.004:
+        aus.append(f"Gehalt {geld(m['gehalt'])} bei {str(round(soll_stunden, 1)).replace('.', ',')} Sollstunden ergibt {geld(m['gehalt'] / soll_stunden)} je Stunde – "
+                   f"unter dem gesetzlichen Mindestlohn von {geld(ml)}")
+    if art == "minijob" and (m["stundenlohn"] or 0) > 0:
+        grenze, verdienst = minijob_grenze(stichtag), (m["stundenlohn"] or 0) * ist_stunden
+        if verdienst > grenze + 0.004:
+            aus.append(f"Richtwert {geld(verdienst)} liegt über der Minijob-Grenze von {geld(grenze)} im Monat "
+                       f"(bei {geld(m['stundenlohn'])} sind das höchstens {str(round(grenze / m['stundenlohn'], 1)).replace('.', ',')} Stunden)")
+    return aus
+
+
 LOHNARTEN = {"stunde": "Stundenlohn", "gehalt": "Monatsgehalt", "minijob": "Minijob", "azubi": "Auszubildende/r", "inhaber": "Inhaber (ohne Lohn)"}
 KST_NAMEN = {"AVORBER": "Arbeitsvorbereitung", "ZUSCHNIT": "Zuschnitt", "KANTENMA": "Kantenmaschine", "SONST-MA": "Sonstige Maschinen",
              "BANKRAUM": "Bankraum", "OBERFLÄ": "Oberfläche", "MONTAGE": "Montage", "REPARAT": "Reparatur", "FAHRZEIT": "Fahrzeit",
@@ -516,7 +557,7 @@ def mitarbeiter_liste(con, q):
                 d["ueberstunden"] = None
         except Exception:  # noqa: BLE001
             d["ueberstunden"] = d["resturlaub"] = None
-        lauf = con.execute("SELECT z.*, a.nummer AS auftragsnr FROM zeiten z LEFT JOIN auftraege a ON a.id=z.auftrag_id "
+        lauf = con.execute("SELECT z.*, a.nummer AS auftragsnr FROM zeiten z INDEXED BY zeiten_offen LEFT JOIN auftraege a ON a.id=z.auftrag_id "
                            "WHERE z.mitarbeiter_id=? AND z.ende IS NULL ORDER BY z.datum DESC, z.beginn DESC LIMIT 1", (m["id"],)).fetchone()
         d["laeuft"] = dict(lauf) if lauf else None
         d["benutzer"] = [r["login"] for r in con.execute("SELECT login FROM benutzer WHERE mitarbeiter_id=?", (m["id"],))]
@@ -573,6 +614,11 @@ def zeit_speichern(con, d, zid=None, von=""):
     if not beginn:
         raise Fehler("Bitte den Beginn angeben.")
     zeit_pruefen(con, mid, datum, beginn, ende, zid)
+    for mo in {str(datum or "")[:7], (alt["datum"] if alt else "")[:7]} - {""}:
+        if monat_abgerechnet(con, mid, mo) and d.get("quelle") != "nachtrag":
+            # Büro: möglich, aber nur nach Rückfrage – der Lohn dieses Monats ist schon zur Zahlung angelegt
+            kern.rueckfrage(f"lohnmonat-{mid}-{mo}", f"Für {mo[5:7]}/{mo[:4]} sind die Lohnzahlungen dieses Mitarbeiters schon angelegt.\n\n"
+                            "Eine Änderung der Zeiten ändert die Stunden, nach denen abgerechnet wurde. Bitte danach den Lohn prüfen.", "Trotzdem ändern")
     auftrag = d.get("auftrag_id", alt["auftrag_id"] if alt else None)
     auftrag = int(auftrag) if auftrag else None
     titel = d.get("titel", (alt["titel"] if alt else 0) if not ("auftrag_id" in d and alt and auftrag != alt["auftrag_id"]) else 0)
@@ -623,6 +669,10 @@ def tage(con, m, von, bis):
     abw = abwesenheiten_im(con, m["id"], von, bis)
     inhaber = m["lohnart"] == "inhaber"
     aus = []
+    # Ruhezeit (§ 5 ArbZG): Ende des letzten Arbeitstags vor dem Zeitraum, um den ersten Tag prüfen zu können
+    v = con.execute("SELECT datum, MAX(ende) AS ende FROM zeiten WHERE mitarbeiter_id=? AND datum<? AND datum>=? AND ende IS NOT NULL GROUP BY datum ORDER BY datum DESC LIMIT 1",
+                    (m["id"], von, (d0 - timedelta(2)).isoformat())).fetchone()
+    feierabend = datetime.fromisoformat(f"{v['datum']}T{v['ende']}") if v and v["ende"] else None
     t = d0
     while t <= d1:
         iso = t.isoformat()
@@ -685,6 +735,16 @@ def tage(con, m, von, bis):
             tag["hinweis"] = tag["hinweis"] or "über 6 h: 30 min Pause nötig"
         if tag["arbeit"] > 10:
             tag["hinweis"] = "mehr als 10 h Arbeitszeit"
+        if segs and not inhaber:
+            try:
+                beginn_dt = datetime.fromisoformat(f"{iso}T{segs[0]['beginn']}")
+                if feierabend and timedelta(0) < beginn_dt - feierabend < timedelta(hours=RUHEZEIT_STUNDEN):
+                    ruhe = (beginn_dt - feierabend).total_seconds() / 3600
+                    tag["hinweis"] = (tag["hinweis"] + " · " if tag["hinweis"] else "") + f"Ruhezeit nur {str(round(ruhe, 1)).replace('.', ',')} h (mindestens {RUHEZEIT_STUNDEN} h)"
+                letztes = max((z["ende"] for z in segs if z["ende"]), default=None)
+                feierabend = datetime.fromisoformat(f"{iso}T{letztes}") if letztes else None
+            except ValueError:
+                feierabend = None
         aus.append(tag)
         t += timedelta(1)
     return aus
@@ -872,7 +932,7 @@ def monatsbeleg_html(con, mid, monat, firma, als_pdf=False, sig=None):
     return f"""<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Monatsbeleg {h(m['name'])} {monat}</title><style>
 @page {{ size: A4; margin: 12mm 12mm 14mm 14mm; }}
 body {{ font: 8.6pt/1.3 Calibri, "Segoe UI", Arial, sans-serif; color: #222; margin: 0; }}
-{"" if als_pdf else "html{background:#888} body{background:#fff;width:210mm;margin:10mm auto;padding:12mm 12mm 14mm 14mm;box-sizing:border-box;box-shadow:0 2px 12px rgba(0,0,0,.3)}"}
+{"" if als_pdf else "@media screen{html{background:#888} body{background:#fff;width:210mm;margin:10mm auto;padding:12mm 12mm 14mm 14mm;box-sizing:border-box;box-shadow:0 2px 12px rgba(0,0,0,.3)}}"}
 .kopf {{ display:flex; justify-content:space-between; align-items:flex-end; border-bottom:.8pt solid #333; padding-bottom:2mm; margin-bottom:3mm; }}
 h1 {{ font-size:14pt; margin:0; }} .unter {{ color:#555; }}
 table {{ border-collapse:collapse; }} table.t {{ width:100%; }}
@@ -1066,7 +1126,8 @@ def lohn_liste(con, monat):
                     "stunden": round(sum(t["arbeit"] for t in ts), 2), "ist": round(sum(t["ist"] for t in ts), 2),
                     "soll": round(sum(t["soll"] for t in ts), 2),
                     "urlaub": sum(t["urlaubstage"] for t in ts), "krank": sum(1 for t in ts if t["abw"] in ("krank", "kind_krank") and t["soll"]),
-                    "schaetzung": round(m["stundenlohn"] * sum(t["ist"] for t in ts), 2) if m["lohnart"] in ("stunde", "minijob") else m["gehalt"]})
+                    "schaetzung": round(m["stundenlohn"] * sum(t["ist"] for t in ts), 2) if m["lohnart"] in ("stunde", "minijob") else m["gehalt"],
+                    "hinweise": lohn_hinweise(m, monat, sum(t["ist"] for t in ts), sum(t["soll"] + (t.get("feiertag_std") or 0) for t in ts))})
     e = HILFE["einstellungen"](con)
     return {"monat": monat, "zeilen": aus, "faellig": lohn_faelligkeiten(monat), "finanzamt_id": e.get("lohn_finanzamt_id"),
             "empfaenger": [dict(r) for r in con.execute("SELECT id, kurzname, gruppe, iban FROM lieferanten WHERE aktiv=1 AND gruppe<>'Mitarbeiter' "
@@ -1216,7 +1277,7 @@ def mein_plan(con, m, tage_voraus=6):
 
 def stempel_status(con, m):
     heute = date.today().isoformat()
-    offen = con.execute("SELECT z.*, a.nummer AS auftragsnr, a.bezeichnung AS auftrag FROM zeiten z LEFT JOIN auftraege a ON a.id=z.auftrag_id "
+    offen = con.execute("SELECT z.*, a.nummer AS auftragsnr, a.bezeichnung AS auftrag FROM zeiten z INDEXED BY zeiten_offen LEFT JOIN auftraege a ON a.id=z.auftrag_id "
                         "WHERE z.mitarbeiter_id=? AND z.ende IS NULL ORDER BY z.datum DESC, z.beginn DESC LIMIT 1", (m["id"],)).fetchone()
     montag = (date.today() - timedelta(date.today().weekday())).isoformat()
     woche = tage(con, m, montag, heute)
@@ -1232,6 +1293,22 @@ def stempel_status(con, m):
             "letzte": dict(letzte) if letzte else None, "inhaber": m["lohnart"] == "inhaber", "serverzeit": datetime.now().isoformat(timespec="seconds")}
 
 
+# Die Stempeluhr am Handy arbeitet auch ohne Netz und überträgt später – die Uhrzeit kommt dann vom Handy. Damit das Büro sieht,
+# was nicht im Augenblick des Stempelns ankam: Ab STEMPEL_TOLERANZ Minuten Verzug wird der Eintrag als „nachträglich eingegangen“
+# gekennzeichnet. Was älter als STEMPEL_MAX_TAGE Tage ist, wird nicht mehr übernommen (dafür gibt es den Nachtrag bzw. das Büro).
+STEMPEL_TOLERANZ = 15
+STEMPEL_MAX_TAGE = 7
+
+
+def monat_abgerechnet(con, mid, monat):
+    """Für diesen Monat sind schon Lohnzahlungen angelegt: Die Zeiten dahinter sollen sich nicht mehr unbemerkt ändern."""
+    l = con.execute("SELECT zahlungen FROM lohn WHERE mitarbeiter_id=? AND monat=?", (mid, monat)).fetchone()
+    try:
+        return bool(l and json.loads(l["zahlungen"] or "{}"))
+    except ValueError:
+        return False
+
+
 def stempeln(con, m, ev):
     """Ein Stempel-Ereignis verarbeiten. ev: {client_id, aktion: start|pause|ende, zeit: 'YYYY-MM-DDTHH:MM', auftrag_id, kst, taetigkeit}"""
     cid = str(ev.get("client_id") or "")[:64]
@@ -1244,12 +1321,27 @@ def stempeln(con, m, ev):
         zp = datetime.fromisoformat(zeit)
     except ValueError:
         raise Fehler("Zeitpunkt nicht lesbar.")
-    if zp > datetime.now() + timedelta(minutes=10):
-        zp = datetime.now()  # Handyuhr geht vor
+    eingang = datetime.now()
+    if zp > eingang + timedelta(minutes=10):
+        zp = eingang  # Handyuhr geht vor
     datum, uhr = zp.date().isoformat(), zp.strftime("%H:%M")
     aktion = ev.get("aktion")
+    verzug = max(0, int((eingang - zp).total_seconds() // 60))
+    spaet = verzug if verzug > STEMPEL_TOLERANZ else 0
+    grund = ""
+    if verzug > STEMPEL_MAX_TAGE * 1440:
+        grund = f"ist älter als {STEMPEL_MAX_TAGE} Tage"
+    elif monat_abgerechnet(con, m["id"], datum[:7]):
+        grund = f"fällt in den schon abgerechneten Monat {datum[5:7]}/{datum[:4]}"
+    if grund and aktion in ("start", "pause", "ende"):
+        # Nicht übernehmen, aber als erledigt beantworten: Das Handy soll die Buchung aus seiner Warteschlange nehmen und die folgenden senden.
+        erg = {"ok": False, "abgelehnt": True, "id": None,
+               "hinweise": [f"Die Stempelung vom {de_datum(datum)}, {uhr} Uhr {grund} und wurde nicht übernommen. Bitte die Zeit im Büro nachtragen lassen."]}
+        if cid:
+            con.execute("INSERT INTO stempel_ereignisse VALUES (?,?,?,?,?,?,?)", (cid, m["id"], zeit, aktion, json.dumps(ev, ensure_ascii=False), json.dumps(erg), jetzt()))
+        return erg
     hinweise = []
-    offen = con.execute("SELECT * FROM zeiten WHERE mitarbeiter_id=? AND ende IS NULL ORDER BY datum DESC, beginn DESC", (m["id"],)).fetchall()
+    offen = con.execute("SELECT * FROM zeiten INDEXED BY zeiten_offen WHERE mitarbeiter_id=? AND ende IS NULL ORDER BY datum DESC, beginn DESC", (m["id"],)).fetchall()
     for o in offen:
         if o["datum"] == datum:
             if minuten(uhr) <= minuten(o["beginn"]):
@@ -1261,7 +1353,7 @@ def stempeln(con, m, ev):
                 hinweise.append("Zeitpunkt lag vor dem Beginn – Abschnitt mit 0 Minuten geschlossen.")
             else:
                 uhr_ende = uhr
-            con.execute("UPDATE zeiten SET ende=?, geaendert=? WHERE id=?", (uhr_ende, jetzt(), o["id"]))
+            con.execute("UPDATE zeiten SET ende=?, geaendert=?, eingang=?, spaet=MAX(IFNULL(spaet,0), ?) WHERE id=?", (uhr_ende, jetzt(), jetzt(), spaet, o["id"]))
         else:
             # vergessener Feierabend an einem früheren Tag: offen lassen wäre falsch, Ende = Beginn + Hinweis
             con.execute("UPDATE zeiten SET ende=beginn, notiz=TRIM(notiz || ' Feierabend nicht gestempelt – bitte korrigieren'), geaendert=? WHERE id=?",
@@ -1279,10 +1371,10 @@ def stempeln(con, m, ev):
                 titel = HILFE["titel_buchbar"](con, aid, ev.get("titel"))
             except Exception as f:  # noqa: BLE001  abgeschlossener Titel: trotzdem stempeln, ohne Titel
                 hinweise.append(str(f) + " Die Zeit läuft ohne Titel.")
-        neu_id = con.execute("INSERT INTO zeiten (mitarbeiter_id, datum, beginn, ende, auftrag_id, kst, taetigkeit, titel, quelle, angelegt, geaendert) "
-                             "VALUES (?,?,?,NULL,?,?,?,?,?,?,?)",
+        neu_id = con.execute("INSERT INTO zeiten (mitarbeiter_id, datum, beginn, ende, auftrag_id, kst, taetigkeit, titel, quelle, angelegt, geaendert, eingang, spaet) "
+                             "VALUES (?,?,?,NULL,?,?,?,?,?,?,?,?,?)",
                              (m["id"], datum, uhr, aid, ev.get("kst") or "", ev.get("taetigkeit") or "", titel,
-                              "stempel", jetzt(), jetzt())).lastrowid
+                              "stempel", jetzt(), jetzt(), jetzt(), spaet)).lastrowid
     elif aktion not in ("pause", "ende"):
         raise Fehler("Unbekannte Stempel-Aktion.")
     erg = {"ok": True, "id": neu_id, "hinweise": hinweise}
@@ -1344,6 +1436,8 @@ def api(con, methode, teile, q, daten):
             grenze = (date.today() - timedelta(14)).isoformat()
             if (d.get("datum") or "") < grenze or (d.get("datum") or "") > date.today().isoformat():
                 raise Fehler("Nachtragen geht für die letzten 14 Tage. Ältere Korrekturen bitte im Büro.")
+            if monat_abgerechnet(con, m["id"], (d.get("datum") or "")[:7]):
+                raise Fehler("Dieser Monat ist schon abgerechnet. Bitte die Zeit im Büro nachtragen lassen.")
             zid = zeit_speichern(con, {**d, "mitarbeiter_id": m["id"], "quelle": "nachtrag"}, None, wer)
             return {"id": zid}
         if methode == "DELETE" and len(teile) == 3 and teile[1] == "zeiten":
@@ -1416,6 +1510,10 @@ def api(con, methode, teile, q, daten):
         if methode == "PUT" and rid:
             return {"id": zeit_speichern(con, d, rid, wer)}
         if methode == "DELETE" and rid:
+            z = con.execute("SELECT mitarbeiter_id, datum FROM zeiten WHERE id=?", (rid,)).fetchone()
+            if z and monat_abgerechnet(con, z["mitarbeiter_id"], z["datum"][:7]):
+                kern.rueckfrage(f"lohnmonat-{z['mitarbeiter_id']}-{z['datum'][:7]}", f"Für {z['datum'][5:7]}/{z['datum'][:4]} sind die Lohnzahlungen dieses Mitarbeiters schon angelegt.\n\n"
+                                "Das Löschen ändert die Stunden, nach denen abgerechnet wurde. Bitte danach den Lohn prüfen.", "Trotzdem löschen")
             zeit_loeschen(con, rid)
             return {"ok": True}
 

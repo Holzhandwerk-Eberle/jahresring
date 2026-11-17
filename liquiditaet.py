@@ -13,7 +13,7 @@ from datetime import date, timedelta
 import bank
 import benutzer
 import personal
-from kern import ApiFehler
+from kern import ApiFehler, kfm
 
 # von app.py gesetzt: einstellungen, auftrag_rechnen, beleg_umsatz
 HILFE = {}
@@ -44,7 +44,7 @@ STANDARD_JSON = json.dumps(STANDARD)
 
 def _zahl(v):
     try:
-        return round(float(str(v).replace(".", "").replace(",", ".")) if isinstance(v, str) and "," in v else float(v or 0), 2)
+        return kfm(float(str(v).replace(".", "").replace(",", ".")) if isinstance(v, str) and "," in v else float(v or 0))
     except (TypeError, ValueError):
         raise Fehler("Bitte einen gültigen Betrag eingeben.")
 
@@ -115,7 +115,7 @@ def berechnen(con, hilfe, cfg=None):
     sm = cfg.get("start_manuell")
     start = None
     if ks and (not sm or ks["saldo_datum"] >= sm["datum"]):
-        start = {"betrag": round(ks["saldo_ende"], 2), "datum": ks["saldo_datum"], "quelle": "kontoauszug"}
+        start = {"betrag": kfm(ks["saldo_ende"]), "datum": ks["saldo_datum"], "quelle": "kontoauszug"}
     elif sm:
         start = {"betrag": sm["betrag"], "datum": sm["datum"], "quelle": "manuell"}
     if not start:
@@ -127,7 +127,7 @@ def berechnen(con, hilfe, cfg=None):
     def dazu(d, betrag, art, text, link="", ust=0.0, ueberfaellig=False):
         if abs(betrag) < 0.005:
             return
-        posten.append({"datum": d.isoformat(), "betrag": round(betrag, 2), "art": art, "text": text, "link": link, "ust": round(ust, 2), "ueberfaellig": ueberfaellig})
+        posten.append({"datum": d.isoformat(), "betrag": kfm(betrag), "art": art, "text": text, "link": link, "ust": kfm(ust), "ueberfaellig": ueberfaellig})
 
     # offene Posten (Kundenrechnungen)
     for o in con.execute("SELECT o.id, o.nummer, o.art, o.offen, o.faellig, o.beleg_id, IFNULL(b.ust_satz,19) AS ust_satz, k.kurzname "
@@ -238,7 +238,7 @@ def berechnen(con, hilfe, cfg=None):
             ist_vst = con.execute("SELECT COALESCE(SUM((betrag - IFNULL(skonto,0)) * IFNULL(vorsteuer,0) / (100 + IFNULL(vorsteuer,0))),0) FROM zahlungen "
                                   "WHERE substr(bezahlt,1,10) BETWEEN ? AND ?", (p_von.isoformat(), min(p_bis, heute).isoformat())).fetchone()[0] or 0
             plan = sum(p["ust"] for p in posten if p_von.isoformat() <= p["datum"] <= p_bis.isoformat())
-            zahllast = round(ist_ust - ist_vst + plan, 2)
+            zahllast = kfm(ist_ust - ist_vst + plan)
             name = f"{pm:02d}/{pj}" if n == 1 else f"{(pm - 1) // 3 + 1}. Quartal {pj}"
             if abs(zahllast) >= 1:
                 dazu(faellig, -zahllast, "ust", f"Umsatzsteuer {name} (geschätzt)")
@@ -251,13 +251,13 @@ def berechnen(con, hilfe, cfg=None):
         von = start_woche + timedelta(7 * i)
         bis = von + timedelta(6)
         ps = [p for p in posten if von.isoformat() <= p["datum"] <= bis.isoformat()]
-        ein = round(sum(p["betrag"] for p in ps if p["betrag"] > 0), 2)
-        ab = round(-sum(p["betrag"] for p in ps if p["betrag"] < 0), 2)
-        saldo = round(saldo + ein - ab, 2)
+        ein = kfm(sum(p["betrag"] for p in ps if p["betrag"] > 0))
+        ab = kfm(-sum(p["betrag"] for p in ps if p["betrag"] < 0))
+        saldo = kfm(saldo + ein - ab)
         aus.append({"von": von.isoformat(), "bis": bis.isoformat(), "kw": von.isocalendar()[1], "ein": ein, "aus": ab, "saldo": saldo, "posten": ps})
     tiefst = min(aus, key=lambda w: w["saldo"]) if aus else None
-    ueber = {"ein": round(sum(p["betrag"] for p in posten if p["ueberfaellig"] and p["betrag"] > 0), 2),
-             "aus": round(-sum(p["betrag"] for p in posten if p["ueberfaellig"] and p["betrag"] < 0), 2)}
+    ueber = {"ein": kfm(sum(p["betrag"] for p in posten if p["ueberfaellig"] and p["betrag"] > 0)),
+             "aus": kfm(-sum(p["betrag"] for p in posten if p["ueberfaellig"] and p["betrag"] < 0))}
     return {"start": start, "wochen": aus, "tiefst": tiefst and {"saldo": tiefst["saldo"], "von": tiefst["von"]}, "ueberfaellig": ueber,
             "hinweise": hinweise, "einstellungen": cfg}
 
@@ -280,7 +280,7 @@ def auftraege_rest(con):
         except ApiFehler:
             continue
         termin = con.execute("SELECT MAX(bis) FROM termine WHERE auftrag_id=? AND erledigt=0", (a["id"],)).fetchone()[0]
-        aus.append({"id": a["id"], "nummer": a["nummer"], "kunde": a["kurzname"], "rest_netto": round(max(0, netto - berechnet.get(a["id"], 0)), 2),
+        aus.append({"id": a["id"], "nummer": a["nummer"], "kunde": a["kurzname"], "rest_netto": kfm(max(0, netto - berechnet.get(a["id"], 0))),
                     "ust_satz": float(a["ust"] if a["ust"] is not None else 19), "termin": a["plan_bis"] or a["lieferung"] or termin or ""})
     return aus
 

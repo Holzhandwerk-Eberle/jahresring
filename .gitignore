@@ -8,3 +8,5 @@ __pycache__/
 # Bauergebnisse
 *.zip
 *.exe
+# versehentlich abgelegte Paketdateien aus der Prüfumgebung
+*.whl

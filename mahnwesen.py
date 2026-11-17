@@ -1,5 +1,6 @@
 """Mahnwesen: Mahnstufen (Zahlungserinnerung, Mahnung, Letzte Mahnung), Mahnvorschlag, Verzugszinsen und Druckinhalt."""
 from datetime import date, timedelta
+from kern import kfm
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS mahnungen (
@@ -93,9 +94,9 @@ def verzugszinsen(offen, von_iso, bis_iso, basiszins, unternehmer):
     von, bis = _d(von_iso), _d(bis_iso)
     if not von or not bis or bis <= von or offen <= 0:
         return 0.0, 0, 0.0
-    satz = round(basiszins + (9 if unternehmer else 5), 2)
+    satz = kfm(basiszins + (9 if unternehmer else 5))
     tage = (bis - von).days
-    return round(offen * satz / 100 * tage / 365, 2), tage, satz
+    return kfm(offen * satz / 100 * tage / 365), tage, satz
 
 
 def berechnen(op, letzte_liste, stufe_cfg, datum_iso, cfg, unternehmer, mit_zinsen=None, gebuehr=None, mit_pauschale=None):
@@ -103,8 +104,8 @@ def berechnen(op, letzte_liste, stufe_cfg, datum_iso, cfg, unternehmer, mit_zins
     mit_zinsen = stufe_cfg.get("zinsen") if mit_zinsen is None else mit_zinsen
     mit_pauschale = stufe_cfg.get("pauschale") if mit_pauschale is None else mit_pauschale
     gebuehr = float(stufe_cfg.get("gebuehr") or 0) if gebuehr is None else float(gebuehr or 0)
-    offen = round(op.get("offen") or 0, 2)
-    kosten_bisher = round(op.get("mahnkosten") or 0, 2)
+    offen = kfm(op.get("offen") or 0)
+    kosten_bisher = kfm(op.get("mahnkosten") or 0)
     zinsen, tage, satz = 0.0, 0, 0.0
     if mit_zinsen:
         # Zinsen ab Fälligkeit bzw. ab der letzten Mahnung, die schon Zinsen berechnet hat (nichts doppelt)
@@ -116,8 +117,8 @@ def berechnen(op, letzte_liste, stufe_cfg, datum_iso, cfg, unternehmer, mit_zins
     pauschale = 0.0
     if mit_pauschale and unternehmer and not any((m.get("pauschale") or 0) > 0 for m in letzte_liste):
         pauschale = PAUSCHALE_B2B
-    gesamt = round(offen + kosten_bisher + gebuehr + zinsen + pauschale, 2)
-    return {"offen": offen, "kosten_bisher": kosten_bisher, "gebuehr": round(gebuehr, 2), "zinsen": zinsen, "zinstage": tage,
+    gesamt = kfm(offen + kosten_bisher + gebuehr + zinsen + pauschale)
+    return {"offen": offen, "kosten_bisher": kosten_bisher, "gebuehr": kfm(gebuehr), "zinsen": zinsen, "zinstage": tage,
             "zinssatz": satz, "pauschale": pauschale, "gesamt": gesamt}
 
 
@@ -127,7 +128,7 @@ def inhalt_html(m, d, hilfe):
     r = d.get("rechnung") or {}
     zeilen = [(f"Rechnung {h(r.get('nummer', ''))} vom {de_datum(r.get('datum'))}, fällig am {de_datum(r.get('faellig'))}",
                f"{de(r.get('betrag', 0))} €")]
-    bezahlt = round((r.get("betrag") or 0) - m["offen"], 2)
+    bezahlt = kfm((r.get("betrag") or 0) - m["offen"])
     if abs(bezahlt) >= 0.005:
         zeilen.append(("abzüglich bereits bezahlt", f"-{de(bezahlt)} €"))
         zeilen.append(("<b>offener Rechnungsbetrag</b>", f"<b>{de(m['offen'])} €</b>"))

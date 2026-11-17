@@ -40,6 +40,21 @@ class ImportFehler(Exception):
 
 
 def dekodieren(roh):
+    # „Unicode-Text“ aus Excel ist UTF-16: am Anfangszeichen zu erkennen – oder daran, dass jedes zweite Byte 0 ist
+    if roh[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        try:
+            return roh.decode("utf-16")
+        except UnicodeDecodeError:
+            pass
+    probe = roh[:4000]
+    if len(probe) >= 8 and probe.count(b"\x00") > len(probe) // 3:
+        for enc in ("utf-16-le", "utf-16-be"):
+            try:
+                text = roh.decode(enc)
+            except UnicodeDecodeError:
+                continue
+            if text[:200].count("\x00") == 0 and sum(1 for c in text[:200] if c.isprintable() or c in "\r\n\t") > len(text[:200]) * 0.9:
+                return text
     for enc in ("utf-8-sig", "cp1252", "latin-1"):
         try:
             return roh.decode(enc)
@@ -50,14 +65,55 @@ def dekodieren(roh):
 
 def csv_lesen(roh):
     text = dekodieren(roh)
+    if "\x00" in text[:20000]:
+        raise ImportFehler("Die Datei ist keine lesbare Tabelle. Bitte als .csv oder .xlsx speichern.")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")   # auch Dateien mit alten Mac-Zeilenenden (nur CR)
     probe = text[:5000]
     try:
         dialekt = csv.Sniffer().sniff(probe, delimiters=";,\t|")
         trenner = dialekt.delimiter
     except csv.Error:
         trenner = max(";,\t", key=probe.count)
-    zeilen = [z for z in csv.reader(io.StringIO(text), delimiter=trenner) if any(x.strip() for x in z)]
+    try:
+        zeilen = [z for z in csv.reader(io.StringIO(text), delimiter=trenner) if any(x.strip() for x in z)]
+    except csv.Error:
+        raise ImportFehler("Die Datei ließ sich nicht als Tabelle lesen (CSV). Bitte in der Tabellenkalkulation neu als .csv oder .xlsx speichern.")
     return zeilen
+
+
+# Excel-Dateien sind gepackt: Eine kleine Datei kann ausgepackt sehr groß werden. Mehr als diese Menge liest das Programm nicht
+# in den Arbeitsspeicher (eine Preisliste mit 200.000 Zeilen bleibt weit darunter).
+MAX_XLSX_ENTPACKT = 150 * 1024 * 1024
+
+
+def _xlsx_teil(z, name):
+    """Ein Teil der Excel-Datei als XML-Baum – mit Größenprüfung und ohne DTD/Entity-Deklarationen."""
+    try:
+        info = z.getinfo(name)
+    except KeyError:
+        raise ImportFehler("Die Excel-Datei ist unvollständig. Bitte neu als .xlsx speichern.")
+    if info.file_size > MAX_XLSX_ENTPACKT:
+        raise ImportFehler("Die Excel-Datei ist zu groß (mehr als 150 MB Tabelleninhalt).")
+    try:
+        roh = z.read(name)
+    except Exception:   # noqa: BLE001 – beschädigtes Archiv
+        raise ImportFehler("Die Excel-Datei ist beschädigt. Bitte neu als .xlsx speichern.")
+    if re.search(rb"<!\s*(DOCTYPE|ENTITY)", roh[:4096], re.I):
+        raise ImportFehler("Die Excel-Datei enthält eine DTD bzw. Entity-Deklaration und wird aus Sicherheitsgründen nicht gelesen.")
+    try:
+        return ET.fromstring(roh)
+    except ET.ParseError:
+        raise ImportFehler("Die Excel-Datei ist beschädigt. Bitte neu als .xlsx speichern.")
+
+
+def _xlsx_oeffnen(roh):
+    try:
+        z = zipfile.ZipFile(io.BytesIO(roh))
+    except zipfile.BadZipFile:
+        raise ImportFehler("Die Excel-Datei ließ sich nicht öffnen. Bitte als .xlsx oder .csv speichern.")
+    if sum(i.file_size for i in z.infolist() if i.filename.startswith("xl/") and i.filename.endswith(".xml")) > MAX_XLSX_ENTPACKT:
+        raise ImportFehler("Die Excel-Datei ist zu groß (mehr als 150 MB Tabelleninhalt).")
+    return z
 
 
 def _farbe_rgb(el, theme):
@@ -119,7 +175,10 @@ def _xlsx_farben(z, ns):
             break
     if "xl/styles.xml" not in z.namelist():
         return {}
-    st = ET.fromstring(z.read("xl/styles.xml"))
+    try:
+        st = ET.fromstring(z.read("xl/styles.xml"))
+    except Exception:   # noqa: BLE001 – Formatvorlagen nicht lesbar: dann eben ohne Farberkennung
+        return {}
     fills = []
     fl = st.find("m:fills", ns)
     for f in (fl.findall("m:fill", ns) if fl is not None else []):
@@ -159,8 +218,8 @@ def xlsx_blaetter(z, ns):
 
 def xlsx_blattnamen(roh):
     try:
-        z = zipfile.ZipFile(io.BytesIO(roh))
-    except zipfile.BadZipFile:
+        z = _xlsx_oeffnen(roh)
+    except ImportFehler:
         return []
     return [b[0] for b in xlsx_blaetter(z, {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"})]
 
@@ -169,13 +228,10 @@ def xlsx_lesen(roh, blatt=None, info=None):
     """Liest ein Tabellenblatt. blatt = Name (oder None = erstes / passendes Blatt).
     info (dict) bekommt: blaetter (Namen), blatt (gelesenes Blatt), gelb (Zeilenindizes mit gelber Füllung)."""
     ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
-    try:
-        z = zipfile.ZipFile(io.BytesIO(roh))
-    except zipfile.BadZipFile:
-        raise ImportFehler("Die Excel-Datei ließ sich nicht öffnen. Bitte als .xlsx oder .csv speichern.")
+    z = _xlsx_oeffnen(roh)
     shared = []
     if "xl/sharedStrings.xml" in z.namelist():
-        for si in ET.fromstring(z.read("xl/sharedStrings.xml")).findall("m:si", ns):
+        for si in _xlsx_teil(z, "xl/sharedStrings.xml").findall("m:si", ns):
             shared.append("".join(t.text or "" for t in si.iter("{%s}t" % ns["m"])))
     blaetter = xlsx_blaetter(z, ns)
     pfad, name = None, ""
@@ -193,18 +249,28 @@ def xlsx_lesen(roh, blatt=None, info=None):
             pfad = kandidaten[0]
     farben = _xlsx_farben(z, ns) if info is not None else {}
     zeilen, gelb = [], []
-    for row in ET.fromstring(z.read(pfad)).iter("{%s}row" % ns["m"]):
+    def ganz(t):
+        try:
+            return int(t or 0)
+        except ValueError:
+            return 0
+    for row in _xlsx_teil(z, pfad).iter("{%s}row" % ns["m"]):
         werte, gelbe_zellen = {}, 0
-        zeile_gelb = row.get("customFormat") == "1" and farben.get(int(row.get("s") or 0), False)
+        zeile_gelb = row.get("customFormat") == "1" and farben.get(ganz(row.get("s")), False)
+        vorige = 0
         for c in row.findall("m:c", ns):
             ref = c.get("r") or ""
             spalte = 0
-            for ch in re.match(r"[A-Z]*", ref).group(0):
+            for ch in re.match(r"[A-Z]*", ref.upper()).group(0):
                 spalte = spalte * 26 + ord(ch) - 64
+            if not spalte:   # Zelle ohne Bezug (manche Programme lassen ihn weg): Sie folgt auf die vorige
+                spalte = vorige + 1
+            vorige = spalte
             typ = c.get("t")
             v = c.find("m:v", ns)
             if typ == "s" and v is not None:
-                wert = shared[int(v.text)]
+                nr = ganz(v.text) if (v.text or "").strip().isdigit() else -1
+                wert = shared[nr] if 0 <= nr < len(shared) else ""
             elif typ == "inlineStr":
                 wert = "".join(t.text or "" for t in c.iter("{%s}t" % ns["m"]))
             else:
@@ -212,7 +278,7 @@ def xlsx_lesen(roh, blatt=None, info=None):
                 if wert and re.fullmatch(r"-?\d+\.0+", wert):
                     wert = wert.split(".")[0]
             wert = (wert or "").strip()
-            if wert and farben.get(int(c.get("s") or 0), False):
+            if wert and farben.get(ganz(c.get("s")), False):
                 gelbe_zellen += 1
             if wert or spalte - 1 in werte:
                 werte[spalte - 1] = wert

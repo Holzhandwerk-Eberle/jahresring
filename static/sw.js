@@ -10,7 +10,7 @@ const WARTESEITE = '<!doctype html><meta charset="utf-8"><meta name="viewport" c
   '<p><button onclick="location.reload()">Erneut versuchen</button></p>' +
   '<script>let n=0;const pruefen=async()=>{try{const r=await fetch("/api/version?wartet=1",{cache:"no-store"});if(r.ok){location.reload();return;}}catch(e){}' +
   'if(++n===30){document.getElementById("t").textContent="Jahresring ist nicht erreichbar";' +
-  'document.getElementById("p").textContent="Der Büro-PC ist aus, das Programm läuft nicht oder das Gerät ist nicht im selben WLAN. Die Seite öffnet sich von selbst, sobald das Programm wieder läuft.";}' +
+  'document.getElementById("p").textContent="Der Büro-PC ist aus, das Programm läuft nicht oder das Gerät ist nicht im Netzwerk des Büros. Die Seite öffnet sich von selbst, sobald das Programm wieder läuft.";}' +
   'setTimeout(pruefen,n<60?1000:5000);};setTimeout(pruefen,1000);</script></body>';
 self.addEventListener("fetch", e => {
   if (e.request.mode !== "navigate") return;   // nur Seitenaufrufe, alles andere geht direkt an den Server

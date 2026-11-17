@@ -13,6 +13,7 @@ import re
 import zipfile
 from datetime import datetime
 from xml.sax.saxutils import escape
+from kern import kfm
 
 # von app.py gesetzt
 HILFE = {"daten": "", "basis": "", "einstellungen": None, "archiv_pdf": None, "klartext": None, "version": ""}
@@ -193,7 +194,7 @@ def belegpaket(con, von, bis, wer=""):
             [[_de(x["datum"]), x.get("rechnungsnr") or "", x.get("kundennr") or "", _z(x["betrag"]), _z(x.get("auf_mahnkosten")),
               x.get("art") or "", x.get("bemerkung") or ""] for x in eing]))
         luecken = nummern_luecken(con, von, bis)
-        summe = {k: round(sum(float(b[k] or 0) for b in rech), 2) for k in ("netto", "ust", "brutto")}
+        summe = {k: kfm(sum(float(b[k] or 0) for b in rech)) for k in ("netto", "ust", "brutto")}
         info = [f"Belegpaket {e.get('firma') or ''} – Zeitraum {_de(von)} bis {_de(bis)}",
                 f"Erstellt am {datetime.now():%d.%m.%Y %H:%M} mit Jahresring {HILFE['version']} von {wer}", "",
                 f"Ausgangsrechnungen: {len(rech)} (Netto {_z(summe['netto'])} €, USt {_z(summe['ust'])} €, Brutto {_z(summe['brutto'])} €)",
@@ -461,7 +462,7 @@ def datev_buchungen(con, von, bis, cfg):
         for b in rechnungen(con, von, bis):
             d = b["daten"]
             s = d.get("summen") or {}
-            brutto = round(float(b["brutto"] or 0) - float(s.get("abzug_brutto") or 0), 2)
+            brutto = kfm(float(b["brutto"] or 0) - float(s.get("abzug_brutto") or 0))
             if abs(brutto) < 0.005:
                 continue
             kunde = d.get("kunde") or {}
@@ -488,7 +489,7 @@ def datev_buchungen(con, von, bis, cfg):
             gruppe = con.execute("SELECT gruppe, datev_konto FROM lieferanten WHERE id=?", (z["lieferant_id"],)).fetchone()
             if gruppe and (gruppe["gruppe"] or "") in LOHN_GRUPPEN:
                 continue   # Löhne, Lohnsteuer, Sozialversicherung bucht das Lohnbüro
-            betrag = round(float(z["betrag"] or 0), 2)
+            betrag = kfm(float(z["betrag"] or 0))
             if abs(betrag) < 0.005:
                 continue
             vst = float(z["vorsteuer"] or 0)
@@ -576,8 +577,8 @@ def datev_export(con, von, bis, wer=""):
     name = f"DATEV_{_sauber(e.get('firma') or 'Jahresring')}_{von}_bis_{bis}.zip".replace(" ", "_")
     csv_name = f"EXTF_Buchungsstapel_{von}_bis_{bis}.csv"
     ziel = os.path.join(ordner(), name)
-    summe_aus = round(sum(b["betrag"] for b in buchungen if b["konto"] == cfg["konten"]["debitor"]), 2)
-    summe_ein = round(sum(b["betrag"] for b in buchungen if b["gegen"] == cfg["konten"]["kreditor"] and b["konto"] != cfg["konten"]["bank"]), 2)
+    summe_aus = kfm(sum(b["betrag"] for b in buchungen if b["konto"] == cfg["konten"]["debitor"]))
+    summe_ein = kfm(sum(b["betrag"] for b in buchungen if b["gegen"] == cfg["konten"]["kreditor"] and b["konto"] != cfg["konten"]["bank"]))
     n_bank = sum(1 for b in buchungen if b["konto"] == cfg["konten"]["bank"])
     info = [f"DATEV-Buchungsstapel {e.get('firma') or ''} – Zeitraum {_de(von)} bis {_de(bis)}",
             f"Erstellt am {jetzt_:%d.%m.%Y %H:%M} mit Jahresring {HILFE['version']} von {wer}", "",

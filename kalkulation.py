@@ -4,6 +4,9 @@ Positionskalkulation für Jahresring.
 Alle Beträge je Anzahl (= je Stück der Position), sofern nicht anders benannt.
 """
 import copy
+import math
+import threading
+from kern import kfm, zahl_lesen
 
 LOHNGRUPPEN = ["Meister", "Geselle", "Lehrling", "Hilfskraft", "Inhaber", "Durchschnitt"]
 
@@ -173,11 +176,28 @@ TAETIGKEITEN_KATALOG = [
 ]
 
 
+_UNLESBAR = threading.local()   # je Rechenlauf: Werte, die keine Zahl sind (werden als Warnung an der Position gemeldet)
+
+
 def f(x):
-    try:
-        return float(x or 0)
-    except (TypeError, ValueError):
+    """Zahl aus einem Kalkulationswert. Texte in deutscher Schreibweise („12,5“, „40 €“) werden gelesen. Was keine endliche
+    Zahl ist („abc“, unendlich), zählt als 0 und wird gemerkt, damit die Position darauf hinweisen kann."""
+    if isinstance(x, (int, float)):
+        try:
+            if math.isfinite(x):
+                return float(x)
+        except OverflowError:
+            pass
+    elif not x:
         return 0.0
+    else:
+        v = zahl_lesen(x)
+        if v is not None:
+            return v
+    liste = getattr(_UNLESBAR, "liste", None)
+    if liste is not None and len(liste) < 20:
+        liste.append(str(x)[:30])
+    return 0.0
 
 
 def leer_zeile(w):
@@ -347,6 +367,18 @@ def gk_von(kalk, kst):
 
 def position_rechnen(pos, kalk, kinder=()):
     """Liefert die komplette Kalkulation einer Position (je Anzahl) inkl. Unterpositionen."""
+    aussen = getattr(_UNLESBAR, "liste", None)
+    _UNLESBAR.liste = []
+    try:
+        erg = _position_rechnen(pos, kalk, kinder)
+        for t in sorted(set(_UNLESBAR.liste)):
+            erg["warnungen"].append(f"Der Wert „{t}“ ist keine Zahl – gerechnet wurde mit 0. Bitte die Eingaben der Position prüfen.")
+        return erg
+    finally:
+        _UNLESBAR.liste = aussen
+
+
+def _position_rechnen(pos, kalk, kinder=()):
     menge = f(pos.get("menge")) or 0.0
     wks, bss = wk_index(kalk), bs_index(kalk)
     stueck = pos.get("stueckliste") or []
@@ -365,7 +397,7 @@ def position_rechnen(pos, kalk, kinder=()):
         for k, v in r["bezug"].items():
             if k in bezug:
                 bezug[k] += v * n
-        teile.append({"kosten": round(r["kosten"], 2), "dicke": r["dicke"]})
+        teile.append({"kosten": kfm(r["kosten"]), "dicke": r["dicke"]})
     # Bezugsgrößen, die je Position eingetragen werden (eigene mit Quelle „Position“), und Anzahl Beschläge
     pb = (pos.get("extras") or {}).get("bezug_eigen") or {}
     for b in eigene:
@@ -382,7 +414,7 @@ def position_rechnen(pos, kalk, kinder=()):
         if b.get("k") and not stamm and f(b.get("menge")):
             warnungen.add(f"Beschlag „{b.get('k')}“ fehlt in den Beschlägen des Auftrags – er kostet 0 €")
         beschlaege += k * f(b.get("menge"))
-        bzeilen.append({"kosten_me": round(k, 2), "gesamt": round(k * f(b.get("menge")), 2),
+        bzeilen.append({"kosten_me": kfm(k), "gesamt": kfm(k * f(b.get("menge"))),
                         "einheit": stamm.get("einheit") if stamm else "", "name": stamm.get("name") if stamm else ""})
     ex = pos.get("extras") or {}
     # freie Kostenliste: Werkstoffe (mit Kleinmaterial und Material-GK), Fremdleistungen und Zukauf (mit Material-GK)
@@ -416,7 +448,7 @@ def position_rechnen(pos, kalk, kinder=()):
             h = f(z.get("stunden"))
             buche(z.get("kst"), gruppe, h)
             sum_bearb += h
-            zzeilen.append({"min_anz": round(h * 60, 2), "h_anz": round(h, 2), "menge": None})
+            zzeilen.append({"min_anz": kfm(h * 60), "h_anz": kfm(h), "menge": None})
             continue
         q = bezug.get(z.get("bezug") or "", 0.0)
         faktor = q if z.get("bezug") else 1.0
@@ -441,9 +473,9 @@ def position_rechnen(pos, kalk, kinder=()):
         sum_bearb += min_anz / 60
         sum_ruest += ruest / 60
         sum_helfer += helfer_anz / 60
-        zzeilen.append({"bezug_fehlt": bez_fehlt, "menge": round(q, 2) if z.get("bezug") else None, "min_anz": round(min_anz, 2),
-                        "h_anz": round(min_anz / 60, 2), "ruest_h": round(ruest / 60, 2), "helfer_h": round(helfer_anz * menge / 60, 2),
-                        "h_pos": round((min_anz * menge + ruest + helfer_anz * menge) / 60, 2)})
+        zzeilen.append({"bezug_fehlt": bez_fehlt, "menge": kfm(q) if z.get("bezug") else None, "min_anz": kfm(min_anz),
+                        "h_anz": kfm(min_anz / 60), "ruest_h": kfm(ruest / 60), "helfer_h": kfm(helfer_anz * menge / 60),
+                        "h_pos": kfm((min_anz * menge + ruest + helfer_anz * menge) / 60)})
     # Stunden je Anzahl nicht auf 1/100 h runden: bei großen Mengen gingen sonst Zeiten verloren oder würden aufgebläht
     # (0,004 h × 200 Stück). Gerundet wird nur in der Anzeige.
     ksts = {k.get("kst") for k in kalk.get("kostenstellen", [])}
@@ -468,7 +500,7 @@ def position_rechnen(pos, kalk, kinder=()):
     else:
         wg_pz = f(ex.get("wg")) if ex.get("wg") not in (None, "") else f(kalk.get("wg"))
         wg = selbstkosten * wg_pz / 100
-        ep = round(selbstkosten + wg + sonder_vertr, 2)
+        ep = kfm(selbstkosten + wg + sonder_vertr)
 
     # Unterpositionen (je Anzahl der Hauptposition)
     unter_ep = unter_kosten = 0.0
@@ -481,7 +513,7 @@ def position_rechnen(pos, kalk, kinder=()):
         kc = k.get("_calc") or {}
         for key in KATEGORIEN:
             unter_kat[key] = unter_kat.get(key, 0.0) + f(k["menge"]) * (f(kc.get(key)) + f((kc.get("unter_kat") or {}).get(key)))
-    ep_gesamt = round(ep + unter_ep, 2)
+    ep_gesamt = kfm(ep + unter_ep)
     kosten_gesamt = selbstkosten + unter_kosten
     return {
         "werkstoffe": werkstoffe, "beschlaege": beschlaege, "oberflaeche": oberflaeche,
@@ -492,11 +524,11 @@ def position_rechnen(pos, kalk, kinder=()):
         "stunden": stunden, "stunden_kst": stunden_kst, "lohn": lohn,
         "gk_lohn_pz": (gk_lohn / lohn * 100) if lohn else 0, "gk_lohn": gk_lohn, "lohn_gk": lohn + gk_lohn,
         "sonder_fertigung": sonder_fert, "selbstkosten": selbstkosten,
-        "wg_pz": wg_pz, "wg": wg, "sonder_vertrieb": sonder_vertr, "einzelpreis": round(ep, 2),
-        "unter_ep": round(unter_ep, 2), "unter_kosten": unter_kosten, "unter_kat": unter_kat,
+        "wg_pz": wg_pz, "wg": wg, "sonder_vertrieb": sonder_vertr, "einzelpreis": kfm(ep),
+        "unter_ep": kfm(unter_ep), "unter_kosten": unter_kosten, "unter_kat": unter_kat,
         "ep_gesamt": ep_gesamt, "kosten_gesamt": kosten_gesamt,
         "wg_gesamt_pz": ((ep_gesamt - kosten_gesamt) / kosten_gesamt * 100) if kosten_gesamt else 0,
-        "gesamtpreis": round(ep_gesamt * menge, 2),
+        "gesamtpreis": kfm(ep_gesamt * menge),
         "bezug": {k: round(v, 3) for k, v in bezug.items()},
         "teile": teile, "beschlagzeilen": bzeilen, "zeitzeilen": zzeilen, "massiv_m3": round(massiv_m3, 4),
         "zeit_summen": {"bearbeitung": sum_bearb, "ruest": sum_ruest, "helfer": sum_helfer,

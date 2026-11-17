@@ -1,0 +1,481 @@
+
+# Prüfbericht Jahresring 2026.11.01-148
+ · 
+## Gesamturteil
+Jahresring ist in seinem Kern solide gebaut. Die Anmeldung, die Rechteprüfung der Schnittstelle, die Festschreibung der Rechnungen mit Protokoll und Prüfsummen, die Kalkulation selbst und das Einlesen der Importdateien haben einer harten Prüfung standgehalten, und auch mit einem Bestand von 628 MB bleibt das Programm zügig. Die Bedienung ist einheitlich; die Abweichungen sind Kleinigkeiten.
+Gefunden wurden 51 Punkte und acht kleine Abweichungen in der Gestaltung: zwei mit hohem Gewicht, zwölf mittlere, vier zwischen gering und mittel, zwanzig geringe und dreizehn Hinweise. Kein Befund hebelt die Festschreibung der Rechnungen aus. Die beiden schweren Punkte sind von anderer Art: Der eine ist ein Funktionsfehler, der jeden Ausdruck über die Schaltfläche „Drucken“ betrifft, der andere eine Sicherheitslücke, die nur wirkt, wenn außer dem Inhaber jemand Personalrechte hat.
+Empfohlene Reihenfolge:
+Drucken über den Browser reparieren (F1). Mit Briefbogen ist das Druckbild unbrauchbar; das PDF ist nicht betroffen. Vorher am Büro-PC mit einem einseitigen Angebot gegenprüfen.
+Berechtigungen schließen (S1, S2, S3). Kontoübernahme über „Passwort vergessen“, E-Rechnungs-Daten für jeden Angemeldeten, Preise für die Werkstatt über direkte Adressen. Alle drei sind kleine Eingriffe.
+Falsche Beträge verhindern (K1, K2, K3). „1.500“ wird als 1,50 € gespeichert; gerundet wird nicht kaufmännisch (Umsatzsteuer in 0,5 % der Fälle einen Cent zu niedrig); bei Bruttoanzeige kann die Summe der Zeilen vom Gesamtbetrag abweichen.
+Sammelübernahme der Bankvorschläge absichern (I1, I2). Derselbe offene Posten kann in einem Durchgang mehrfach bezahlt gebucht werden.
+Nachvollziehbarkeit ergänzen (G1, G2, M3). Versandte Angebote festhalten; Änderungen an Stammdaten, Einstellungen, Benutzern und Rechten protokollieren.
+Anonymisieren vervollständigen (D1, D2). Freitexte mit leeren; die Belegprüfung meldet danach fälschlich fehlende Archiv-PDFs.
+Stempelzeiten absichern (M2). Die Uhrzeit kommt ungeprüft vom Gerät.
+Neue E-Rechnungs-Norm einplanen (Z1). XRechnung 4.0 wird für 2027 erwartet; alte und neue Norm dürfen bis März 2029 nebeneinander benutzt werden.
+Die übrigen Punkte sind Härtungen, Robustheit bei kaputten Dateien und Gestaltung; sie lassen sich nebenher erledigen. Am Programm wurde für diese Prüfung nichts geändert.
+## Cybersicherheit
+Das Grundgerüst hält. Anmeldung, Sitzungen, die Rechteprüfung der Datenschnittstelle, der Inhaltsschutz im Browser, der Umgang mit hochgeladenen Dateien und die Datenbankzugriffe haben allen Angriffen standgehalten. Die Lücken liegen an den Rändern: im Ablauf „Passwort vergessen“ und bei einigen Adressen, die außerhalb der normalen Schnittstelle liegen und deshalb eine eigene Rechteregel brauchen.
+| 
+Nr. | 
+Befund | 
+Gewicht | 
+Abhilfe | 
+| 
+S1 | 
+Kontoübernahme über „Passwort vergessen“. Steht am Benutzerkonto keine eigene Mailadresse, geht der Code an die Adresse des verknüpften Mitarbeiters. Wer Mitarbeiterdaten bearbeiten darf (eigene Rechte mit „Personal: bearbeiten“), trägt dort seine Adresse ein, fordert den Code an und setzt das Passwort. Im Test gelang so die Anmeldung als Inhaber; auch die Benachrichtigung „Passwort geändert“ ging an die falsche Adresse. Wirksam nur, wenn außer dem Inhaber jemand Personalrechte hat und der Mailversand eingerichtet ist. | 
+hoch | 
+Code nur an die Adresse senden, die am Benutzerkonto selbst steht (beim Inhaber ersatzweise die Betriebsadresse). Die Adresse aus dem Mitarbeiterstamm dafür nicht verwenden. | 
+| 
+S2 | 
+E-Rechnungs-Daten für jeden Angemeldeten. Die Adressen /api/belege/<Nr>/zugferd.xml und …/xrechnung.xml haben keine Rechteregel. Die Rollen Mitarbeiter und Werkstatt, die den Beleg selbst nicht öffnen dürfen, bekamen die ZUGFeRD-Datei mit Kunde, Positionen und Beträgen (die XRechnung-Variante scheiterte im Test nur an fehlenden Pflichtangaben des Testkunden). Die Belegnummern in der Adresse sind fortlaufend. | 
+mittel | 
+Dieselbe Regel wie für die Druckansicht eintragen. | 
+| 
+S3 | 
+Werkstatt sieht Preise über direkt eingegebene Adressen. Die Oberfläche bietet der Rolle Werkstatt nur Werkstattauftrag, Stückliste und Materialsummen an. Der Server liefert ihr aber auch /papier/<Nr>/kosten (Selbstkosten, Wagnis und Gewinn, Netto), /papier/<Nr>/sollist, /liste/lager (Preis je Einheit, Lagerwert) und /liste/werkzeuge (Preis netto, Anschaffungswerte). | 
+mittel | 
+Im Server die Papiere Kosten und Soll/Ist für Benutzer „ohne Preise“ sperren und die Preisspalten der beiden Listen ausblenden. | 
+| 
+S4 | 
+Unendliche Zahlen. Eine gezielt gebaute Anfrage mit dem Einzelpreis 1e999 wird gespeichert. Danach liefern die Positionsliste des Auftrags und die Startseite Daten, die der Browser nicht lesen kann; die Startseite lädt dann für alle Benutzer nicht mehr. Über die Oberfläche lässt sich das nicht auslösen. | 
+gering bis mittel | 
+Nicht endliche Zahlen beim Einlesen ablehnen und bei der Ausgabe nicht zulassen. | 
+| 
+S5 | 
+Stumme Verbindungen. Auf dem unverschlüsselten Zugang bleiben offene Verbindungen ohne Zeitgrenze bestehen: 400 Verbindungen belegten 400 Arbeitsfäden und waren nach 40 Sekunden alle noch offen. Der https-Zugang trennt nach 30 Sekunden. Im Netzbetrieb kann ein Gerät im WLAN das Programm so ausbremsen. | 
+gering | 
+Zeitgrenze auch für http, dazu eine Obergrenze gleichzeitiger Verbindungen. | 
+| 
+S6 | 
+Excel-Dateien ohne Größengrenze beim Entpacken. Eine 0,9 MB große .xlsx mit 300 MB Inhalt ließ den Arbeitsspeicher von 342 auf 1.178 MB steigen (Preis- und Kundenimport). ZIP-Preislisten und Kontoauszüge haben eine Grenze. | 
+gering | 
+Entpackte Größe wie bei den ZIP-Dateien prüfen. | 
+| 
+S7 | 
+Große Anfragen vor der Rechteprüfung. Ein angemeldeter Benutzer ohne Rechte kann Anfragen bis 300 MB schicken; gelesen wird vor der Prüfung. Die Rolle Mitarbeiter darf eine vierstellige PIN haben und bleibt 120 Tage angemeldet. | 
+gering | 
+Erst prüfen, dann lesen; kleinere Grenze für Rollen ohne Dateiuploads. | 
+| 
+S8 | 
+Fehlermeldungen. Ein überlanger Dateiname beim Anhang endet als interner Fehler mit dem Ordnerpfad des Servers, ein Zeilenumbruch im Mail-Betreff ebenfalls als interner Fehler (einschleusen lässt sich nichts), ungültige Unicode-Zeichen als interner Fehler oder als Verbindung ohne Antwort. Textfelder haben keine Längengrenze (200.000 Zeichen im Kurznamen wurden angenommen). | 
+gering | 
+Eingaben vorab prüfen, keine Pfade ausgeben. | 
+| 
+S9 | 
+Kleinere Härtungen. Die Herkunftsprüfung lässt den Wert „null“ durch. Die Kalenderadresse nimmt auch Datei- und interne Netzadressen (nur der Inhaber kann sie setzen) und liest ohne Größengrenze. Der Code zum Zurücksetzen steht im Betreff der Mail. Passwörter werden mit 200.000 Runden gestreckt; empfohlen sind für dieses Verfahren derzeit 600.000. Handy-Freigabe.ps1 gibt python.exe für alle Ports frei und entfernt vorhandene Sperrregeln zu Python. | 
+gering | 
+Bei Gelegenheit nachziehen. | 
+Ohne Befund blieben: Datenbankbefehle über Feldnamen und Feldtypen (41 Bereiche mit je elf Varianten, keine einzige Datenbank-Fehlermeldung), 13 Versuche, über Pfadangaben an Programm- und Datendateien zu kommen, hochgeladene HTML-, SVG- und Programmdateien (werden nur zum Herunterladen angeboten, Ausführung gesperrt), Skripte in Texten (114 Seiten durchlaufen), Kopfzeilen in Mails, Kontoauszüge mit eingebetteter Dokumenttyp-Definition, Sitzungsende bei Passwortwechsel und Sperre, Anmeldesperre nach fünf Fehlversuchen, erneutes Einrichten ohne Anmeldung, Aufrufe von fremden Seiten und unter fremdem Namen.
+Gut gelöst sind außerdem: Sitzungskennungen stehen nur als Prüfsumme in der Datenbank, das Mailpasswort ist an das Windows-Konto gebunden, die eigene Zertifizierungsstelle für https kann nur Zertifikate für das eigene Netz ausstellen und ihr Schlüssel wandert nicht in die Sicherung, die Prüfwerkzeuge für E-Rechnungen werden mit festen Versionen und Prüfsummen geladen, das Python-Installationsprogramm wird auf seine Signatur geprüft, und die Update-Abfrage installiert nichts von selbst. Die eingesetzte PDF-Anzeige (pdf.js 3.11.174) hat eine bekannte Schwachstelle; sie ist im Programm an allen vier Stellen ausdrücklich entschärft und zusätzlich durch den Inhaltsschutz gedeckt.
+## Datenschutz
+Die Bausteine sind vorhanden und greifen: Datenauskunft je Kunde, Löschliste für den Inhaber, Anonymisieren von Kunden, Lieferanten und Mitarbeitern, und das Anonymisieren bleibt gesperrt, solange die Aufbewahrungsfrist läuft. Der Mitarbeiterstamm ist sparsam (keine Steuer-ID, keine Sozialversicherungsnummer, keine Konfession). Im Kalender sehen Kollegen nur „abwesend“, weder Grund noch Notiz. Lohn, Stammdaten und Zeiten anderer waren für die Rollen Büro, Werkstatt und Mitarbeiter durchweg gesperrt, das Verbandbuch liest nur der Inhaber. Die Dokumentation nennt die unverschlüsselte Ablage auf dem PC und empfiehlt die Laufwerksverschlüsselung; vor unverschlüsseltem WLAN-Betrieb warnt das Programm selbst.
+Die Schwäche liegt beim Anonymisieren: Es räumt die Stammdaten ab, lässt aber Freitexte stehen.
+| 
+Nr. | 
+Befund | 
+Gewicht | 
+Abhilfe | 
+| 
+D1 | 
+Anonymisieren lässt Personenbezug stehen. Nach dem Anonymisieren eines Testkunden standen dessen Kennwörter weiter in: Einleitung, Schlusstext und Betreff der Belege („Sehr geehrter Herr …“), Positionstexten (auch im eingefrorenen Belegstand), Bezeichnung und Bemerkungen des Auftrags, Titel und Notiz der Termine, Betreff der Briefe, Bemerkung der Zahlungseingänge, Ort im Kundenstamm, Name und Verwendungszweck der Kontoumsätze samt abgelegter Kontoauszugsdatei. Entfernt wurden Name, Anschrift, Telefon, Mail, IBAN, Notizen, Brieftexte, Anhänge, Wiedervorlagen, Unterschrift und Archiv-PDF. | 
+mittel | 
+Freitexte der Belege, Aufträge, Termine, Briefe und Zahlungen mit leeren; für Kontoumsätze eine eigene Löschregel nach Fristablauf. | 
+| 
+D2 | 
+Nach dem Anonymisieren meldet die Belegprüfung dauerhaft einen Fehler. Für jede Rechnung des Kunden erscheint „Archiv-PDF fehlt“, auch nach erneutem Öffnen des PDFs. Ursache: Die Prüfung will anonymisierte Belege überspringen und fragt dazu nach dem Kurznamen „anonymisiert“ im Belegstand; das Anonymisieren setzt ihn dort aber auf leer. | 
+mittel | 
+Beide Stellen auf dasselbe Merkmal bringen. | 
+| 
+D3 | 
+Büro sieht arbeitsmedizinische Vorsorge. Die Rolle Büro (Arbeitsschutz: bearbeiten) liest Art, Datum und Arzt der Vorsorge sowie das Expositionsverzeichnis aller Beschäftigten. Werkstatt und Mitarbeiter sehen beides nicht. | 
+Hinweis | 
+Prüfen, ob das gewollt ist; sonst wie das Verbandbuch dem Inhaber vorbehalten. | 
+| 
+D4 | 
+Frist. Rechnungen gelten im Programm einheitlich zehn Jahre als aufbewahrungspflichtig. Seit 2025 sind es für Buchungsbelege acht Jahre; länger zu speichern als nötig widerspricht dem Grundsatz der Speicherbegrenzung. | 
+Hinweis | 
+Mit dem Steuerberater klären und die Frist einstellbar machen. | 
+| 
+D5 | 
+Dauerhafte Spuren. Das Protokoll nennt Kunden mit Kurznamen und ist bewusst unveränderbar. Vorschau-PDFs liegen bis zu drei Tage im Zwischenordner. Sicherungen (30 Tagesstände und 12 Monatsstände) enthalten gelöschte Daten entsprechend lange; die Dokumentation weist darauf hin. | 
+Hinweis | 
+Im Löschkonzept so belassen und benennen. | 
+## GoBD
+Der Kern ist belastbar. Eine festgeschriebene Rechnung ließ sich auf keinem der acht versuchten Wege ändern (Text, Datum, Status, Nummer, Druckeinstellungen, Kunde, Betrag) und nicht löschen. Spätere Änderungen an der Auftragsposition oder am Kunden wirken nicht auf sie zurück. Eingriffe an der Programmoberfläche vorbei wurden erkannt: ein in der Datenbank geänderter Bruttobetrag, ein verändertes Archiv-PDF, ein geänderter Protokolleintrag (die Datenbank sperrt Ändern und Löschen im Protokoll selbst; nach dem Entfernen dieser Sperre schlug die Prüfsummenkette an) und ein abgeschnittenes Protokoll (Vergleich mit der Journaldatei). Ein Rechnungsdatum im Vorjahr oder in der Zukunft löst eine Rückfrage aus. Das Löschen eines Zahlungseingangs wird protokolliert, Eingangsrechnungen werden mit dem Fingerabdruck der Originaldatei abgelegt, und der Datenexport für den Prüfer steht.
+Nicht abgedeckt ist, was vor oder neben der Rechnung liegt.
+| 
+Nr. | 
+Befund | 
+Gewicht | 
+Abhilfe | 
+| 
+G1 | 
+Versandte Angebote und Auftragsbestätigungen werden nicht festgehalten. Ein per Mail versandtes Angebot über 800 € ließ sich auf 650 € ändern und unter derselben Nummer erneut versenden; das Archiv-PDF wurde dabei überschrieben, die erste Fassung ist weg. Der Schriftverkehr nennt nur den Dateinamen des Anhangs. Versandtes Angebot und versandte Auftragsbestätigung ließen sich außerdem löschen (der Vorgang steht im Protokoll, die Datei bleibt liegen, der Datensatz ist weg). Abgesandte Geschäftsbriefe sind sechs Jahre in der versandten Fassung aufzubewahren. | 
+mittel | 
+Beim Versand die Fassung einfrieren oder die versandte Datei unter eigenem Namen behalten; Änderungen danach als neue Fassung (A02) führen; versandte Belege nicht löschbar machen. | 
+| 
+G2 | 
+Änderungen an Stammdaten und Einstellungen stehen nicht im Protokoll. Geändert wurden im Test die IBAN eines Lieferanten, die IBAN des Betriebs, der Umsatzsteuersatz in den Einstellungen und beim Kunden sowie eine Kundenanschrift; das Protokoll bekam keine Zeile. Gerade die Bankverbindung des Lieferanten ist für Zahlungen heikel. | 
+mittel | 
+Diese Felder mit altem und neuem Wert protokollieren. | 
+| 
+G3 | 
+„PDF ansehen“ zeigt nicht das Archiv-Original. Bei festgeschriebenen Rechnungen wird das PDF jedes Mal neu erzeugt. Der Inhalt kommt aus dem eingefrorenen Stand (Bankverbindung und Beträge blieben im Test trotz geänderter Einstellungen gleich), Briefbogen und Seitenaufbau aber aus dem aktuellen Programm. Mailversand und Projektordner verwenden das Original. | 
+gering | 
+Für festgeschriebene Belege die archivierte Datei ausliefern. | 
+| 
+G4 | 
+Rechnungen ohne Protokolleintrag fallen nicht auf. Die Belegprüfung zählt sie nur als „aus der Zeit vor dem Protokoll“. Im Großbestand mit 72.000 direkt in die Datenbank geschriebenen Rechnungen meldete sie „in Ordnung“. | 
+Hinweis | 
+Im Echtbetrieb als Abweichung melden. | 
+| 
+G5 | 
+Barzahlung ohne Kassenbuch. Die Zahlart „Bar“ lässt sich buchen; ein Kassenbuch führt das Programm nicht. | 
+Hinweis | 
+Die Vorlage der Verfahrensdokumentation fragt das bereits ab (keine Bargeschäfte oder Kassenbuch). Bei Barzahlungen das Kassenbuch außerhalb führen. | 
+Dass Benutzer- und Rechteänderungen nicht protokolliert werden, steht im Abschnitt Mitarbeiterverwaltung und Berechtigungen.
+## Funktionalität
+Der Ablauf vom Kunden über Auftrag, Kalkulation und Beleg bis zu Rechnung, Zahlung und Mahnung läuft. Die vorhandene Prüfkette (fünf Teile) war für diesen Stand bestanden; für diese Prüfung liefen der Gesamtdurchlauf, der Durchgang über 118 Seiten (kein Skriptfehler, kein Serverfehler) und die Layoutprüfung in drei Fensterbreiten erneut ohne Fund. Neu nachgerechnet wurde der Übertrag: In einer Schlussrechnung mit zwei Abschlägen stimmen die Zwischensummen auf jeder Seite und der Zahlbetrag (41.769,00 € abzüglich 25.061,40 € ergibt 16.707,60 €), ebenso in einem Angebot mit Titeln.
+Ein Befund wiegt schwer, weil er eine Hauptfunktion betrifft.
+| 
+Nr. | 
+Befund | 
+Gewicht | 
+Abhilfe | 
+| 
+F1 | 
+„Drucken“ über den Browser liefert mit Briefbogen ein unbrauchbares Druckbild. Die Schaltfläche öffnet die Druckansicht und löst den Druck des Browsers aus. Ein einseitiges Angebot kam dabei auf vier Seiten heraus: Seite 1 mit dem Inhalt ohne Briefkopf und Fußzeile, zehn Millimeter nach unten versetzt; Seite 2 mit dem Briefkopf und darüber gedrucktem Schlusstext; Seite 3 leer; Seite 4 die AGB. Bei mehrseitigen Belegen steht der Briefkopf der ersten Seite auf Seite 2 über der Positionstabelle, die Folgeseiten haben keinen Briefbogen, und der Übertrag passt nicht zum Seiteninhalt (Seite 1 zeigte 1.190,00 € bei Positionen über 714,00 €). Ein Brief verhielt sich genauso. Ursache: Die Regeln für die Bildschirmansicht (grauer Hintergrund, Blatt mit zehn Millimetern Rand, ausgeblendeter Folgeseiten-Briefbogen) gelten auch im Druck, weil sie nicht auf den Bildschirm beschränkt sind. Der Fehler steckt schon im Ausgangsstand, nicht erst im Übertrag. Nachgestellt im Prüfbrowser (Chromium 153) über dessen Druckweg; am Büro-PC mit Edge einmal gegenprüfen. Das vom Programm erzeugte PDF („PDF ansehen“, Mailanhang, Projektordner) ist in Ordnung. | 
+hoch | 
+Die Bildschirmregeln auf den Bildschirm beschränken oder „Drucken“ das fertige PDF öffnen lassen. Danach den Druckweg in die Prüfkette aufnehmen; er wird bisher nirgends geprüft. | 
+| 
+F2 | 
+Positionen werden am Seitenende geteilt. Im Test standen von einer vierzeiligen Position zwei Zeilen unten und zwei oben auf der Folgeseite. Der Übertrag zählt die Position richtig zur ersten Seite. | 
+gering | 
+Kurze Positionen zusammenhalten. | 
+| 
+F3 | 
+Ursache des PDF-Ausfalls am Büro-PC weiter offen. Seit Version 141 versucht das Programm drei Browserprofile und nennt den Grund im Hinweis. Die eigentliche Ursache ließ sich hier nicht nachstellen. | 
+Hinweis | 
+Tritt es wieder auf, den angezeigten Grund notieren. | 
+Die Zahleneingabe („1.500“ wird als 1,50 € gelesen) ist ebenfalls ein Funktionsfehler; sie steht wegen ihrer Folgen im Abschnitt Kalkulation.
+## Einheitliche Bedienung
+Gemessen statt geschätzt: Auf 118 Seiten wurden 5.403 Bedienelemente im Browser vermessen, darunter 3.098 Schaltflächen im Inhaltsbereich. Das Bild ist einheitlich. 2.442 Schaltflächen haben dieselbe Höhe (30 Pixel), dieselbe Schrift (Segoe UI, 14 Pixel) und denselben Eckenradius (4 Pixel); die drei Farbrollen (normal, Hauptschaltfläche, rot für Löschen) sind überall dieselben. Weitere 580 Schaltflächen gehören zur Werkzeugleiste des Texteditors und sind dort untereinander gleich. Rückfragen laufen durchweg über den programmeigenen Dialog mit „Abbrechen“; Meldefenster des Browsers kommen nicht vor. Tabellenköpfe und Seitenüberschriften sind einheitlich. In den Breiten 1400, 1100 und 820 Pixel gab es keine überlappenden oder herausragenden Elemente.
+Die Abweichungen sind Kleinigkeiten, aber sichtbar.
+| 
+Nr. | 
+Abweichung | 
+Wo | 
+| 
+U1 | 
+Schaltflächen mit vorangestelltem Symbol sind 32 statt 30 Pixel hoch. | 
+„✉ Rundmail“ (Kunden), „🔍 XML prüfen“ (Zahlungen), „🏷 Etiketten“ (Material), zwölf Stellen | 
+| 
+U2 | 
+„Hinzufügen“ ist 49 Pixel hoch. | 
+Kunde und Lieferant, Reiter Anhänge | 
+| 
+U3 | 
+Löschzeichen uneinheitlich: 139-mal „✕“, dreimal „×“, daneben Wörter („entfernen“, „Löschen“). | 
+„×“ bei Kunde › Anhänge und Auftrag › Historie | 
+| 
+U4 | 
+67 Löschzeichen ohne Erklärtext beim Überfahren; insgesamt 82 reine Symbolschaltflächen ohne Erklärung. | 
+Einstellungen › Kalkulation (60), Einstellungen › Kalender (7), Pfeile und „＋“ | 
+| 
+U5 | 
+„Speichern“ ist siebenmal Hauptschaltfläche und einmal normale Schaltfläche. | 
+normale Schaltfläche in der Positionsansicht, Hauptschaltfläche in den Einstellungen | 
+| 
+U6 | 
+Zwei Sonderformen neben der Standardschaltfläche: Symbolknöpfe in Listen (32 Pixel, Radius 6) und Aktionsknöpfe im Adressblock (28 Pixel, Radius 5). | 
+Kunden-, Auftrags- und Lieferantenliste; Kunde und Lieferant | 
+| 
+U7 | 
+Eingabefelder je nach Art unterschiedlich hoch: Text 30, Auswahl 29, Datum 32, Uhrzeit 26 Pixel. In einer Zeile nebeneinander steht das leicht versetzt. | 
+überall, wo Datum und Text nebeneinanderstehen | 
+| 
+U8 | 
+Zwischenüberschriften in drei Größen (17, 16,4 und 16 Pixel). | 
+Auftrag/Beleg/Position, Einstellungen/Material/Offene Posten, Startseite | 
+Höhen, Radien und Schriftgrößen (U1, U2, U6 bis U8) lassen sich in der gemeinsamen Formatvorlage angleichen; für U3 bis U5 sind kleine Änderungen an den genannten Stellen nötig.
+## Geschwindigkeit bei sehr großer Datenbank
+Geprüft wurde mit einem erzeugten Bestand von 628 MB: 12.001 Kunden, 24.001 Aufträge mit 360.016 Positionen, 72.002 Belege, 450.000 Zeiteinträge, 120.000 Einträge im Schriftverkehr, 60.000 Termine, 36.000 Zahlungsaufträge und 9.000 Materialien, verteilt auf 15 Jahre. Das ist ein Mehrfaches dessen, was ein Handwerksbetrieb in dieser Zeit erzeugt. Gemessen wurde auf dem Prüfrechner mit zwei Prozessorkernen; die Zahlen zeigen die Größenordnung, nicht das Verhalten des Büro-PCs.
+| 
+Vorgang | 
+Zeit | 
+Anmerkung | 
+| 
+Programmstart bis zur ersten Antwort | 
+0,7 s | 
+Arbeitsspeicher des Programms 220 bis 280 MB | 
+| 
+Anmeldung bis fertige Startseite | 
+1,8 s | 
+Startseite allein 1,5 s, 3,2 MB Daten | 
+| 
+Kundenliste öffnen | 
+0,5 s | 
+lädt alle 12.000 Kunden (11,7 MB), zeigt 32 Zeilen | 
+| 
+Auftragsliste öffnen | 
+0,6 s | 
+lädt alle 24.000 Aufträge (11,4 MB) | 
+| 
+Offene Posten, Zahlungen, Lieferanten, Material, Projekte, Leitstand | 
+unter 0,1 s | 
+ | 
+| 
+Kalender | 
+0,9 s | 
+ | 
+| 
+Personalübersicht | 
+1,4 s, beim ersten Aufruf 4,4 s | 
+rechnet Stunden- und Urlaubskonten über alle 450.000 Zeiten | 
+| 
+Auftrag öffnen | 
+0,9 s | 
+ | 
+| 
+Suche | 
+0,2 bis 0,3 s | 
+ | 
+| 
+Position anlegen und bepreisen | 
+8 bis 12 ms | 
+auch als 120. Position eines Auftrags | 
+| 
+Rechnung mit 120 Positionen festschreiben | 
+6,2 s | 
+fast ganz die PDF-Erzeugung; ohne sie 0,08 s | 
+| 
+PDF mit 120 Positionen | 
+3,3 s ohne, 5,7 s mit Übertrag | 
+der Übertrag braucht zusätzliche Messdurchläufe | 
+| 
+Belegprüfung über 72.000 Belege | 
+3,0 s | 
+ | 
+| 
+Protokollprüfung über 20.000 Einträge | 
+0,4 s | 
+wächst gleichmäßig mit der Zahl der Einträge | 
+| 
+Vollständige Sicherung | 
+9,4 s | 
+63,7 MB | 
+| 
+Datenexport für den Prüfer, ein Jahr / 15 Jahre | 
+0,7 s / 5,7 s | 
+ | 
+| 
+Kontoauszug mit 5.000 Umsätzen einlesen | 
+0,3 s | 
+ | 
+| 
+Preisliste mit 120.000 Zeilen lesen | 
+0,7 s | 
+ | 
+Das Programm bleibt also auch mit einem sehr großen Bestand zügig. Vier Stellen wachsen mit dem Bestand und sind auf Dauer zu beobachten.
+| 
+Nr. | 
+Befund | 
+Gewicht | 
+Abhilfe | 
+| 
+P1 | 
+Listen laden immer den ganzen Bestand. Kunden, Aufträge, alle Belege (24 MB), alle offenen Posten (19 MB) und alle Zahlungen (16 MB) kommen in einer Antwort. Am Büro-PC fällt das nicht auf; über WLAN auf dem Tablet wird es mit den Jahren spürbar. | 
+gering | 
+Seitenweise laden oder auf die letzten Jahre begrenzen. | 
+| 
+P2 | 
+Personalübersicht rechnet alles neu. Die Konten werden über sämtliche Zeiten gebildet. | 
+gering | 
+Abgeschlossene Jahre als Zwischenstand merken. | 
+| 
+P3 | 
+Festgeschriebene Rechnungen werden bei „PDF ansehen“ jedes Mal neu erzeugt (5,8 s bei 120 Positionen), obwohl die Datei im Archiv liegt. | 
+gering | 
+Archivdatei ausliefern (siehe G3). | 
+| 
+P4 | 
+Gleichzeitige Zugriffe. Acht lesende und drei schreibende Benutzer zugleich erzeugten keinen einzigen Fehler, die Antwortzeiten stiegen aber auf Sekunden (mittlere Lesezeit 3,2 s), weil das Programm Anfragen nacheinander rechnet. Für zwei bis fünf Benutzer ohne Belang. | 
+Hinweis | 
+Erst bei deutlich mehr Benutzern ein Thema. | 
+## Zukunftsfähigkeit
+Die technische Basis ist schlicht und damit langlebig: Python-Standardbibliothek und SQLite, vier kleine Fremdbausteine (pypdf, segno, pdf.js, jsQR), keine Cloud, kein Lizenzserver. Unter Python 3.13 laden 44 der 45 Module ohne Abkündigungswarnung (das Taskleistensymbol für Windows ließ sich hier nicht prüfen), die statische Prüfung findet außer acht unbenutzten Importen nichts. Prüfkette, technische Dokumentation und Handbuch sind vorhanden und werden mit jeder Version gepflegt.
+| 
+Nr. | 
+Befund | 
+Gewicht | 
+Abhilfe | 
+| 
+Z1 | 
+Neue E-Rechnungs-Norm steht an. Die überarbeitete EN 16931-1 (Ausgabe Oktober 2026) ersetzt die Fassung von 2020. XRechnung 4.0 liegt seit September 2026 als Vorabversion vor, die endgültige Fassung wird für das Frühjahr 2027 erwartet; alte und neue Norm dürfen bis März 2029 nebeneinander benutzt werden (Bericht dazu). Das Programm erzeugt XRechnung 3.0 und prüft mit den Regelwerken dieses Stands. Daneben greift die Pflicht, E-Rechnungen zu versenden, je nach Umsatz ab 2027 oder 2028. | 
+mittel | 
+Umstellung für 2027/2028 einplanen; die Prüfroutine zum Rechtsstand führt den Punkt. | 
+| 
+Z2 | 
+Wartbarkeit. app.py hat 10.536 Zeilen, die zentrale Funktion api() allein 1.950. Änderungen dort sind schwer zu überblicken; viele Bereiche sind bereits in eigene Module ausgelagert. | 
+gering bis mittel | 
+Auslagerung fortsetzen (Belege, Druck, Einstellungen). | 
+| 
+Z3 | 
+Lücken der Prüfkette. Die Prüfskripte erwarten feste Ordner einer Linux-Umgebung. Auf Windows wird nichts automatisch geprüft (Installation, Schlüsselschutz, Autostart, Edge). Der Druckweg über den Browser fehlt ganz, deshalb blieb F1 unbemerkt. | 
+gering | 
+Druckweg aufnehmen; eine kurze Prüfliste für Windows nach jedem Bau. | 
+| 
+Z4 | 
+Veraltende Bausteine. pdf.js 3.11.174 stammt von 2023 (bekannte Schwachstelle, im Programm entschärft). start.bat lädt fest Python 3.13.3. Die Prüfwerkzeuge für E-Rechnungen gibt es nur für Python 3.12 bis 3.14. | 
+gering | 
+Einmal im Jahr nachziehen. | 
+| 
+Z5 | 
+Installation und Updates. Das Installationsprogramm ist nicht signiert (Windows warnt beim Start), Updates werden von Hand eingespielt. | 
+gering | 
+Signatur erwägen, sobald weitere Betriebe das Programm nutzen. | 
+| 
+Z6 | 
+Fest hinterlegte Rechtswerte. Der Basiszinssatz ist mit 1,52 % vorbelegt; das ist der seit 1. Juli 2026 gültige Wert (Bundesbank), er ändert sich halbjährlich und ist einstellbar. Der Umsatzsteuersatz ist ein einzelner Wert ohne Stichtag, die Aufbewahrungsfrist steht fest im Programm. | 
+Hinweis | 
+Steuersatz mit Gültigkeitsdatum, Frist einstellbar. | 
+| 
+Z7 | 
+Steuerfälle außer dem Regelfall. Ohne Umsatzsteuer kennt das Programm nur § 13b; jeder andere Fall wird in der E-Rechnung pauschal als „Steuerfrei“ ausgewiesen (Kleinunternehmer, Lieferung ins EU-Ausland und Ausfuhr werden nicht unterschieden). Für den eigenen Betrieb ohne Belang, für ein neutrales Programm eine Lücke. | 
+Hinweis | 
+Bei Bedarf ergänzen. | 
+| 
+Z8 | 
+Eigene Verschlüsselung. Die Sicherungsverschlüsselung und die Erzeugung der https-Zertifikate sind aus Standardbausteinen selbst gebaut, weil die Python-Standardbibliothek dafür nichts Fertiges mitbringt. Der Aufbau ist sorgfältig (Schlüsselableitung, Prüfsumme vor dem Entschlüsseln, Namensbeschränkung der Zertifizierungsstelle), bleibt aber Eigenbau. | 
+Hinweis | 
+Vor einer Weitergabe an Dritte von jemand Fachkundigem gegenlesen lassen. | 
+| 
+Z9 | 
+Fremdbausteine. Die Lizenztexte liegen bei den Bausteinen, eine gemeinsame Übersicht fehlt. PDFs hängen an Edge oder Chrome auf dem Büro-PC. | 
+Hinweis | 
+Übersicht ins Handbuch. | 
+## Kalkulation und Rechenfehler
+Die Zuschlagskalkulation selbst rechnet richtig. Eine Position wurde unabhängig von Hand nachgerechnet (Plattenwerkstoff mit Verschnitt, Beschläge, Kleinmaterial, Material-Gemeinkosten, Lohn, Lohn-Gemeinkosten je Kostenstelle, Wagnis und Gewinn, Einzel- und Gesamtpreis); alle elf Zwischenwerte stimmen auf den Cent. Der vorhandene Kalkulationstest besteht. Das Programm warnt, wenn ein Werkstoff, eine Lohngruppe oder eine Kostenstelle fehlt und deshalb sonst still mit null gerechnet würde. Die Schlussrechnung mit Abschlägen stimmt, der Verzugszins wird taggenau gerechnet.
+Die Fehler liegen nicht in der Kalkulation, sondern davor und danach: bei der Eingabe von Zahlen und beim Runden.
+| 
+Nr. | 
+Befund | 
+Gewicht | 
+Abhilfe | 
+| 
+K1 | 
+Zahleneingabe mit Tausenderpunkt. Wer im Feld Einzelpreis „1.500“ eintippt, speichert 1,50 €; das Feld selbst zeigt Beträge aber als „1.500,00“ an. „2.000.000“, „1 500“ und „1.500,00 €“ werden ohne Meldung zu 0,00. Im Mengenfeld wird „1.000“ zu 1. Mit Komma („1.234,56“, „12,5“) ist alles richtig. | 
+mittel | 
+Einen Punkt vor genau drei Ziffern als Tausenderpunkt lesen, Leerzeichen und „€“ entfernen, nicht lesbare Eingaben melden statt null zu speichern. | 
+| 
+K2 | 
+Rundung nicht kaufmännisch. Gerundet wird mit Gleitkommazahlen; halbe Cent fallen dabei je nach interner Darstellung nach unten. Umsatzsteuer: Von drei Millionen durchgerechneten Nettobeträgen (0,01 € bis 30.000 €) liegt bei 0,5 % die Steuer um einen Cent zu niedrig, nie zu hoch (2,50 € netto ergibt 0,47 € statt 0,48 €; 29.997,50 € ergibt 5.699,52 € statt 5.699,53 €). Gesamtpreis je Position: Bei gebrochenen Mengen wich in einer Zufallsprobe jeder zehnte Fall um einen Cent ab (0,5 × 4.764,83 € ergibt 2.382,41 € statt 2.382,42 €). Der Rabatt ist ebenso betroffen. Im echten Beleg nachgestellt. | 
+mittel | 
+Geldbeträge in Cent oder mit Dezimalzahlen rechnen und kaufmännisch runden; dieselbe Regel in der Oberfläche. | 
+| 
+K3 | 
+Bruttoanzeige für Privatkunden. Drei Positionen zu je 8,40 € netto werden als 10,00 + 10,00 + 10,00 gedruckt, der Gesamtbetrag darunter lautet 29,99 €. Rechnerisch folgerichtig (die Steuer wird auf die Nettosumme gerechnet), für den Kunden sieht es wie ein Rechenfehler aus. | 
+gering bis mittel | 
+Bei Bruttoanzeige von den Bruttobeträgen der Zeilen ausgehen oder die Differenz als Rundung ausweisen. | 
+| 
+K4 | 
+Zahlen als Text rechnen still mit null. Steht in den Kalkulationswerten ein Preis als Text mit Komma („12,5“) oder mit Einheit („40 €“), zählt er als 0 €, ohne Warnung. Über die Oberfläche kommen Zahlen an; über Importe und die Schnittstelle ist es möglich. | 
+gering | 
+Deutsche Schreibweise lesen, sonst warnen. | 
+## Einstellungen
+Der Umfang ist groß und deckt ab, was ein Betrieb anpassen will: 122 Einstellungen, darunter Betriebsdaten, Briefbogen und Seitenaufbau, Nummernkreise, Belegtexte und eigene Belegarten, Kalkulationsvorgaben (Löhne, Kostenstellen, Zuschläge, Tätigkeiten), Statusfolge, Einheiten, Feiertage und arbeitsfreie Tage einzeln wählbar, Mahnstufen und Basiszins, Mail, Sicherung, Netzwerk und https, Kontenzuordnung für den Steuerberater, Ordnerschema. Ändern kann sie nur der Inhaber; der Server setzt das durch. Die Rollen Mitarbeiter und Werkstatt bekommen nur 43 unkritische Werte (Listen, Betriebsname), keine Bankdaten und keine Kalkulationssätze.
+| 
+Nr. | 
+Befund | 
+Gewicht | 
+Abhilfe | 
+| 
+E1 | 
+Im Handbuch beschrieben, im Programm nicht vorhanden. Das Handbuch nennt „Einstellungen › Belege & Briefbogen › Letzte Seite unten bündig“ als Betriebsvorgabe. Die Oberfläche hat diese Einstellung nicht; umstellen lässt es sich nur je Beleg. | 
+gering | 
+Feld ergänzen oder den Satz im Handbuch streichen. | 
+| 
+E2 | 
+Einstellung ohne Wirkung. Die Rundung gestempelter Zeiten (zeit_rundung) steht in den Vorgaben, hat aber weder ein Feld noch eine Stelle im Programm, die sie auswertet. | 
+gering | 
+Umsetzen oder entfernen. | 
+| 
+E3 | 
+Fehlende Stellschrauben. Nicht einstellbar sind: Übertrag als Betriebsvorgabe (nur je Beleg), Aufbewahrungsfrist, Dauer der Anmeldung, Passwortregeln (die vierstellige PIN für die Rolle Mitarbeiter ist fest), Umsatzsteuersatz mit Stichtag. | 
+Hinweis | 
+Nach Bedarf ergänzen; Übertrag und Frist zuerst. | 
+## Preisimport und Kontoauszugsimport
+Beide Importe lesen die üblichen Dateien zuverlässig und schnell. Der Kontoauszugsimport nahm CAMT in den Arten 052, 053 und 054 und in den Fassungen 02, 08 und 13 an, erkannte dieselbe Datei beim zweiten Einlesen, hielt zwei gleiche Umsätze in einer Datei auseinander, erkannte denselben Umsatz in Tages- und Monatsauszug, ließ vorgemerkte Umsätze weg und wies MT940, CSV, PDF und Dateien mit Dokumenttyp-Definition mit klarer Meldung ab. Die Vorschläge fanden Rechnungsnummern auch mit Leerzeichen oder ohne Bindestrich, eine Sammelzahlung für zwei Rechnungen und stuften einen Skontoabzug richtig als unsicher ein. Der Preisimport las Windows- und UTF-8-Dateien, Semikolon und Komma, deutsche, englische und Schweizer Zahlen, Excel-Zahlen mit Gleitkommarest und Exponent, Formelzellen und lange EAN; Datanorm, ZIP, Rabattgruppen und Preiseinheiten deckt der vorhandene Test ab.
+| 
+Nr. | 
+Befund | 
+Gewicht | 
+Abhilfe | 
+| 
+I1 | 
+„Alle sicheren Vorschläge übernehmen“ bucht doppelt. Die Vorschläge werden einmal für alle Umsätze gebildet und dann der Reihe nach gebucht, ohne nach jeder Buchung neu zu prüfen. Im Test erhielt eine Rechnung über 1.190 € drei Zahlungen (offen danach −2.380 €), eine zweite zwei. Dazu trägt bei, dass „Betrag und Name passen“ als sicher gilt, auch wenn ein anderer Umsatz derselben Liste dieselbe Rechnung schon über die Nummer begleicht. Bei gleich hohen Abschlägen desselben Kunden ist das ein realistischer Fall. | 
+mittel | 
+Nach jeder Buchung den nächsten Vorschlag neu bilden; einen offenen Posten in einem Durchgang nur einmal als sicher zulassen. | 
+| 
+I2 | 
+Verschiedene Umsätze als doppelt verworfen. Mit Bankreferenz zählen nur Konto, Referenz und Betrag. Zwei Umsätze an verschiedenen Tagen von verschiedenen Zahlern mit derselben Referenz „NONREF“ und gleichem Betrag: Der zweite wurde als „schon vorhanden“ ausgelassen. | 
+gering bis mittel | 
+Buchungstag in den Schlüssel aufnehmen; Platzhalter-Referenzen wie fehlende behandeln. | 
+| 
+I3 | 
+Keine Vollständigkeitsprüfung. Ohne Hinweis angenommen wurden: ein fehlender Auszug dazwischen (Endsaldo 1.010 €, nächster Anfangssaldo 5.000 €), ein Auszug, dessen Umsätze nicht zum Endsaldo passen, ein Auszug eines fremden Kontos und ein Umsatz in US-Dollar (als Euro übernommen). | 
+gering | 
+Salden und Kontonummer vergleichen und hinweisen; Fremdwährung kennzeichnen. | 
+| 
+I4 | 
+Preisimport: drei Dateiformen führen zum internen Fehler. Zeilenenden nur mit Wagenrücklauf (alte Mac-Dateien), Binärmüll als .csv und Excel-Dateien, deren Zellen keinen Zellbezug tragen (manche Exportprogramme schreiben so). Excel-„Unicode-Text“ (UTF-16) wird gelesen, aber mit verstümmelten Spaltennamen. | 
+gering | 
+Abfangen und verständlich melden; UTF-16 erkennen. | 
+| 
+I5 | 
+Preisimport: stille Annahmen. Ein Preis „1.250“ ohne Komma wird als 1,25 gelesen. Eine Zeile mit „EUR 3,45“ fällt ohne Hinweis weg; übersprungene Zeilen werden nicht gezählt. Negative Preise werden angenommen. | 
+gering | 
+Übersprungene Zeilen zählen und zeigen; auffällige Preise markieren. | 
+Die fehlende Größengrenze beim Entpacken von Excel-Dateien steht unter S6.
+## Mitarbeiterverwaltung und Berechtigungen
+Das Rollenmodell ist klar und wird vom Server durchgesetzt: Inhaber, Büro, Werkstatt, Mitarbeiter und „eigene Rechte“ mit drei Stufen je Bereich. Im Test waren Lohn, Mitarbeiterstamm und Zeiten anderer für Büro, Werkstatt und Mitarbeiter gesperrt. Benutzer verwaltet nur der Inhaber; „eigene Rechte“ können den Bereich Einstellungen und Benutzer nie enthalten, auch nicht über eine gebaute Anfrage. Ein Benutzer mit eigenen Rechten konnte weder einen Inhaber anlegen noch Rechte vergeben noch das Passwort des Inhabers setzen. Sitzungen enden sofort bei Passwortwechsel und Sperre. Nach fünf falschen Anmeldungen sperrt das Programm je Gerät mit wachsender Wartezeit. Die Stempeluhr arbeitet nur mit den eigenen Daten des Angemeldeten. Unterschriebene Monatsbelege zeigen an, wenn sich die Zeiten danach geändert haben, und bei mehr als sechs oder neun Stunden ohne ausreichende Pause erscheint ein Hinweis.
+| 
+Nr. | 
+Befund | 
+Gewicht | 
+Abhilfe | 
+| 
+M1 | 
+Drei Lücken in den Berechtigungen stehen unter Cybersicherheit: Kontoübernahme über „Passwort vergessen“ (S1), E-Rechnungs-Daten für jeden Angemeldeten (S2), Preise für die Werkstatt über direkte Adressen (S3). | 
+hoch / mittel | 
+siehe dort | 
+| 
+M2 | 
+Stempelzeiten sind frei wählbar. Die Stempeluhr übernimmt die Uhrzeit, die das Gerät mitschickt. Mit einer gebauten Anfrage (oder verstellter Handyuhr ohne Netz) stempelte die Rolle Mitarbeiter einen Beginn um 05:00 Uhr vor sechs Tagen und ein Ende um 19:30 Uhr, außerdem einen Arbeitstag im Jahr 2019. Die Einträge erscheinen im Büro mit der Quelle „Stempel“ wie live gestempelt; der tatsächliche Eingangszeitpunkt wird gespeichert, aber nirgends gezeigt. Einen Monatsabschluss gibt es nicht. | 
+mittel | 
+Stempel, die später als etwa eine Stunde nach der angegebenen Zeit eintreffen, als Nachtrag kennzeichnen; älter als ein paar Tage ablehnen; abgerechnete Monate sperren. | 
+| 
+M3 | 
+Änderungen an Benutzern und Rechten stehen nicht im Protokoll. Anlegen, Rolle und Rechte ändern, sperren, Passwort durch den Inhaber setzen sowie gelungene und fehlgeschlagene Anmeldungen hinterlassen keine Zeile; protokolliert wird nur „Passwort vergessen“. | 
+mittel | 
+Diese Vorgänge ins Protokoll aufnehmen. | 
+| 
+M4 | 
+Vierstellige PIN und lange Anmeldung. Die Rolle Mitarbeiter darf eine PIN ab vier Zeichen haben und bleibt 120 Tage angemeldet. Der Schaden ist auf die eigene Zeiterfassung begrenzt, mit M2 zusammen aber nicht belanglos. | 
+gering | 
+Sechs Stellen verlangen. | 
+| 
+M5 | 
+Keine Prüfung auf Höchstarbeitszeit und Lohnuntergrenzen. Ein Tag mit 14,5 Stunden löste keinen Hinweis aus (mehr als zehn Stunden, Ruhezeit). Mindestlohn und Minijob-Grenze werden nicht gegen Stundenlohn und Stunden geprüft. | 
+Hinweis | 
+Als Hinweise in der Monatsübersicht ergänzen. | 
+## Weitere Punkte
+Betriebssicherheit. Die Datenbank wird täglich mit Integritätsprüfung gesichert; aufbewahrt werden 30 Tagesstände und 12 Monatsstände, auf Wunsch zusätzlich verschlüsselt auf einem externen Ziel. Eine Rücksicherung legt vorher selbst einen Stand an und ist dem Inhaber vorbehalten. Der Büro-PC bleibt trotzdem der eine Punkt, an dem alles hängt: Das externe Sicherungsziel und das Sicherungskennwort sollten eingerichtet sein, und die Rücksicherung sollte einmal auf einem zweiten Rechner geübt werden.
+Dokumentation. Handbuch, Verfahrensdokumentation, Datenschutzunterlagen, Installationsanleitung und technische Dokumentation sind vorhanden und nennen die Neuerungen bis Version 148 (Übertrag, Kontoauszug entfernen, Dateinamen). Eine Abweichung zum Programm steht unter E1. Die Vorlage der Verfahrensdokumentation enthält Stellen, die der Betrieb selbst ausfüllen muss (zum Beispiel zu Bargeschäften); das sollte geschehen sein, bevor ein Prüfer danach fragt.
+Bedienhilfen. Für Symbolschaltflächen fehlen an 82 Stellen Erklärtexte (U4). Die Bedienung nur mit der Tastatur und mit Vorleseprogrammen wurde nicht geprüft.
+Rechtsstand. Die Prüfroutine zum Rechtsstand liegt als eigenes Dokument vor. Zwei ihrer Punkte sind in diesem Bericht bereits konkret geworden: die neue E-Rechnungs-Norm (Z1) und die Aufbewahrungsfrist von acht Jahren für Buchungsbelege (D4).
+## Was geprüft wurde und was nicht
+Geprüft wurde der Stand 2026.11.01-148 aus dem Projektordner, ausschließlich an Kopien. Am Programm selbst wurde für diese Prüfung nichts geändert; es gibt keine neue Version. Die Befunde wurden am laufenden Programm nachgestellt. Allein auf dem Quelltext beruhen die Aussagen zu den Einstellungen (E1 bis E3), zur Passwort-Streckung, zur PIN-Länge, zum Firewall-Skript und die Hinweise im Abschnitt Zukunftsfähigkeit.
+Die Mittel im Einzelnen: Angriffe mit Benutzern aller fünf Rollen gegen 18 Adressen außerhalb der normalen Schnittstelle; Fehleingaben gegen 41 Bereiche der Schnittstelle; gebaute Dateien für Uploads und Importe (Excel mit 300 MB Inhalt, XML mit Dokumenttyp-Definition, Kontoauszüge in fünf CAMT-Varianten und gut zwanzig Sonderfällen, Preislisten in knapp vierzig Varianten); eine Rückstandssuche in allen Tabellen und Dateien nach dem Anonymisieren eines Kunden mit 33 Kennwörtern; gezielte Eingriffe in Datenbank, Archiv und Protokoll; drei Millionen durchgerechnete Rundungsfälle; eine von Hand nachgerechnete Kalkulation; die Vermessung von 5.403 Bedienelementen auf 118 Seiten; ein erzeugter Großbestand von 628 MB mit Zeitmessung im Programm, über die Schnittstelle und im Browser; der Druckweg des Browsers für drei Belege und einen Brief.
+Nicht geprüft werden konnte, was Windows und echte Gegenstellen braucht: die Installation, der Schlüsselschutz über das Windows-Konto, Autostart, Taskleistensymbol und Firewall-Skript in der Ausführung, der Druck mit Edge auf Papier, echte Mailserver und Postfächer, echte Kontoauszüge der Hausbank, https auf Handy und Tablet. Die Zeitmessungen stammen vom Prüfrechner, nicht vom Büro-PC. Der Export des Belegpakets ließ sich mit dem erzeugten Bestand nicht messen, weil dessen Rechnungen keine Archiv-PDFs haben. Nicht Gegenstand waren der Inhalt der mitgelieferten AGB- und Arbeitsschutz-Vorlagen und der Stücklistenimport aus dem CAD. Die Einschätzungen zu GoBD, Datenschutz und Steuer sind technische Einschätzungen und ersetzen nicht den Steuerberater oder eine Rechtsberatung.

@@ -109,7 +109,7 @@ async function serviceSeite(z, sub) {
       <p>Zeigt Kunden, Lieferanten und ausgeschiedene Mitarbeiter, deren Aufbewahrungsfristen abgelaufen sind, sowie Interessenten und Lieferanten ohne Belege, die seit drei Jahren unverändert sind. Gelöscht oder anonymisiert wird hier nichts – ein Klick öffnet den Datensatz, dort steht „Anonymisieren …“ bzw. „Löschen“.</p>
       <div id="lpErg"><div class="leer">wird geprüft …</div></div>`;
     try {
-      const d = await api("datenschutz/faellig");
+      const d = await api("datenschutz/faellig"), ka = d.kontoauszuege || {auszuege: 0, grenze: ""};
       const tab = (titel, liste, link, spalte) => `<div class="sektion" style="margin-top:14px">${titel} <span class="hinweis" style="font-weight:400">· ${liste.length}</span></div>` + (liste.length
         ? `<table class="liste"><tr><th style="width:110px">Nummer</th><th>Name</th><th style="width:150px">${spalte}</th><th style="width:170px">Frist abgelaufen am</th></tr>
           ${liste.map(x => `<tr class="klick" data-hash="${link(x)}"><td><a href="${link(x)}">${esc(String(x.nummer))}</a></td><td>${esc(x.name)}${x.ohne_belege ? ` <span class="hinweis">ohne Belege – kann gelöscht werden</span>` : ""}</td>
@@ -118,7 +118,17 @@ async function serviceSeite(z, sub) {
       $("#lpErg").innerHTML = (d.anzahl ? "" : `<div class="kachel" style="border-left:4px solid var(--gruen)">Derzeit ist nichts zu löschen oder zu anonymisieren.</div>`)
         + tab("Kunden", d.kunden, x => `#/kunde/${x.id}`, "letzter Beleg") + tab("Lieferanten", d.lieferanten, x => `#/lieferant/${x.id}`, "letzter Beleg")
         + tab("Ausgeschiedene Mitarbeiter", d.mitarbeiter, x => `#/personal/ma/${x.id}`, "Austritt")
-        + `<p class="hinweis" style="margin-top:14px">Fristen: Rechnungen 10 Jahre, Angebote und Geschäftsbriefe 6 Jahre, Lohn- und Zeitunterlagen 10 Jahre, jeweils ab Ende des Kalenderjahres; ein Expositionsverzeichnis 40 Jahre. Empfohlen: einmal im Jahr prüfen und in der Datenschutz-Dokumentation vermerken.</p>`;
+        + `<div class="sektion" style="margin-top:14px">Kontoauszüge</div>` + (ka.auszuege
+          ? `<div class="kachel" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1 1 320px">${ka.auszuege} ${ka.auszuege === 1 ? "eingelesener Kontoauszug" : "eingelesene Kontoauszüge"} bis ${datum(ka.bis)}${ka.umsaetze ? ` mit ${ka.umsaetze} Umsätzen, in denen noch Name oder Verwendungszweck stehen` : ""}: Die Aufbewahrungsfrist ist abgelaufen.
+              <div class="hinweis">Gelöscht werden die abgelegten Auszugsdateien; in den Umsätzen werden Name, Verwendungszweck und Gegenkonto entfernt. Beträge, Buchungstage und die Zuordnung zu Rechnungen bleiben.</div></div>
+              <button class="btn rot" id="lpKonto">Alte Kontoauszüge löschen …</button></div>`
+          : `<div class="hinweis">Kein Kontoauszug, dessen Frist abgelaufen ist (Auszüge bis ${datum(ka.grenze)} wären es).</div>`)
+        + `<p class="hinweis" style="margin-top:14px">Fristen: Rechnungen und Kontoauszüge ${d.frist_rechnung_jahre || 10} Jahre (einstellbar unter Einstellungen › Kunden &amp; Aufträge, zulässig sind 8 bis 10), Angebote und Geschäftsbriefe 6 Jahre, Lohn- und Zeitunterlagen 10 Jahre, jeweils ab Ende des Kalenderjahres; ein Expositionsverzeichnis 40 Jahre. Empfohlen: einmal im Jahr prüfen und in der Datenschutz-Dokumentation vermerken.</p>`;
+      if ($("#lpKonto")) $("#lpKonto").onclick = async () => {
+        if (!await frage(`${ka.auszuege} ${ka.auszuege === 1 ? "Kontoauszug" : "Kontoauszüge"} bis ${datum(ka.bis)} endgültig löschen? Die Auszugsdateien werden entfernt, in den Umsätzen verschwinden Name, Verwendungszweck und Gegenkonto. Das lässt sich nicht rückgängig machen; der Vorgang steht im Protokoll.`, {ok: "Löschen"})) return;
+        try { const r = await api("datenschutz/kontoauszuege", {method: "POST", body: {}}); toast(`${r.dateien} Dateien gelöscht, ${r.umsaetze} Umsätze bereinigt`); serviceSeite(z, "loeschen"); }
+        catch (x) { toast(x.message, true); }
+      };
     } catch (e) { $("#lpErg").innerHTML = `<div class="leer">${esc(e.message)}</div>`; }
     return;
   }
@@ -286,12 +296,14 @@ async function serviceSeite(z, sub) {
           <a href="#" id="prVoll">Jetzt vollständig prüfen</a></div>
         <div class="hinweis" style="margin-top:4px">Letzter Hash: <code>${esc(p.letzter_hash)}</code> · Journaldatei: ${esc(p.datei || "")}</div>
         ${d.belege ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--linie)">${d.belege.ok
-            ? `<b>✓ Festgeschriebene Rechnungen unverändert.</b> ${d.belege.geprueft} Rechnungen mit dem Protokoll verglichen (Nummer, Datum, Beträge${d.belege.mit_fingerabdruck ? `, davon ${d.belege.mit_fingerabdruck} auch im Inhalt` : ""}), ${d.belege.pdf_geprueft} Archiv-PDFs${d.belege.eingang_geprueft ? ` und ${d.belege.eingang_geprueft} abgelegte Eingangsrechnungen` : ""} anhand ihres Hashs geprüft${d.belege.ohne_protokoll ? `, ${d.belege.ohne_protokoll} ältere ohne Protokolleintrag` : ""}.`
+            ? `<b>✓ Festgeschriebene Rechnungen unverändert.</b> ${d.belege.geprueft} Rechnungen mit dem Protokoll verglichen (Nummer, Datum, Beträge${d.belege.mit_fingerabdruck ? `, davon ${d.belege.mit_fingerabdruck} auch im Inhalt` : ""}), ${d.belege.pdf_geprueft} Archiv-PDFs${d.belege.eingang_geprueft ? `, ${d.belege.eingang_geprueft} abgelegte Eingangsrechnungen` : ""}${d.belege.versandt_geprueft ? ` und ${d.belege.versandt_geprueft} versandte Fassungen von Angeboten und anderen Belegen` : ""} anhand ihres Hashs geprüft${d.belege.ohne_protokoll ? `, ${d.belege.ohne_protokoll} ältere ohne Protokolleintrag` : ""}.`
             : `<b style="color:var(--rot)">Achtung – Abweichung bei festgeschriebenen Rechnungen oder abgelegten Eingangsrechnungen:</b><br>${d.belege.fehler.map(esc).join("<br>")}`}
           <div class="hinweis">Stand ${datum(d.belege.zeit.slice(0, 10))} ${esc(d.belege.zeit.slice(11, 16))} · läuft bei jedem Programmstart und mit „Jetzt vollständig prüfen“</div></div>` : ""}
         <div class="hinweis">${d.echtbetrieb ? `Echtbetrieb seit ${datum(d.echtbetrieb.seit.slice(0, 10))} ${esc(d.echtbetrieb.seit.slice(11, 16))}` : "Echtbetrieb noch nicht gestartet (Service › Testdaten löschen)"}</div></div>
-      <p class="hinweis" style="margin-top:0">Hier stehen alle GoBD-relevanten Vorgänge: Festschreiben und Stornieren von Rechnungen, gelöschte Belege, geänderte oder gelöschte Zahlungsaufträge, gelöschte Zahlungseingänge und Mahnungen,
-        Nummernkreis-Änderungen, Sicherungen, Rücksicherungen, Testdatenlöschung, Echtbetrieb und Programmversionen. Einträge können nicht geändert oder gelöscht werden; jeder Eintrag ist über einen SHA-256-Hash mit dem vorigen verkettet.</p>
+      <p class="hinweis" style="margin-top:0">Hier stehen alle GoBD-relevanten Vorgänge: Festschreiben und Stornieren von Rechnungen, versandte Fassungen von Angeboten und anderen Belegen, gelöschte Belege,
+        geänderte oder gelöschte Zahlungsaufträge, gelöschte Zahlungseingänge und Mahnungen, Nummernkreis-Änderungen, Änderungen an Stammdaten (Kunden, Lieferanten, Mitarbeiter) und Einstellungen,
+        Benutzer und Rechte, Anmeldungen, Sicherungen, Rücksicherungen, Testdatenlöschung, Echtbetrieb und Programmversionen. Bei Stammdaten stehen Zahlungsbedingungen mit altem und neuem Wert da,
+        Bankverbindungen verkürzt, Namen und Anschriften nur als Tatsache. Einträge können nicht geändert oder gelöscht werden; jeder Eintrag ist über einen SHA-256-Hash mit dem vorigen verkettet.</p>
       <div class="such" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
         <select id="prArt"><option value="">Alle Vorgänge</option>${Object.entries(d.arten).map(([k, l]) => `<option value="${k}" ${k === pf.art ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
         <input type="date" id="prVon" value="${esc(pf.von)}"><input type="date" id="prBis" value="${esc(pf.bis)}">

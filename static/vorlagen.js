@@ -74,7 +74,7 @@ async function vorlageDialog({a = null, titel = 0, pid = null, vorlageId = null,
     const w = $("#vlWahl", hg);
     if (w) w.onchange = () => { v = liste.find(x => x.id === w.value); vorbelegen(); zeichnen(); rechnen(); };
     $$("[data-vs]", hg).forEach(el => el.onchange = () => { ein[el.dataset.vs] = +el.value; rechnen(); });
-    $$("[data-vp]", hg).forEach(el => el.oninput = () => { ein[el.dataset.vp] = el.value.trim() === "" ? "" : (/^[\d.,\s-]+$/.test(el.value) ? zahlEin(el.value) : el.value); spaeter(); });
+    $$("[data-vp]", hg).forEach(el => el.oninput = () => { const n = /^[\d.,\s-]+$/.test(el.value) ? zahlLesen(el.value) : null; ein[el.dataset.vp] = el.value.trim() === "" ? "" : (n ? n.wert : el.value); spaeter(); });
     $$("[data-vm]", hg).forEach(b => b.onclick = async () => {
       const p = v.parameter.find(x => x.k === b.dataset.vm);
       const m = await materialWaehlen(VL_KATS[p.rolle || "platte"], `${p.name || p.k} wählen`);
@@ -224,7 +224,7 @@ async function positionsvorlagenVorgabe(z, gewaehlt) {
     });
     feld(() => akt.parameter, "data-p"); feld(() => akt.pruefungen, "data-q"); feld(() => akt.hilfswerte, "data-h"); feld(() => akt.teile, "data-t"); feld(() => akt.beschlaege, "data-b"); feld(() => akt.zeiten, "data-z");
     $$("[data-p][data-k=k]", z).forEach(el => el.addEventListener("change", () => zeichnen()));
-    $$("[data-p][data-k=wert]", z).forEach(el => el.addEventListener("input", () => { akt.parameter[+el.dataset.p].wert = /^[\d.,\s-]+$/.test(el.value) ? zahlEin(el.value) : el.value; speichern(); }));
+    $$("[data-p][data-k=wert]", z).forEach(el => el.addEventListener("input", () => { const n = /^[\d.,\s-]+$/.test(el.value) ? zahlLesen(el.value) : null; akt.parameter[+el.dataset.p].wert = n ? n.wert : el.value; speichern(); }));
     $$("[data-g]", z).forEach(el => el.onchange = () => { const t = akt.teile[+el.dataset.t], g = el.dataset.g; t[g] = t[g] || {}; if (el.value) t[g][el.dataset.s] = el.value; else delete t[g][el.dataset.s]; speichern(true); });
     $$("[data-hzeig]", z).forEach(el => el.onchange = () => { akt.hilfswerte[+el.dataset.hzeig].verdeckt = !el.checked; speichern(true); });
     $$("[data-fr]", z).forEach(el => el.onchange = () => { const t = akt.teile[+el.dataset.t]; t.fraesen = t.fraesen || {}; if (el.checked) t.fraesen[el.dataset.fr] = true; else delete t.fraesen[el.dataset.fr]; speichern(true); });

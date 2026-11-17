@@ -75,7 +75,7 @@ body.anmelde-body::before{content:"";position:fixed;left:50%;top:50%;width:min(9
 .krumen a:before{content:"▸ ";color:var(--leise)}
 .firma,.uhr{color:var(--leise)}
 .icons{display:flex;gap:6px}
-.ib{background:var(--dunkel);color:#fff;border:0;border-radius:6px;width:34px;height:32px;cursor:pointer;display:grid;place-items:center;text-decoration:none}
+.ib{background:var(--dunkel);color:#fff;border:0;border-radius:4px;width:32px;height:30px;cursor:pointer;display:grid;place-items:center;text-decoration:none}
 .ib:hover{background:var(--akzent)}
 .ib svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8}
 .kontext{background:var(--hell);border-radius:6px;padding:8px 12px;margin:0;color:var(--leise);min-height:20px}
@@ -98,12 +98,18 @@ body.anmelde-body::before{content:"";position:fixed;left:50%;top:50%;width:min(9
 .titel h2{margin:0;font-size:19px;min-width:150px}
 .titel .rechts{margin-left:auto;display:flex;gap:6px}
 .such{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-input[type=text],input[type=number],input[type=date],input[type=email],input[type=url],input[type=password],input:not([type]),select,textarea{
+input[type=text],input[type=number],input[type=date],input[type=time],input[type=month],input[type=datetime-local],input[type=email],input[type=url],input[type=tel],input[type=search],input[type=password],input:not([type]),select,textarea{
   border:1px solid #cfc6ba;border-radius:4px;padding:4px 7px;background:#fff}
+/* Auswahl, Datum und Uhrzeit so hoch wie ein Textfeld (30 px) */
+select:not([multiple]):not([size]){min-height:30px}
+input[type=date],input[type=time],input[type=month],input[type=datetime-local]{height:30px}
+input[type=color]{height:30px;width:46px;padding:2px;border:1px solid #cfc6ba;border-radius:4px;background:#fff;cursor:pointer}
+h3{font-size:16px}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--akzent2);outline-offset:-1px;border-color:var(--akzent2)}
 textarea{resize:vertical;width:100%}
-.btn{border:1px solid #cfc6ba;background:#f3efe9;border-radius:4px;padding:4px 12px;cursor:pointer}
+.btn{border:1px solid #cfc6ba;background:#f3efe9;border-radius:4px;padding:4px 12px;cursor:pointer;line-height:20px}
 .btn:hover{background:#e8e1d7}
+a.btn{text-decoration:none;color:inherit}
 .btn.prim{background:var(--akzent);border-color:var(--akzent);color:#fff}
 .btn.prim:hover{background:var(--akzent2)}
 .btn.rot{color:var(--rot)}
@@ -117,7 +123,7 @@ table.liste td{background:var(--zeile);padding:7px 10px}
 table.liste tr.klick:hover td{background:var(--zeile2);cursor:pointer}
 table.liste td a{color:var(--dunkel)}
 .filter td{background:transparent!important;padding:2px 10px!important}
-.filter select{font-size:13px;padding:2px 4px}
+.filter select{font-size:13px;padding:2px 4px;min-height:0}
 .leer{padding:22px;text-align:center;color:var(--leise);background:var(--zeile);border-radius:6px}
 .form{display:grid;grid-template-columns:1fr 1fr;gap:3px 14px}
 .zeile{display:grid;grid-template-columns:150px 1fr;background:var(--zeile);min-height:36px}
@@ -128,7 +134,7 @@ table.liste td a{color:var(--dunkel)}
 .zeile>div>textarea{flex:1}
 .zeile .klein{flex:0 0 90px}
 .sektion{grid-column:1/-1;font-weight:700;margin:12px 0 3px}
-.aktion{background:var(--dunkel);color:#fff;border:0;border-radius:5px;width:28px;height:28px;display:inline-grid;place-items:center;cursor:pointer;text-decoration:none;flex:0 0 auto}
+.aktion{background:var(--dunkel);color:#fff;border:0;border-radius:4px;width:30px;height:30px;display:inline-grid;place-items:center;cursor:pointer;text-decoration:none;flex:0 0 auto}
 .aktion:hover{background:var(--akzent)}
 .aktion svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8}
 .spalte{display:flex;flex-direction:column;gap:4px;flex:1}
@@ -352,6 +358,7 @@ a.sk:hover{border-color:var(--akzent2)}
 .rot-t{color:var(--rot);font-weight:600}
 /* Positionen & Kalkulation */
 input.zahl{text-align:right}
+input.zahl-fehler,textarea.zahl-fehler{outline:2px solid var(--rot);outline-offset:-1px;background:#fff4f2}
 .zeile>div>input.zahl{flex:0 0 auto}
 .reiter .luecke{flex:1}
 table.pl td{vertical-align:top}
@@ -425,7 +432,7 @@ table.sl td{white-space:nowrap}
 .mit-seite #seite{display:flex;flex-direction:column;position:sticky;top:12px;max-height:calc(100vh - 24px);padding:14px 14px 10px;margin-bottom:16px}
 .mit-seite #inhalt{margin-bottom:16px}
 .pb-kopf{display:flex;align-items:center;gap:6px;margin-bottom:6px}
-.pb-kopf h3{margin:0;flex:1;font-size:17px}
+.pb-kopf h3{margin:0;flex:1;font-size:16px}
 .pb-ib{border:1px solid #cfc6ba;background:#f3efe9;border-radius:5px;height:30px;min-width:32px;padding:0 7px;cursor:pointer}
 .pb-ib:hover{background:#e8e1d7}
 .pb-krume{background:var(--hell);border-radius:5px;padding:6px 8px;margin-bottom:6px;font-size:13px;word-break:break-word}
@@ -700,7 +707,16 @@ function toast(text, fehler = false) {
 }
 const datum = d => { if (!d) return ""; const [y, m, t] = d.slice(0, 10).split("-"); return `${t}.${m}.${y}`; };
 const groesse = b => b > 1048576 ? (b / 1048576).toFixed(1).replace(".", ",") + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
-const zahlDE = (z, n = 2) => Number(z || 0).toLocaleString("de-DE", {minimumFractionDigits: n, maximumFractionDigits: n});
+// Kaufmännisch runden wie das Programm selbst (kern.kfm): 2,675 → 2,68. Reine Gleitkommarechnung ergäbe 2,67, weil 2,675 im
+// Rechner als 2,67499999… abgelegt ist; im Grenzfall entscheidet deshalb die Dezimaldarstellung der Zahl.
+function kfm(x, n = 2) {
+  x = Number(x); if (!Number.isFinite(x)) return 0;
+  const m = 10 ** n, y = Math.abs(x) * m, g = Math.floor(y), rest = y - g;
+  const v = Math.abs(rest - 0.5) > 1e-6 ? (g + (rest > 0.5 ? 1 : 0)) / m
+    : Number((BigInt(Math.abs(x).toFixed(n + 6).replace(".", "")) + 500000n) / 1000000n) / m;
+  return x < 0 && v ? -v : v;
+}
+const zahlDE = (z, n = 2) => kfm(z || 0, n).toLocaleString("de-DE", {minimumFractionDigits: n, maximumFractionDigits: n});
 function kw(d) {
   const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const tag = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - tag);
@@ -813,7 +829,89 @@ function ibanOk(iban) {
   return BigInt(z) % 97n === 1n;
 }
 const ibanFormat = i => String(i || "").replace(/\s/g, "").toUpperCase().replace(/(.{4})/g, "$1 ").trim();
-const zahlEin = s => { const t = String(s ?? "").trim(); return +(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t) || 0; };
+// ---------- Zahlen aus Eingabefeldern ----------
+// Deutsche Schreibweise: Komma = Dezimalzeichen, Punkt = Tausenderzeichen. Gelesen werden „1.234,56“, „1234,56“, „1 500“,
+// „2.000.000“, „480 €“, „12 %“ und die englische Form „1,234.56“. Ein einzelner Punkt mit genau drei Ziffern dahinter ist ein
+// Tausenderpunkt („1.500“ = 1500), sonst ein Dezimalpunkt („1.5“, „0.125“, „12.50“). Liefert {wert, tausender} oder null (keine Zahl).
+function zahlLesen(s) {
+  let t = String(s ?? "").replace(/[\s\u00a0\u202f'’]/g, "").replace(/^(€|EUR)/i, "").replace(/(€|EUR|%)$/i, "");
+  if (t === "") return {wert: 0};
+  let vz = 1;
+  if ("+-−".includes(t[0])) { if (t[0] !== "+") vz = -1; t = t.slice(1); }
+  if (t === "" || t === "," || t === ".") return {wert: 0};   // beim Tippen: erst das Vorzeichen oder das Komma
+  if (!/^[\d.,]+$/.test(t) || !/\d/.test(t)) return null;
+  const gruppen = (x, z) => new RegExp("^\\d{1,3}(\\" + z + "\\d{3})+$").test(x);   // 1.234.567
+  const nk = t.split(",").length - 1, np = t.split(".").length - 1;
+  let ganz = t, bruch = "", tausender = false;
+  if (nk && np) {   // beides: Das letzte Zeichen trennt die Nachkommastellen ab
+    const dez = t.lastIndexOf(",") > t.lastIndexOf(".") ? "," : ".", tsd = dez === "," ? "." : ",";
+    const teile = t.split(dez); if (teile.length !== 2) return null;
+    [ganz, bruch] = teile;
+    if (!gruppen(ganz, tsd)) return null;
+    ganz = ganz.split(tsd).join("");
+  } else if (nk > 1) {
+    if (!gruppen(t, ",")) return null;
+    ganz = t.split(",").join("");
+  } else if (nk) [ganz, bruch] = t.split(",");
+  else if (np > 1) {
+    if (!gruppen(t, ".")) return null;
+    ganz = t.split(".").join("");
+  } else if (np) {
+    if (/^[1-9]\d{0,2}\.\d{3}$/.test(t)) { ganz = t.replace(".", ""); tausender = true; }
+    else [ganz, bruch] = t.split(".");
+  }
+  const wert = vz * Number((ganz || "0") + (bruch ? "." + bruch : ""));
+  return Number.isFinite(wert) ? {wert: wert || 0, tausender} : null;
+}
+// Was keine Zahl ist, wird nicht still als 0 gespeichert: zahlEin bricht die laufende Aktion ab (ZahlFehler), das Feld wird
+// markiert und beim Verlassen gemeldet. Während des Tippens („input“) bleibt es bei der Markierung.
+class ZahlFehler extends Error {}
+let ZAHL_EREIGNIS = null, zahlToastZeit = 0;
+// Aufbewahrungsfrist für Rechnungen und Kontoauszüge laut Einstellung (8 bis 10 Jahre)
+function fristJahre() { const n = Math.round(+E.frist_rechnung_jahre || 10); return n >= 8 && n <= 10 ? n : 10; }
+const zahlFehlerText = t => `„${String(t).trim()}“ ist keine Zahl und wurde nicht gespeichert – bitte die Eingabe prüfen.`;
+const zahlTsdText = (t, w) => `„${String(t).trim()}“ wurde als ${zahlDE(w, 0)} gelesen (Punkt = Tausenderzeichen). Für Nachkommastellen bitte ein Komma schreiben.`;
+for (const typ of ["input", "change"]) document.addEventListener(typ, e => {
+  const el = e.target; ZAHL_EREIGNIS = {el, typ};
+  setTimeout(() => {   // nach allen Bearbeitern dieses Ereignisses
+    if (ZAHL_EREIGNIS && ZAHL_EREIGNIS.el === el) ZAHL_EREIGNIS = null;
+    if (typ !== "change" || !el || !el.classList) return;
+    if (el.classList.contains("zahl-fehler")) { if (Date.now() - zahlToastZeit > 400) toast(zahlFehlerText(el.value), true); }
+    else if (el.dataset.zahlTsd && el.dataset.zahlTsd === el.value) toast(zahlTsdText(el.value, zahlLesen(el.value).wert));
+    delete el.dataset.zahlTsd;
+  }, 0);
+}, true);
+for (const typ of ["error", "unhandledrejection"]) window.addEventListener(typ, e => {
+  const f = typ === "error" ? e.error : e.reason;
+  if (!(f instanceof ZahlFehler)) return;
+  e.preventDefault();
+  if (!f.leise) { zahlToastZeit = Date.now(); toast(f.message, true); }
+});
+function zahlEin(s) {
+  const r = zahlLesen(s), text = String(s ?? ""), ev = ZAHL_EREIGNIS;
+  const el = ev && ev.el && /^(INPUT|TEXTAREA)$/.test(ev.el.tagName || "") && ev.el.value === text ? ev.el : null;
+  if (r) {
+    if (el) { el.classList.remove("zahl-fehler"); if (r.tausender) el.dataset.zahlTsd = text; else delete el.dataset.zahlTsd; }
+    else if (r.tausender && typeof s === "string") toast(zahlTsdText(text, r.wert));   // aus einem Dialog gelesen
+    return r.wert;
+  }
+  const feld = el || [...document.querySelectorAll("input:not([type=hidden]):not([type=checkbox]):not([type=radio])")].find(i => i.value === text);
+  if (feld) feld.classList.add("zahl-fehler");
+  const f = new ZahlFehler(zahlFehlerText(text));
+  f.leise = !!(ev && ev.typ === "input");
+  throw f;
+}
+
+// Schaltflächen, die nur aus einem Symbol bestehen, bekommen eine Erklärung (Tooltip und für Vorleseprogramme), wenn keine gesetzt ist
+const SYMBOL_ERKLAERUNG = {"✕": "Entfernen", "×": "Entfernen", "‹": "Zurück", "◀": "Zurück", "›": "Weiter", "▶": "Weiter", "🔍": "Suchen", "＋": "Hinzufügen", "▾": "Aufklappen", "▸": "Aufklappen", "✎": "Bearbeiten", "⚙": "Einstellungen"};
+function symboleErklaeren(wurzel) {
+  for (const b of wurzel.querySelectorAll ? wurzel.querySelectorAll("button, a.btn, a.aktion, a.ib") : []) {
+    if (b.title || b.getAttribute("aria-label")) continue;
+    const t = SYMBOL_ERKLAERUNG[b.textContent.trim()];
+    if (t) { b.title = t === "Entfernen" && !b.classList.contains("rot") && b.textContent.trim() === "✕" ? "Schließen" : t; b.setAttribute("aria-label", b.title); }
+  }
+}
+new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) symboleErklaeren(n.matches && n.matches("button, a") ? n.parentNode || n : n); }).observe(document.documentElement, {childList: true, subtree: true});
 
 // ---------- Kopfbereich ----------
 const HAUPTMENUE = [
@@ -1076,7 +1174,7 @@ async function ansichtKunden() {
   kopf({});
   const f = filter.kunden;
   const zeichnen = async () => {
-    const p = new URLSearchParams({feld: f.feld, q: f.q, gruppe: f.gruppe, status: f.status});
+    const p = new URLSearchParams({feld: f.feld, q: f.q, gruppe: f.gruppe, status: f.status, felder: "liste"});
     const liste = await api("kunden?" + p);
     const t = tabelle("kunden", [
       {k: "nummer", t: "Nummer", f: z => `<a href="#/kunde/${z.id}">${z.nummer}</a>`},
@@ -1244,7 +1342,7 @@ function kundeStamm(k) {
       <div class="sektion">Kommunikation</div>
       ${zeile("Telefon", ta(k, "telefon", 3) + `<div style="display:flex;flex-direction:column;gap:4px">${telAktionen}</div>`)}
       ${zeile("E-Mail", `<div class="spalte">${[1,2,3,4].map(i => `<div style="display:flex;gap:6px"><input type="email" data-f="email${i}" value="${esc(k["email" + i])}"><a class="aktion" data-mailto="kunden/${k.id}" href="mailto:${esc(k["email" + i] || "")}" title="Mail aus Jahresring schreiben (Strg-Klick: im eigenen Mailprogramm)" style="${k["email" + i] ? "" : "visibility:hidden"}">${ic("mail")}</a></div>`).join("")}</div>`)}
-      ${zeile("Aufbewahren bis", `<input type="date" ${ICH.rechte.inhaber ? 'data-f="aufbewahren_bis"' : "disabled"} value="${esc(k.aufbewahren_bis || "")}" style="max-width:180px"><span class="hinweis" style="padding-top:5px">Altbestand aus früheren Programmen: Bis zu diesem Tag kann der Kunde weder gelöscht noch anonymisiert werden. Beim Start des Echtbetriebs und beim Import setzt das Programm Jahresende + 10 Jahre; ist die letzte Rechnung im alten Programm bekannt, hier den 31.12. im Jahr der Rechnung + 10 eintragen.</span>`)}
+      ${zeile("Aufbewahren bis", `<input type="date" ${ICH.rechte.inhaber ? 'data-f="aufbewahren_bis"' : "disabled"} value="${esc(k.aufbewahren_bis || "")}" style="max-width:180px"><span class="hinweis" style="padding-top:5px">Altbestand aus früheren Programmen: Bis zu diesem Tag kann der Kunde weder gelöscht noch anonymisiert werden. Beim Start des Echtbetriebs und beim Import setzt das Programm Jahresende + ${fristJahre()} Jahre (Aufbewahrungsfrist laut Einstellungen › Kunden &amp; Aufträge); ist die letzte Rechnung aus dem früheren Programm bekannt, hier den 31.12. im Jahr der Rechnung + ${fristJahre()} eintragen.</span>`)}
       ${zeile("Geburtstag", `<input type="date" data-f="geburtstag" value="${esc(/^\d{4}-\d{2}-\d{2}$/.test(k.geburtstag || "") ? k.geburtstag : "")}" style="max-width:180px"><span class="hinweis" style="padding-top:5px">Erinnerung auf der Startseite, mit Glückwunsch-Mail</span>`)}
       ${zeile("Rundmails", `<label style="padding-top:4px"><input type="checkbox" data-f="newsletter_aus" ${k.newsletter_aus ? "checked" : ""}> keine Rundmails / Newsletter an diesen Kunden</label>`)}
       ${zeile("Website", inp(k, "website") + (k.website ? `<a class="aktion" target="_blank" href="${esc(/^https?:/.test(k.website) ? k.website : "https://" + k.website)}" title="Website öffnen">${ic("web")}</a>` : ""))}
@@ -1288,7 +1386,7 @@ function kundeStamm(k) {
   if ($("#dsAnon")) $("#dsAnon").onclick = async () => {
     try {
       const i = await api(`kunden/${k.id}/anonymisieren`);
-      if (!i.erlaubt) return frage(i.offene_posten ? `Es gibt noch ${i.offene_posten} offene Posten.` : `Noch nicht möglich.\n\nLetzter Beleg ${datum(i.letzter_beleg)} – die Aufbewahrungsfrist (Rechnungen 10, Angebote und E-Mails 6 Jahre ab Jahresende) läuft bis ${datum(i.frist_ende)}. Bis dahin müssen Belege unverändert bleiben (GoBD).`, {titel: "Anonymisieren", ok: "OK", abbrechen: "Schließen"});
+      if (!i.erlaubt) return frage(i.offene_posten ? `Es gibt noch ${i.offene_posten} offene Posten.` : `Noch nicht möglich.\n\nLetzter Beleg ${datum(i.letzter_beleg)} – die Aufbewahrungsfrist (Rechnungen ${fristJahre()}, Angebote und E-Mails 6 Jahre ab Jahresende) läuft bis ${datum(i.frist_ende)}. Bis dahin müssen Belege unverändert bleiben (GoBD).`, {titel: "Anonymisieren", ok: "OK", abbrechen: "Schließen"});
       if (!await frage(`Kunde „${k.kurzname}“ anonymisieren?\n\nName, Anschrift, Kontaktdaten, Notizen, Korrespondenz, Anhänge, Unterschriften und archivierte Beleg-PDFs werden endgültig entfernt; Beträge, Positionen und Stunden bleiben für die Statistik.${i.ordner.length ? "\n\nProjektordner bitte selbst löschen:\n" + i.ordner.join("\n") : ""}`, {ok: "Endgültig anonymisieren"})) return;
       await api(`kunden/${k.id}/anonymisieren`, {method: "POST"}); toast("Kunde anonymisiert"); ansichtKunde(k.id, "stamm");
     } catch (e) { toast(e.message, true); }
@@ -1350,8 +1448,8 @@ async function anhangBereich(ziel, {kunde_id, auftrag_id, lieferant_id}) {
       <div class="ablage" id="ablage">Dateien hierher ziehen oder <label style="text-decoration:underline;cursor:pointer">auswählen<input type="file" id="datei" multiple hidden></label></div>
       ${t.html}
       <h3 style="margin:22px 0 8px">Notizen</h3>
-      <div style="display:flex;gap:8px;margin-bottom:10px"><textarea id="notiz" rows="2" placeholder="z. B. Telefonat: wünscht Eiche geölt statt lackiert"></textarea><button class="btn prim" id="notizNeu">Hinzufügen</button></div>
-      ${not.map(n => `<div class="notiz"><div>${esc(n.text)}</div><span class="hinweis">${datum(n.angelegt)} ${n.angelegt.slice(11,16)}</span><button class="btn rot" data-ndel="${n.id}">×</button></div>`).join("") || `<div class="hinweis">Noch keine Notizen.</div>`}`;
+      <div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-end"><textarea id="notiz" rows="2" placeholder="z. B. Telefonat: wünscht Eiche geölt statt lackiert"></textarea><button class="btn prim" id="notizNeu">Hinzufügen</button></div>
+      ${not.map(n => `<div class="notiz"><div>${esc(n.text)}</div><span class="hinweis">${datum(n.angelegt)} ${n.angelegt.slice(11,16)}</span><button class="btn rot" data-ndel="${n.id}" title="Notiz löschen">✕</button></div>`).join("") || `<div class="hinweis">Noch keine Notizen.</div>`}`;
     t.binden(zeichnen);
     const hoch = async files => {
       for (const f of files) {
@@ -1388,7 +1486,7 @@ const statusMitSchritt = a => esc(a.status || "") + (werkstattSchritt(a) ? ` <sp
 async function auftragsListe(ziel, kunde) {
   const f = kunde ? (filter["auftr" + kunde.id] ||= {q: "", gruppe: "", status: ""}) : filter.auftraege;
   const zeichnen = async () => {
-    const p = new URLSearchParams({q: f.q, gruppe: f.gruppe, status: f.status, ...(kunde ? {kunde: kunde.id} : {})});
+    const p = new URLSearchParams({q: f.q, gruppe: f.gruppe, status: f.status, felder: "liste", ...(kunde ? {kunde: kunde.id} : {})});
     let liste = await api("auftraege?" + p);
     if (f.schritt) liste = liste.filter(z => werkstattSchritt(z) === f.schritt);
     sortierung.auftr ||= {k: "nummer", ab: true};
@@ -1785,7 +1883,7 @@ function lieferantStamm(l) {
   if ($("#lAnon")) $("#lAnon").onclick = async () => {
     try {
       const i = await api(`lieferanten/${l.id}/anonymisieren`);
-      if (!i.erlaubt) return frage(i.offen ? `Es gibt noch ${i.offen} unbezahlte Zahlungsaufträge.` : `Noch nicht möglich.\n\nLetzter Beleg ${datum(i.letzter_beleg)} – die Aufbewahrungsfrist (10 Jahre ab Jahresende, Geschäftsbriefe 6 Jahre) läuft bis ${datum(i.frist_ende)}. Bis dahin müssen die Rechnungen unverändert bleiben (GoBD).`, {titel: "Anonymisieren", ok: "OK", abbrechen: "Schließen"});
+      if (!i.erlaubt) return frage(i.offen ? `Es gibt noch ${i.offen} unbezahlte Zahlungsaufträge.` : `Noch nicht möglich.\n\nLetzter Beleg ${datum(i.letzter_beleg)} – die Aufbewahrungsfrist (${fristJahre()} Jahre ab Jahresende, Geschäftsbriefe 6 Jahre) läuft bis ${datum(i.frist_ende)}. Bis dahin müssen die Rechnungen unverändert bleiben (GoBD).`, {titel: "Anonymisieren", ok: "OK", abbrechen: "Schließen"});
       if (!await frage(`Lieferant „${l.kurzname}“ anonymisieren?\n\nName, Anschrift, Kontaktdaten, Bankverbindung, Notizen, Korrespondenz, Anhänge und die abgelegten Rechnungsdateien werden endgültig entfernt; Beträge und Buchungen bleiben.${i.material ? `\n\n${i.material} Materialien verweisen noch auf diesen Lieferanten – sie bleiben erhalten.` : ""}`, {ok: "Endgültig anonymisieren"})) return;
       await api(`lieferanten/${l.id}/anonymisieren`, {method: "POST"}); toast("Lieferant anonymisiert"); ansichtLieferant(l.id, "stamm");
     } catch (e) { toast(e.message, true); }
@@ -1830,7 +1928,7 @@ function lieferantKonditionen(l) {
 
 // ---------- Zahlungsaufträge ----------
 const skontoAktiv = z => z.skonto > 0 && z.skonto_bis && z.skonto_bis >= heute() && !z.bezahlt;
-const skontoBetrag = z => Math.round(z.betrag * z.skonto) / 100;
+const skontoBetrag = z => kfm(z.betrag * z.skonto / 100);
 async function zahlungsListe(ziel, lieferant) {
   const f = lieferant ? (filter["zl" + lieferant.id] ||= {q: "", status: "offen", bezahlung: ""}) : filter.zahlungen;
   const gewaehlt = new Set();
@@ -2125,6 +2223,7 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
         <div style="display:flex;gap:14px;flex-wrap:wrap"><label style="display:flex;gap:6px;align-items:center">Abstand von unten (mm) <input name="seitenzahl_unten" type="number" step="0.5" value="${E.seitenzahl_unten ?? 6}" style="width:70px"></label>
         <label style="display:flex;gap:6px;align-items:center">Abstand von rechts (mm) <input name="seitenzahl_rechts" type="number" step="0.5" value="${E.seitenzahl_rechts ?? 18}" style="width:70px"></label></div></div>`, true)}
       ${zeile("Letzte Seite unten bündig", `<label class="pchk"><input type="checkbox" name="unten_buendig" ${E.unten_buendig !== false ? "checked" : ""}> Summen, Konditionen, Schlusstext und Gruß unten auf der letzten Seite (Vorgabe für neue und offene Belege, im Beleg unter Druckeinstellungen änderbar)</label>`, true)}
+      ${zeile("Übertrag", `<label class="pchk"><input type="checkbox" name="uebertrag" ${E.uebertrag !== false ? "checked" : ""}> Bei mehrseitigen Belegen mit Preisen die Zwischensumme am Seitenende und oben auf der nächsten Seite drucken (Vorgabe für neue und offene Belege, im Beleg unter Druckeinstellungen änderbar)</label>`, true)}
       ${zeile("Verbraucher-AGB für", `<input id="agbGruppen" value="${esc((E.agb_verbraucher_gruppen || ["Privatkunde"]).join(", "))}"><span class="hinweis" style="padding-top:5px">Kundengruppen, alle anderen bekommen die Unternehmer-AGB</span>`, true)}
       <div class="zeile voll"><label>Position der Felder</label><div><details style="width:100%"><summary class="hinweis" style="cursor:pointer">Ränder und Adressfeld in mm (nur ändern, wenn ein neuer Briefbogen anders aufgebaut ist)</summary>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;margin-top:8px">${[["oben","Rand oben (Folgeseiten)"],["unten","Rand unten"],["links","Rand links"],["rechts","Rand rechts"],["adresse_oben","Adressfeld von oben"],["info_oben","Belegdaten von oben"],["info_links","Belegdaten von links"],["inhalt_start","Text beginnt auf Seite 1 bei"]].map(([k, l]) => `<label style="display:flex;gap:6px;align-items:center;justify-content:space-between">${l}<input data-layout="${k}" type="number" value="${(E.brief_layout || {})[k] ?? ""}" style="width:70px"></label>`).join("")}</div></details></div></div>
@@ -2141,6 +2240,8 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
       <div class="sektion">Datenauskunft (Art. 15 DSGVO)</div>
       ${zeile("Speicherorte", `<div class="spalte"><textarea name="auskunft_speicherorte" data-text="1" rows="2">${esc(E.auskunft_speicherorte || "")}</textarea><span class="hinweis">Wo die Kundendaten im Betrieb liegen; steht so im Auskunftsbrief (Kunde › Datenauskunft). Weitere Systeme des Betriebs hier ergänzen, z. B. Dokumentenarchiv, Cloud-Speicher, Buchhaltungsprogramm.</span></div>`, true)}
       ${zeile("Empfänger", `<div class="spalte"><textarea name="auskunft_empfaenger" data-text="1" rows="2">${esc(E.auskunft_empfaenger || "")}</textarea><span class="hinweis">An wen Daten weitergegeben werden, z. B. Steuerberatung, Website-Anbieter.</span></div>`, true)}
+      <div class="sektion">Aufbewahrung und Löschen</div>
+      ${zeile("Aufbewahrungsfrist", `<div class="spalte"><select name="frist_rechnung_jahre" data-zahl="1" style="max-width:260px">${[[10, "10 Jahre (Vorgabe)"], [9, "9 Jahre"], [8, "8 Jahre"]].map(([v, l]) => `<option value="${v}" ${+(E.frist_rechnung_jahre || 10) === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="hinweis">Gilt für Rechnungen und Kontoauszüge: Erst nach Ablauf schlägt die Löschprüfung (Service › Löschprüfung) Kunden zum Anonymisieren und Kontoauszüge zum Löschen vor. Für Buchungsbelege gelten seit 2025 acht Jahre, für Bücher, Aufzeichnungen und den Jahresabschluss weiterhin zehn. Im Zweifel bei zehn Jahren bleiben oder die Steuerberatung fragen.</span></div>`, true)}
       <div class="sektion">Nummern</div>
       ${zeile("Kundennr. ab", `<input name="kundennr_start" type="number" value="${E.kundennr_start}" class="klein">`)}
       ${zeile("Auftragsnr.", `<span class="hinweis" style="padding-top:4px">Jahr-laufende Nummer, z. B. ${new Date().getFullYear()}-0001</span>`)}
@@ -2244,7 +2345,7 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
       else if (el.type === "checkbox") d[el.name] = el.checked;
       else if (el.tagName === "TEXTAREA" && el.dataset.text) d[el.name] = el.value;
       else if (el.tagName === "TEXTAREA") d[el.name] = el.value.split("\n").map(s => s.trim()).filter(Boolean);
-      else if (el.type === "number") d[el.name] = +el.value;
+      else if (el.type === "number" || el.dataset.zahl) d[el.name] = +el.value;
       else d[el.name] = el.value.trim();
     });
     d.mail = {}; $$("[data-m]").forEach(x => { d.mail[x.dataset.m] = x.type === "checkbox" ? x.checked : x.type === "number" ? +x.value : x.value.trim(); });
@@ -2639,7 +2740,7 @@ async function render() {
   }
 }
 window.addEventListener("hashchange", render);
-const VERSION = "2026.11.01-148";
+const VERSION = "2026.11.01-149";
 (async () => {
   try {
     const v = await api("version").catch(() => ({}));

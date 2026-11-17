@@ -4,6 +4,7 @@
 // =====================================================================
 const BANK_FILTER = {status: "offen", q: ""};
 let BANK_DATEIEN_OFFEN = false;   // Liste der eingelesenen Dateien aufgeklappt (nach dem Einlesen von selbst)
+const betragLesen = t => (zahlLesen(t) || {wert: 0}).wert;   // für die laufende Summe im Dialog: Unlesbares zählt dort als 0
 
 async function ansichtBank() {
   OP_REITER("bank");
@@ -30,11 +31,12 @@ async function ansichtBank() {
       Gutschriften werden offenen Rechnungen zugeordnet, Abbuchungen den Zahlungsaufträgen. Schon eingelesene Umsätze erkennt das Programm und legt sie nicht doppelt an.</p>
     <div class="kachel" style="margin-bottom:12px">${ks ? `Kontostand laut Auszug vom <b>${datum(ks.saldo_datum)}</b>: <b style="font-size:17px">${eur(ks.saldo_ende)}</b> <span class="hinweis">${esc(ks.iban || "")}</span>` : `<span class="hinweis">Noch kein Kontoauszug mit Kontostand eingelesen.</span>`}
       · <a href="#/op/liquiditaet">Liquiditätsvorschau ›</a>${benutzerIstInhaber() ? ` · <a href="#/einstellungen/service/export" id="bkKp" title="Sachkonten, DATEV-Einstellungen">Kontenplan ›</a>` : ""}</div>
-    ${dateien.length ? `<details id="bkDateien" class="kachel" style="margin-bottom:12px"${BANK_DATEIEN_OFFEN ? " open" : ""}><summary style="cursor:pointer"><b>Eingelesene Dateien</b> <span class="hinweis">${dateien.length}${dateien.length === 30 ? " (die letzten)" : ""} · zuletzt ${esc(dateien[0].datei)} vom ${datum(dateien[0].importiert)}</span></summary>
+    ${dateien.length ? `<details id="bkDateien" class="kachel" style="margin-bottom:12px"${BANK_DATEIEN_OFFEN ? " open" : ""}><summary style="cursor:pointer"><b>Eingelesene Dateien</b> <span class="hinweis">${dateien.length}${dateien.length === 30 ? " (die letzten)" : ""} · zuletzt ${esc(dateien[0].datei)} vom ${datum(dateien[0].importiert)}</span>${(n => n ? ` <span style="color:#8a5a00">· ⚠ ${n === 1 ? "eine Datei" : n + " Dateien"} mit Hinweis</span>` : "")(dateien.filter(a => (a.hinweise || []).length).length)}</summary>
       <table class="liste" style="margin-top:8px"><tr><th>eingelesen</th><th>Datei</th><th>Zeitraum</th><th class="r">Umsätze</th><th class="r">davon gebucht</th><th class="r">schon vorhanden</th><th class="r">Kontostand</th><th></th></tr>
       ${dateien.map(a => `<tr><td class="nw">${datum(a.importiert)} ${esc((a.importiert || "").slice(11, 16))}</td><td>${esc(a.datei)} <span class="hinweis">${esc(a.format)}${a.auszuege > 1 ? ` · ${a.auszuege} Auszüge` : ""}</span></td><td class="nw">${a.von ? `${datum(a.von)} – ${datum(a.bis)}` : ""}</td>
         <td class="r">${a.umsaetze}</td><td class="r">${a.gebucht || ""}</td><td class="r">${a.doppelt || ""}</td><td class="r nw">${a.saldo_ende != null ? eur(a.saldo_ende) : ""}</td>
-        <td class="r">${benutzerIstInhaber() ? `<button class="btn rot" data-bkweg="${a.id}" title="${a.gebucht ? "Erst die Zuordnungen dieser Umsätze lösen – dann lässt sich der Kontoauszug entfernen" : "Diesen Kontoauszug samt seinen Umsätzen wieder entfernen"}">✕</button>` : ""}</td></tr>`).join("")}</table>
+        <td class="r">${benutzerIstInhaber() ? `<button class="btn rot" data-bkweg="${a.id}" title="${a.gebucht ? "Erst die Zuordnungen dieser Umsätze lösen – dann lässt sich der Kontoauszug entfernen" : "Diesen Kontoauszug samt seinen Umsätzen wieder entfernen"}">✕</button>` : ""}</td></tr>
+        ${(a.hinweise || []).map(t => `<tr class="bk-hinweis"><td></td><td colspan="7" style="color:#8a5a00;padding-top:0">⚠ ${esc(t)}</td></tr>`).join("")}`).join("")}</table>
       <p class="hinweis" style="margin:8px 0 0">✕ entfernt eine eingelesene Datei samt ihren Umsätzen wieder, zum Beispiel nach einem falschen Konto oder Zeitraum. Das geht nur, solange keiner ihrer Umsätze zugeordnet oder auf ein Konto gebucht ist; das Entfernen steht im Protokoll.</p></details>` : ""}
     ${sicher.length && kann && BANK_FILTER.status === "offen" ? `<div class="kachel" style="border-left:4px solid var(--gruen);margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <span><b>${sicher.length}</b> ${sicher.length === 1 ? "Umsatz passt" : "Umsätze passen"} eindeutig zu Rechnung, Zahlungsauftrag oder einer Kontoregel.</span><button class="btn prim" id="bkAlle">Alle sicheren übernehmen</button></div>` : ""}
@@ -59,12 +61,12 @@ async function ansichtBank() {
   $$("[data-st]", z).forEach(b => b.onclick = () => { BANK_FILTER.status = b.dataset.st; neu(); });
   const s = $("#bkSuche"); let t; s.oninput = () => { clearTimeout(t); t = setTimeout(() => { BANK_FILTER.q = s.value.trim(); neu().then(() => { const x = $("#bkSuche"); if (x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } }); }, 350); };
   if ($("#bkDatei")) $("#bkDatei").onchange = async e => {
-    const dateien = [...e.target.files]; let neuN = 0, dopp = 0;
+    const dateien = [...e.target.files]; let neuN = 0, dopp = 0, hinw = 0;
     for (const f of dateien) {
-      try { const r = await api("bank/einlesen", {method: "POST", body: {dateiname: f.name, daten: await dateiAlsBase64(f)}}); neuN += r.neu; dopp += r.doppelt; }
+      try { const r = await api("bank/einlesen", {method: "POST", body: {dateiname: f.name, daten: await dateiAlsBase64(f)}}); neuN += r.neu; dopp += r.doppelt; hinw += (r.hinweise || []).length; }
       catch (x) { toast(`${f.name}: ${x.message}`, true); }
     }
-    toast(`${neuN} neue Umsätze eingelesen${dopp ? `, ${dopp} waren schon vorhanden` : ""}`);
+    toast(`${neuN} neue Umsätze eingelesen${dopp ? `, ${dopp} waren schon vorhanden` : ""}${hinw ? ` – bitte ${hinw === 1 ? "den Hinweis" : "die Hinweise"} unter „Eingelesene Dateien“ beachten` : ""}`, hinw > 0);
     BANK_FILTER.status = "offen"; BANK_DATEIEN_OFFEN = true; neu();
   };
   if ($("#bkAlle")) $("#bkAlle").onclick = async () => {
@@ -108,12 +110,12 @@ async function bankZuordnen(u, fertig) {
       if (!gutschrift) return;
       const gew = $$("input[name=bzw]:checked", hg);
       if (gew.length === 1) { const b = $(`[data-b="${gew[0].value}"]`, hg); if (!b.value) b.value = zahlDE(u.betrag); }
-      const s = gew.reduce((a, c) => a + (parseFloat(($(`[data-b="${c.value}"]`, hg).value || "0").replace(/\./g, "").replace(",", ".")) || 0), 0);
+      const s = gew.reduce((a, c) => a + betragLesen($(`[data-b="${c.value}"]`, hg).value), 0);
       $("#bzSumme", hg).innerHTML = `Aufgeteilt: <b>${eur(s)}</b> von ${eur(u.betrag)}${Math.abs(s - u.betrag) > 0.009 ? ` <span style="color:var(--rot)">– Rest ${eur(u.betrag - s)}</span>` : " ✓"}`;
     };
     $$("input[name=bzw]", hg).forEach(c => c.onchange = () => {
       if (gutschrift && !c.checked) $(`[data-b="${c.value}"]`, hg).value = "";
-      if (gutschrift && c.checked) { const x = liste.find(y => y.id === +c.value); const rest = u.betrag - $$("input[name=bzw]:checked", hg).filter(o => o !== c).reduce((a, o) => a + (parseFloat(($(`[data-b="${o.value}"]`, hg).value || "0").replace(/\./g, "").replace(",", ".")) || 0), 0); $(`[data-b="${c.value}"]`, hg).value = zahlDE(Math.max(0, Math.min(x.offen, rest))); }
+      if (gutschrift && c.checked) { const x = liste.find(y => y.id === +c.value); const rest = u.betrag - $$("input[name=bzw]:checked", hg).filter(o => o !== c).reduce((a, o) => a + betragLesen($(`[data-b="${o.value}"]`, hg).value), 0); $(`[data-b="${c.value}"]`, hg).value = zahlDE(Math.max(0, Math.min(x.offen, rest))); }
       sum();
     });
     $$(".bz-b", hg).forEach(i => i.oninput = () => { const c = $(`input[name=bzw][value="${i.dataset.b}"]`, hg); c.checked = !!i.value; sum(); });
@@ -121,9 +123,8 @@ async function bankZuordnen(u, fertig) {
     if (gutschrift) { $$("input[name=bzw]:checked", hg).forEach(c => { const v = (u.vorschlag.ziele.find(t => t.id === +c.value) || {}).betrag; $(`[data-b="${c.value}"]`, hg).value = zahlDE(v); }); sum(); }
   });
   if (!r || !fenster) return;
-  const zahlLesen = t => parseFloat(String(t || "0").replace(/\./g, "").replace(",", ".")) || 0;
   const ziele = $$("input[name=bzw]:checked", fenster).map(c => ({art: gutschrift ? "op" : "zahlung", id: +c.value,
-    betrag: gutschrift ? zahlLesen($(`[data-b="${c.value}"]`, fenster).value) : -u.betrag}));
+    betrag: gutschrift ? zahlEin($(`[data-b="${c.value}"]`, fenster).value) : -u.betrag}));
   if (!ziele.length) return toast("Bitte etwas auswählen.", true);
   try { await api(`bank/${u.id}/zuordnen`, {method: "POST", body: {ziele}}); toast("Zugeordnet"); fertig(); } catch (x) { toast(x.message, true); }
 }

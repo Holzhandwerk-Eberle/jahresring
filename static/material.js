@@ -274,7 +274,7 @@ async function auftragBuchen(vorgabe) {
       ${zeile("Auftrag", `<select id="akA" style="width:100%">${auftraege.map(a => `<option value="${a.id}" ${a.id === akWahl.auftrag ? "selected" : ""}>${esc(a.nummer)} ${esc(a.kunde)} · ${esc(a.bezeichnung)}${a.status ? " (" + esc(a.status) + ")" : ""}</option>`).join("")}</select>`, true)}
       ${zeile("Titel", `<select id="akT"><option value="0">(ohne Titel)</option></select>`)}
       ${zeile("Kostenart", `<select id="akK">${Object.entries(meta.kostenarten).map(([k, l]) => `<option value="${k}" ${k === akWahl.kostenart ? "selected" : ""}>${l}</option>`).join("")}</select>`)}
-      ${zeile("Material", `<input id="akMat" readonly placeholder="optional – aus dem Materialstamm wählen" style="cursor:pointer"><button class="btn" id="akMatW">🔍</button><button class="btn" id="akSet" title="Ein Beschlägeset komplett buchen">Set</button>`, true)}
+      ${zeile("Material", `<input id="akMat" readonly placeholder="optional – aus dem Materialstamm wählen" style="cursor:pointer"><button class="btn" id="akMatW" title="Material aus dem Materialstamm wählen">🔍</button><button class="btn" id="akSet" title="Ein Beschlägeset komplett buchen">Set</button>`, true)}
       ${zeile("Bezeichnung", `<input id="akB" placeholder="z. B. Lieferschein-Nr. oder freier Text">`, true)}
       ${zeile("Menge", `<input id="akM" style="width:110px;text-align:right"> <span id="akE" style="padding-top:5px"></span>`)}
       ${zeile("Einzelpreis", `<input id="akP" style="width:110px;text-align:right"> <span style="padding-top:5px">€</span> <span class="hinweis" id="akG" style="padding-top:5px"></span>`)}
@@ -357,7 +357,7 @@ async function lagerBuchen() {
     <div class="titel"><h2>Lager buchen</h2><div class="such"><select id="lO">${opts(E.lagerorte || [], ort, "alle Lagerorte")}</select></div>
       <div class="rechts"><button class="btn" id="lPdf" title="Lagerbestand mit Werten als PDF, z. B. für die Inventur zum Jahresende">📄 Lagerbestand als PDF</button></div></div>
     <div class="form" style="grid-template-columns:1fr 1fr">
-      ${zeile("Material", `<input id="lMat" readonly placeholder="Material wählen …" style="cursor:pointer"><button class="btn" id="lMatW">🔍</button>`, true)}
+      ${zeile("Material", `<input id="lMat" readonly placeholder="Material wählen …" style="cursor:pointer"><button class="btn" id="lMatW" title="Material aus dem Materialstamm wählen">🔍</button>`, true)}
       ${zeile("Buchung", `<div class="radio"><label><input type="radio" name="lA" value="zugang" checked> Lagerzugang</label><label><input type="radio" name="lA" value="abgang"> Lagerabgang</label><label><input type="radio" name="lA" value="inventur"> Inventur (Bestand setzen)</label></div>`, true)}
       ${zeile("Menge", `<input id="lM" style="width:110px;text-align:right"> <span id="lE" style="padding-top:5px"></span><span id="lStk" hidden style="padding-top:5px;margin-left:10px">= <input id="lS" style="width:60px;text-align:right"> Platten</span>`)}
       ${zeile("Einzelpreis", `<input id="lP" style="width:110px;text-align:right"> <span style="padding-top:5px">€</span>`)}
@@ -600,7 +600,8 @@ async function preisImport() {
     $("#piL").onchange = e => { P.lieferant_id = e.target.value; P.rabatte = {}; if (P.datei) lesen(); };
     $$("[data-rg]").forEach(el => el.onchange = async () => {
       const gr = el.dataset.rg, v = el.value.trim();
-      if (v && (isNaN(zahlEin(v)) || zahlEin(v) < 0 || zahlEin(v) >= 100)) { toast("Ein Rabatt liegt zwischen 0 und 100 %.", true); return; }
+      const rn = zahlLesen(v);
+      if (v && (!rn || rn.wert < 0 || rn.wert >= 100)) { toast("Ein Rabatt liegt zwischen 0 und 100 %.", true); return; }
       try {
         if (P.lieferant_id && kann) { await api("preisimport/rabatte", {method: "POST", body: {lieferant_id: P.lieferant_id, rabatte: {[gr]: v === "" ? null : zahlEin(v)}}}); delete P.rabatte[gr]; }
         else if (v === "") delete P.rabatte[gr]; else P.rabatte[gr] = zahlEin(v);

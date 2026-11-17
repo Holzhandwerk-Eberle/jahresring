@@ -14,6 +14,7 @@ import re
 import sys
 from datetime import date, datetime, timezone
 from xml.sax.saxutils import escape
+from kern import kfm
 
 BASIS = os.path.dirname(os.path.abspath(__file__))
 LIB = os.path.join(BASIS, "lib")
@@ -59,7 +60,7 @@ def einheit_code(einheit):
 
 
 def betrag(x):
-    return f"{round(float(x or 0) + 0.0, 2):.2f}"
+    return f"{kfm(float(x or 0) + 0.0):.2f}"
 
 
 def menge_txt(x):
@@ -185,7 +186,7 @@ def cii_xml(b, xrechnung=False, kunde_db=None):
         if z.get("typ") != "pos" or not z.get("zaehlt", True):
             continue
         nr += 1
-        gp = round(vz * float(z.get("gp") or 0), 2)
+        gp = kfm(vz * float(z.get("gp") or 0))
         menge = float(z.get("menge") or 0) or 1.0
         ep = gp / menge if menge else gp
         if ep < 0:   # BR-27: der Preis darf nicht negativ sein – ein Abzug wird als negative Menge übermittelt
@@ -218,19 +219,19 @@ def cii_xml(b, xrechnung=False, kunde_db=None):
     </ram:IncludedSupplyChainTradeLineItem>""")
     if not zeilen:
         raise ERechnungFehler("Die Rechnung enthält keine abrechenbaren Positionen.")
-    summe_zeilen = round(summe_zeilen, 2)
+    summe_zeilen = kfm(summe_zeilen)
 
-    rabatt = round(vz * float(s.get("rabatt") or 0), 2)
-    netto = round(summe_zeilen - rabatt, 2)
-    ust = round(netto * ust_satz / 100, 2)
-    brutto = round(netto + ust, 2)
+    rabatt = kfm(vz * float(s.get("rabatt") or 0))
+    netto = kfm(summe_zeilen - rabatt)
+    ust = kfm(netto * ust_satz / 100)
+    brutto = kfm(netto + ust)
     # Abweichungen zum gedruckten Beleg wären ein Fehler – lieber abbrechen als falsche Zahlen senden
     if abs(netto - vz * float(s.get("netto") or 0)) > 0.011 or abs(brutto - vz * float(s.get("brutto") or 0)) > 0.011:
         raise ERechnungFehler(f"Summen passen nicht zusammen (Positionen {netto:.2f} € netto, Beleg {vz * float(s.get('netto') or 0):.2f} €). "
                               "Bitte den Beleg mit „Aus Positionen aktualisieren“ neu berechnen.")
-    netto, ust, brutto = round(vz * float(s["netto"]), 2), round(vz * float(s["ust"]), 2), round(vz * float(s["brutto"]), 2)
-    vorausbezahlt = round(vz * float(s.get("abzug_brutto") or 0), 2)
-    zahlbetrag = round(brutto - vorausbezahlt, 2)
+    netto, ust, brutto = kfm(vz * float(s["netto"])), kfm(vz * float(s["ust"])), kfm(vz * float(s["brutto"]))
+    vorausbezahlt = kfm(vz * float(s.get("abzug_brutto") or 0))
+    zahlbetrag = kfm(brutto - vorausbezahlt)
 
     # --- Parteien ---
     vk = anschrift_zerlegen(fi.get("firma_anschrift"))

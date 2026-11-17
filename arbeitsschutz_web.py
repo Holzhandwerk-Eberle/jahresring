@@ -31,8 +31,10 @@ def arbeitsschutz_api(con, methode, teile, q, daten):
     A = arbeitsschutz
     wer, inhaber = HILFE["ich_login"](), benutzer.ist_inhaber()
     schreiben = benutzer.darf("arbeitsschutz", 2)
+    # Vorsorgekartei und Expositionsverzeichnis: mit Bearbeitungsrecht – oder, wenn so eingestellt, nur für den Inhaber
+    vorsorge_sicht = schreiben and (inhaber or not HILFE["einstellungen"](con).get("vorsorge_nur_inhaber"))
     if u == "uebersicht" and methode == "GET":
-        return A.uebersicht(con, inhaber)
+        return A.uebersicht(con, inhaber, vorsorge_sicht)
     if u == "vorlagen" and methode == "GET":
         v = A.vorlagen()
         if len(teile) == 4 and teile[2] == "gb":
@@ -225,8 +227,9 @@ def arbeitsschutz_api(con, methode, teile, q, daten):
             return {"ok": True}
     # ---- Vorsorgekartei und Expositionsverzeichnis: vertraulich, nur mit Bearbeitungsrecht im Arbeitsschutz
     if u in ("vorsorge", "exposition"):
-        if not schreiben:
-            raise ApiFehler("Vorsorgekartei und Expositionsverzeichnis sind vertraulich (nur mit Bearbeitungsrecht im Arbeitsschutz).", 403)
+        if not vorsorge_sicht:
+            raise ApiFehler("Vorsorgekartei und Expositionsverzeichnis sind vertraulich (nur für den Inhaber)." if schreiben else
+                            "Vorsorgekartei und Expositionsverzeichnis sind vertraulich (nur mit Bearbeitungsrecht im Arbeitsschutz).", 403)
         if u == "vorsorge":
             if methode == "GET":
                 return {"eintraege": A.vorsorge(con), "arten": A.VORSORGE_ARTEN, "status": A.VORSORGE_STATUS, "anlaesse": A.VORSORGE_ANLAESSE}

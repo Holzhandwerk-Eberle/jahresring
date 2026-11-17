@@ -241,6 +241,9 @@ def ics_parsen(text, von, bis):
     return erg
 
 
+MAX_KALENDER = 20 * 1024 * 1024   # größter Kalender, der aus dem Netz gelesen wird
+
+
 def laden(url, neu=False):
     url = url.strip()
     if url.startswith("webcal://"):
@@ -248,10 +251,15 @@ def laden(url, neu=False):
     jetzt = time.time()
     if not neu and url in _cache and jetzt - _cache[url][0] < CACHE_SEKUNDEN:
         return _cache[url][1]
+    if not re.match(r"https?://", url, re.I):   # keine Datei- oder sonstigen Adressen: hier wird nur ein Kalender aus dem Netz gelesen
+        raise ValueError("Die Kalenderadresse muss mit https:// (oder webcal://) beginnen.")
     req = urllib.request.Request(url, headers={"User-Agent": "Jahresring/1.0"})
     ctx = ssl.create_default_context()
     with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
-        text = r.read().decode("utf-8", errors="replace")
+        roh = r.read(MAX_KALENDER + 1)
+    if len(roh) > MAX_KALENDER:
+        raise ValueError(f"Der Kalender ist zu groß (mehr als {MAX_KALENDER // 1048576} MB).")
+    text = roh.decode("utf-8", errors="replace")
     if "BEGIN:VCALENDAR" not in text:
         raise ValueError("Unter dieser Adresse liegt kein Kalender (iCal). Bitte die „Privatadresse im iCal-Format“ verwenden.")
     _cache[url] = (jetzt, text)

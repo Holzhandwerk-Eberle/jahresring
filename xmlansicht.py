@@ -7,6 +7,7 @@ import io
 import xml.etree.ElementTree as ET
 
 import eingangsrechnung as er
+from kern import kfm
 
 ln = er.ln
 
@@ -171,7 +172,7 @@ def pruefen(xml_bytes, quelle=""):
     p("Gesamtbetrag brutto (BT-112)", f"{brutto:.2f}" if brutto is not None else "")
     p("Zahlbetrag (BT-115)", f"{zahl:.2f}" if zahl is not None else "")
     if zeilen and netto is not None:
-        s = round(sum(zeilen), 2)
+        s = kfm(sum(zeilen))
         erg["pruefungen"].append({"stufe": "ok" if abs(s - netto) < 0.015 else "fehler",
                                   "text": f"{len(zeilen)} Rechnungszeilen, Summe {s:.2f} " + ("= Positionssumme" if abs(s - netto) < 0.015 else f"≠ Positionssumme {netto:.2f}")})
     elif not zeilen:

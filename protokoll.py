@@ -66,6 +66,13 @@ ARTEN = {
     "bank_zuordnung": "Kontoumsatz zugeordnet",
     "bank_loesung": "Zuordnung eines Kontoumsatzes gelöst",
     "preisimport": "Lieferantenpreise übernommen",
+    "anmeldung": "Anmeldung",
+    "passwort": "Passwort und Notfallschlüssel",
+    "benutzer": "Benutzer und Rechte",
+    "stammdaten": "Stammdaten geändert",
+    "einstellung": "Einstellung geändert",
+    "beleg_versandt": "Beleg versandt (Fassung festgehalten)",
+    "bank_auszug_geloescht": "Kontoauszug nach Fristablauf gelöscht",
 }
 START = "0" * 64
 _sperre = threading.Lock()

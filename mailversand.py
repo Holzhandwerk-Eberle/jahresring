@@ -1,11 +1,13 @@
 """E-Mail-Versand über das eigene Postfach (SMTP) mit Ablage im Ordner „Gesendet“ (IMAP)."""
 import imaplib
 import mimetypes
+import os
 import re
 import smtplib
 import socket
 import ssl
 import time
+from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid, formatdate
 
@@ -115,7 +117,7 @@ def nachricht_bauen(cfg, an, cc, betreff, text, anhaenge, bcc=None):
     m["To"] = ", ".join(an)
     if cc:
         m["Cc"] = ", ".join(cc)
-    m["Subject"] = betreff
+    m["Subject"] = " ".join(str(betreff or "").split())   # Zeilenumbrüche im Betreff (z. B. aus eingefügtem Text) wären ein Fehler des Mailformats
     m["Date"] = formatdate(localtime=True)
     m["Message-ID"] = make_msgid(domain=absender.split("@")[-1])
     sig = None if cfg.get("_ohne_signatur") else SIGNATUR["laden"]()
@@ -145,8 +147,16 @@ def adressen(text):
     return teile
 
 
-def senden(cfg, an, cc, betreff, text, anhaenge, kopie_an_mich=False, bcc=None):
-    """Schickt die Mail ab. Liefert {'gesendet': True, 'abgelegt': Ordner oder None, 'hinweis': ...}."""
+def _ohne_bcc(roh):
+    """Kopfzeile „Bcc“ entfernen: In der abgelegten Mail sollen die verdeckten Empfänger (Rundmail) nicht stehen."""
+    kopf, trenner, rest = roh.partition(b"\r\n\r\n") if b"\r\n\r\n" in roh[:200000] else roh.partition(b"\n\n")
+    return re.sub(rb"(?im)^Bcc:.*(?:\r?\n[ \t].*)*\r?\n?", b"", kopf + (b"\r\n" if b"\r\n" in trenner else b"\n")).rstrip(b"\r\n") + trenner + rest
+
+
+def senden(cfg, an, cc, betreff, text, anhaenge, kopie_an_mich=False, bcc=None, ablage=None):
+    """Schickt die Mail ab. Liefert {'gesendet': True, 'abgelegt': Ordner oder None, 'hinweis': ...}.
+    ablage: Ordner, in dem die verschickte Mail vollständig (mit Anhängen) als .eml-Datei festgehalten wird; der Pfad steht
+    dann in 'datei'. So lässt sich später genau das zeigen, was der Empfänger bekommen hat."""
     an, cc = adressen(an), adressen(cc)
     bcc = adressen(", ".join(bcc)) if isinstance(bcc, list) else adressen(bcc)
     if not an:
@@ -182,6 +192,16 @@ def senden(cfg, an, cc, betreff, text, anhaenge, kopie_an_mich=False, bcc=None):
     except Exception as f:  # noqa: BLE001
         raise MailFehler(_verstaendlich(f))
     ergebnis = {"gesendet": True, "abgelegt": None, "message_id": m["Message-ID"]}
+    if ablage:
+        try:
+            jahr = os.path.join(ablage, datetime.now().strftime("%Y"))
+            os.makedirs(jahr, exist_ok=True)
+            pfad = os.path.join(jahr, f"aus_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{os.urandom(4).hex()}.eml")
+            with open(pfad, "wb") as f:
+                f.write(_ohne_bcc(m.as_bytes()))
+            ergebnis["datei"] = pfad
+        except OSError as f:
+            ergebnis["hinweis"] = "Die Mail wurde verschickt, ließ sich aber nicht im Programm ablegen: " + str(f)[:120]
     if cfg.get("gesendet_ablegen", True) and cfg.get("imap_server"):
         try:
             ergebnis["abgelegt"] = in_gesendet_ablegen(cfg, m)

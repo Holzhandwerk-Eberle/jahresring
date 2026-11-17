@@ -1,6 +1,7 @@
 """Projekte: schlanke Klammer über mehrere Aufträge (z. B. Bauabschnitte, Lose, Nachträge, verschiedene Rechnungsempfänger).
 Belege, Kalkulation und Leitstand bleiben je Auftrag; das Projekt fasst nur zusammen und wertet aus."""
 from datetime import date, datetime
+from kern import kfm, zahl_lesen
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS projekte (
@@ -43,10 +44,10 @@ def naechste_nummer(con):
 
 
 def _f(x):
-    try:
-        return float(x or 0)
-    except (TypeError, ValueError):
-        return 0.0
+    """Zahl aus einem gespeicherten Wert; Texte in deutscher Schreibweise werden gelesen, Unlesbares zählt als 0."""
+    if isinstance(x, (int, float)):
+        return float(x) if x == x and abs(x) != float("inf") else 0.0
+    return (zahl_lesen(x) or 0.0) if x else 0.0
 
 
 def auftrag_zahlen(con, a):
@@ -62,8 +63,8 @@ def auftrag_zahlen(con, a):
     for b in con.execute("SELECT * FROM belege WHERE auftrag_id=? AND art IN ('rechnung','abschlag','storno','gutschrift','korrektur') AND status IN ('fest','storniert')", (aid,)):
         berechnet += HILFE["beleg_umsatz"](b)
     op = con.execute("SELECT COALESCE(SUM(betrag),0) AS betrag, COALESCE(SUM(offen),0) AS offen FROM offene_posten WHERE auftrag_id=?", (aid,)).fetchone()
-    return {"angeboten": round(angeboten, 2), "beauftragt": round(beauftragt, 2), "berechnet": round(berechnet, 2),
-            "bezahlt": round(_f(op["betrag"]) - _f(op["offen"]), 2), "offen": round(_f(op["offen"]), 2)}
+    return {"angeboten": kfm(angeboten), "beauftragt": kfm(beauftragt), "berechnet": kfm(berechnet),
+            "bezahlt": kfm(_f(op["betrag"]) - _f(op["offen"])), "offen": kfm(_f(op["offen"]))}
 
 
 def auftraege(con, pid):
@@ -94,16 +95,16 @@ def laden(con, pid, mit_auswertung=True):
                 for k in SI_KEYS:
                     soll[k] += _f(si["soll"].get(k))
                     ist[k] += _f(si["ist"].get(k))
-                a["sollist"] = {"soll_selbstkosten": round(_f(si["soll"].get("selbstkosten")), 2), "ist_selbstkosten": round(_f(si["ist"].get("selbstkosten")), 2),
+                a["sollist"] = {"soll_selbstkosten": kfm(_f(si["soll"].get("selbstkosten"))), "ist_selbstkosten": kfm(_f(si["ist"].get("selbstkosten"))),
                                 "soll_stunden": round(_f(si["soll"].get("stunden")), 1), "ist_stunden": round(_f(si["ist"].get("stunden")), 1)}
             except Exception:  # noqa: BLE001
                 a["sollist"] = None
     p["auftraege"] = liste
-    p["summe"] = {k: round(v, 2) for k, v in summe.items()}
-    p["soll"] = {k: round(v, 2) for k, v in soll.items()}
-    p["ist"] = {k: round(v, 2) for k, v in ist.items()}
+    p["summe"] = {k: kfm(v) for k, v in summe.items()}
+    p["soll"] = {k: kfm(v) for k, v in soll.items()}
+    p["ist"] = {k: kfm(v) for k, v in ist.items()}
     # Ergebnis auf Basis berechneter Umsätze (nachkalkulatorisch)
-    p["ergebnis"] = round(p["summe"]["berechnet"] - p["ist"]["selbstkosten"], 2)
+    p["ergebnis"] = kfm(p["summe"]["berechnet"] - p["ist"]["selbstkosten"])
     return p
 
 
@@ -125,7 +126,7 @@ def liste(con, status=None, q=None):
             z = auftrag_zahlen(con, a)
             for k in s:
                 s[k] += z[k]
-        p["summe"] = {k: round(v, 2) for k, v in s.items()}
+        p["summe"] = {k: kfm(v) for k, v in s.items()}
         aus.append(p)
     return aus
 

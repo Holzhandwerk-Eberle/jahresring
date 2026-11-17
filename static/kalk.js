@@ -515,7 +515,7 @@ function posSeite(ctx) {
         ${[...(MASS_ARTEN[p.masse.art] || "hbt")].map(x => `<span class="hinweis" style="padding-top:5px">${x.toUpperCase()}</span>${numInp(p.masse[x] || "", `data-m="${x}" style="width:72px"`, 0)}`).join("")}`)}
       <div class="zeile voll"><label>Text<br><span class="hinweis" style="font-weight:400">1. Zeile = Kurztext</span></label><div>
         ${rtEditor(p.text, 'data-p="text"', "gross")}
-        <div style="display:flex;flex-direction:column;gap:4px"><button class="btn" id="tbEin" title="Textbaustein einfügen">Baustein</button><button class="btn" id="tbSp" title="Diesen Text als Baustein speichern">Speichern</button></div>
+        <div style="display:flex;flex-direction:column;gap:4px"><button class="btn" id="tbEin" title="Textbaustein einfügen">Baustein</button><button class="btn" id="tbSp" title="Diesen Text als Baustein speichern (die Position selbst speichert von allein)">Als Baustein</button></div>
       </div></div>
       <div class="zeile voll"><label>Bilder<br><span class="hinweis" style="font-weight:400">z. B. Rendering aus dem CAD</span></label><div id="pBilder" style="display:block"></div></div>
       <div class="zeile voll"><label>Werkstattinfo<br><span class="hinweis" style="font-weight:400">nur auf dem Werkstattauftrag, nicht für den Kunden</span></label><div><textarea id="pWi" rows="3" placeholder="z. B. Front mit eingefrästem Griff, Maserung durchlaufend, Kanten vorher anfasen" style="width:100%">${esc((p.extras || {}).werkstattinfo || "")}</textarea></div></div>
@@ -1723,6 +1723,7 @@ async function ansichtBeleg(bid) {
       ? `<div class="hinweis" style="margin:-4px 0 8px">✓ Als versendet vermerkt (${esc(b.versendet_an.slice(9))}) am ${datum(b.versendet.slice(0, 10))} um ${b.versendet.slice(11, 16)} Uhr · <a href="#" id="bVersZur">Vermerk zurücknehmen</a></div>`
       : `<div class="hinweis" style="margin:-4px 0 8px">✉ Per E-Mail gesendet am ${datum(b.versendet.slice(0, 10))} um ${b.versendet.slice(11, 16)} Uhr an ${esc(b.versendet_an)}</div>`
       : ["angebot", "kv"].includes(b.art) ? `<div class="hinweis" style="margin:-4px 0 8px">Noch nicht versendet. Auf der Startseite zählt der Beleg erst nach dem Versand (per E-Mail aus dem Programm oder „Als versendet vermerken“).</div>` : ""}
+    ${(b.versand || []).length ? `<div class="hinweis" id="bVersand" style="margin:-4px 0 8px" title="Jede versandte Fassung bleibt als Datei erhalten – auch wenn der Beleg danach geändert wird.">Versandte ${b.versand.length === 1 ? "Fassung" : "Fassungen"}: ${b.versand.map(v => `<a href="/druck/${bid}/versandt/${v.id}.pdf" target="_blank" title="${esc(v.weg)}${v.an ? " an " + esc(v.an) : ""}">${datum(v.zeit.slice(0, 10))} ${esc(v.zeit.slice(11, 16))}${b.daten.preise === false ? "" : " · " + eur(v.brutto)}</a>`).join(" &nbsp;|&nbsp; ")}</div>` : ""}
     ${b.ist_rechnung ? `<div id="erInfo"></div>` : ""}
     ${b.daten.unterschrift ? `<div class="kachel" style="margin-bottom:10px">✍ Digital unterschrieben von <b>${esc(b.daten.unterschrift.name)}</b>${b.daten.unterschrift.ort ? " in " + esc(b.daten.unterschrift.ort) : ""} am ${datum(b.daten.unterschrift.zeit.slice(0, 10))} um ${b.daten.unterschrift.zeit.slice(11, 16)} Uhr. Der Beleg ist damit endgültig gesperrt und kann nicht gelöscht werden; für Änderungen einen neuen Beleg erstellen.</div>` : ""}
     ${b.art === "abnahme" && !b.daten.unterschrift ? `<div class="form" id="fAbn" style="margin-bottom:10px">
@@ -2578,7 +2579,7 @@ async function historieSeite(z, a) {
       return `${kopf}<div class="h-e h-${x.gruppe}${x.art === "notiz" ? " h-notiz" : ""}"><span class="h-i">${HIST_ICON[x.art] || "•"}</span>
         <div class="h-b"><div><b>${titel}</b> <span class="hinweis">${x.zeit.slice(11, 16) !== "00:00" && x.zeit.slice(11, 16) !== "23:59" && x.zeit.slice(11, 16) !== "12:00" && x.zeit.slice(11, 16) !== "18:00" ? x.zeit.slice(11, 16) : ""}${x.benutzer ? " · " + esc(x.benutzer) : ""}${x.wer ? " · " + esc(x.wer) : ""}</span></div>
         ${x.text ? `<div class="h-t">${esc(x.text).replace(/\n/g, "<br>")}</div>` : ""}</div>
-        ${x.loeschbar ? `<button class="btn rot" data-hdel="${x.id}" title="Notiz löschen">×</button>` : ""}</div>`;
+        ${x.loeschbar ? `<button class="btn rot" data-hdel="${x.id}" title="Notiz löschen">✕</button>` : ""}</div>`;
     }).join("") : `<p class="hinweis">Noch keine Einträge.</p>`;
     $$("[data-hdel]").forEach(b => b.onclick = async () => { if (await frage("Notiz löschen?")) { await api("notizen/" + b.dataset.hdel, {method: "DELETE"}); zeichnen(); } });
   };

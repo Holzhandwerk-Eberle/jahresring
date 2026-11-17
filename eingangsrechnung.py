@@ -5,6 +5,7 @@ import io
 import re
 import xml.etree.ElementTree as ET
 from datetime import date, timedelta
+from kern import kfm
 
 EINHEITEN = {"H87": "Stk.", "C62": "Stk.", "PCE": "Stk.", "EA": "Stk.", "NAR": "Stk.", "ST": "Stk.", "XPP": "Stk.",
              "XUN": "Stk.", "NPR": "Paar", "XCT": "Karton", "CT": "Karton",
@@ -300,7 +301,7 @@ def lies_cii(root):
             "artnr": text(kind(prod, "SellerAssignedID")), "ean": text(kind(prod, "GlobalID")),
             "bezeichnung": name + (("\n" + beschr) if beschr and beschr != name else ""),
             "menge": menge, "einheit": EINHEITEN.get(code.upper(), code), "einheit_code": code,
-            "ep": round(summe / menge, 4) if menge else round(ep, 4), "listenpreis": round(ep, 4), "netto": round(summe, 2),
+            "ep": round(summe / menge, 4) if menge else round(ep, 4), "listenpreis": round(ep, 4), "netto": kfm(summe),
             "ust_satz": satz, "hinweis": " ".join(x for x in (notiz, ref) if x)})
         if ref:
             erg["texte"].append(ref)
@@ -367,7 +368,7 @@ def lies_ubl(root):
     tot = kind(root, "LegalMonetaryTotal")
     r["netto"] = zahl(text(kind(tot, "TaxExclusiveAmount")))
     r["brutto"] = zahl(text(kind(tot, "TaxInclusiveAmount")))
-    r["ust"] = round(r["brutto"] - r["netto"], 2)
+    r["ust"] = kfm(r["brutto"] - r["netto"])
     r["vorausbezahlt"] = zahl(text(kind(tot, "PrepaidAmount")))
     r["zahlbetrag"] = zahl(text(kind(tot, "PayableAmount")))
     if r["brutto"] and r["zahlbetrag"] < 0.005 and r["vorausbezahlt"]:
@@ -384,7 +385,7 @@ def lies_ubl(root):
             "artnr": text(pfad(item, "SellersItemIdentification", "ID")), "ean": text(pfad(item, "StandardItemIdentification", "ID")),
             "bezeichnung": text(kind(item, "Name")) + (("\n" + text(kind(item, "Description"))) if text(kind(item, "Description")) else ""),
             "menge": menge, "einheit": EINHEITEN.get(code.upper(), code), "einheit_code": code,
-            "ep": round(summe / menge, 4) if menge else round(ep, 4), "listenpreis": round(ep, 4), "netto": round(summe, 2),
+            "ep": round(summe / menge, 4) if menge else round(ep, 4), "listenpreis": round(ep, 4), "netto": kfm(summe),
             "ust_satz": zahl(text(pfad(item, "ClassifiedTaxCategory", "Percent"))),
             "hinweis": text(kind(li, "Note"))})
     # Kopf-Zu-/Abschläge (Fracht, Verpackung, Rabatt …) als eigene Zeilen – wie bei CII

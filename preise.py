@@ -15,6 +15,7 @@ import zipfile
 
 import kundenimport
 import material
+from kern import kfm
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS preis_rabatte (
@@ -47,9 +48,22 @@ def _einheit(t):
     return EINHEITEN.get(t.upper().replace(".", ""), t)
 
 
-def _zahl(t):
-    """Zahl aus einer Preisliste: deutsche Schreibweise (1.234,50), englische (1,234.50) und Schweizer (1'234.50)."""
-    t = str(t or "").strip().replace(" ", "").replace("\u00a0", "").replace("€", "").replace("'", "").replace("’", "")
+_WAEHRUNG = re.compile(r"(?i)^(eur|euro|€|chf)|(eur|euro|€|chf)$")
+_PUNKT_3 = re.compile(r"-?[1-9]\d{0,2}\.\d{3}")   # „1.250“: Tausenderpunkt (deutsch) oder drei Nachkommastellen (englisch)?
+
+
+def _zahl_text(t):
+    t = str(t or "").strip()
+    for _ in range(2):
+        t = _WAEHRUNG.sub("", t).strip()
+    return t.replace(" ", "").replace("\u00a0", "").replace("\u202f", "").replace("'", "").replace("’", "")
+
+
+def _zahl(t, punkt=None):
+    """Zahl aus einer Preisliste: deutsche Schreibweise (1.234,50), englische (1,234.50) und Schweizer (1'234.50), auch mit
+    Währung davor oder dahinter („EUR 3,45“). punkt sagt, was ein einzelner Punkt mit genau drei Ziffern dahinter bedeutet
+    („1.250“): "tausend" in einer deutsch geschriebenen Spalte, sonst Dezimalpunkt."""
+    t = _zahl_text(t)
     if not t:
         return None
     if "," in t and "." in t:
@@ -57,12 +71,23 @@ def _zahl(t):
             t = t.replace(",", "")
         else:
             t = t.replace(".", "").replace(",", ".")
+    elif t.count(",") > 1:
+        if not re.fullmatch(r"-?\d{1,3}(,\d{3})+", t):
+            return None
+        t = t.replace(",", "")
     elif "," in t:
         t = t.replace(",", ".")
+    elif t.count(".") > 1:
+        if not re.fullmatch(r"-?\d{1,3}(\.\d{3})+", t):
+            return None
+        t = t.replace(".", "")
+    elif punkt == "tausend" and _PUNKT_3.fullmatch(t):
+        t = t.replace(".", "")
     try:
-        return float(t)
+        v = float(t)
     except ValueError:
         return None
+    return v if v == v and abs(v) != float("inf") else None
 
 
 def _nr(t):
@@ -143,7 +168,7 @@ def datanorm_lesen(text):
                 except (TypeError, ValueError):
                     continue
                 if pz is not None and 0 <= pz < 100:
-                    rabatte[gr] = round(pz, 2)
+                    rabatte[gr] = kfm(pz)
     for nr, e in ean.items():
         if nr in artikel:
             artikel[nr]["ean"] = e
@@ -207,17 +232,49 @@ def tabelle_artikel(zeilen, zuordnung):
     zu = {k: int(v) for k, v in (zuordnung or {}).items() if str(v).lstrip("-").isdigit() and int(v) >= 0} or spalten_vorschlag(kopf)
     if "preis" not in zu or not ("artnr" in zu or "ean" in zu):
         raise Fehler("In der Tabelle wurden die Spalten für Artikelnummer (oder EAN) und Preis nicht gefunden – bitte unten zuordnen.")
-    aus = []
+    # Schreibweise der Preisspalte: Kommt ein Dezimalkomma vor („3,45“), sind Punkte Tausenderpunkte („1.250“ = 1250).
+    # Kommt ein eindeutiger Dezimalpunkt vor („3.45“), ist „1.250“ = 1,25. Ist beides nicht zu sehen, bleibt es mehrdeutig.
+    spalte = [_zahl_text(r[zu["preis"]]) if zu["preis"] < len(r) else "" for r in daten]
+    deutsch = any(re.search(r",\d{1,4}$", x) for x in spalte)
+    englisch = any(re.fullmatch(r"-?\d+\.(\d{1,2}|\d{4,})", x) or re.search(r",\d{3}\.", x) for x in spalte)
+    punkt = "tausend" if deutsch and not englisch else None
+    aus, ohne, unlesbar, negativ, zweifel = [], 0, [], [], []
     for r in daten:
         def w(f):
             return r[zu[f]].strip() if f in zu and zu[f] < len(r) else ""
-        preis = _zahl(w("preis"))
-        if preis is None or not (w("artnr") or w("ean")):
+        if not (w("artnr") or w("ean")):
             continue
+        name = w("artnr") or w("ean")
+        if not w("preis"):
+            ohne += 1
+            continue
+        preis = _zahl(w("preis"), punkt)
+        if preis is None:
+            unlesbar.append((name, w("preis")))
+            continue
+        if preis < 0:
+            negativ.append((name, w("preis")))
+            continue
+        if _PUNKT_3.fullmatch(_zahl_text(w("preis"))) and not (englisch and not deutsch):
+            zweifel.append((name, w("preis"), preis))
         pe = _zahl(w("pe")) or 1
         aus.append({"artnr": w("artnr"), "ean": re.sub(r"\D", "", w("ean")), "text": w("text")[:120], "preis": round(preis / (pe or 1), 4),
                     "einheit": _einheit(w("einheit")), "netto": True, "warengruppe": w("gruppe")[:40]})
-    return aus, zu
+    hinweise = []
+    bsp = lambda liste: f"Artikel {liste[0][0][:30]}: „{liste[0][1][:20]}“"   # noqa: E731
+    if unlesbar:
+        hinweise.append(f"{len(unlesbar)} {'Zeile' if len(unlesbar) == 1 else 'Zeilen'} mit nicht lesbarem Preis übersprungen (z. B. {bsp(unlesbar)}).")
+    if negativ:
+        hinweise.append(f"{len(negativ)} {'Zeile' if len(negativ) == 1 else 'Zeilen'} mit negativem Preis übersprungen (z. B. {bsp(negativ)}).")
+    if ohne:
+        hinweise.append(f"{ohne} {'Zeile' if ohne == 1 else 'Zeilen'} ohne Preis übersprungen.")
+    if zweifel:
+        n, v = zweifel[0][1], zweifel[0][2]
+        gelesen = f"{v:,.2f}".replace(",", "#").replace(".", ",").replace("#", ".")
+        hinweise.append((f"Preise wie „{n}“ wurden als {gelesen} € gelesen, weil die Spalte das Komma als Dezimalzeichen verwendet ({len(zweifel)} Zeilen)." if punkt == "tausend" else
+                         f"{len(zweifel)} {'Preis' if len(zweifel) == 1 else 'Preise'} wie „{n}“ {'ist' if len(zweifel) == 1 else 'sind'} mehrdeutig (Tausenderpunkt oder Dezimalpunkt?) – gelesen als {gelesen} €. "
+                         "Bitte prüfen; eindeutig wird es mit einem Komma in der Datei („1.250,00“ oder „1,25“)."))
+    return aus, zu, " ".join(hinweise)
 
 
 def lesen(roh, dateiname, zuordnung=None):
@@ -241,11 +298,11 @@ def lesen(roh, dateiname, zuordnung=None):
     except kundenimport.ImportFehler as f:
         raise Fehler(str(f))
     try:
-        art, zu = tabelle_artikel(zeilen, zuordnung)
+        art, zu, hinweis = tabelle_artikel(zeilen, zuordnung)
     except Fehler as f:
         # Spalten nicht erkannt: Kopfzeile trotzdem zurückgeben, damit sie sich in der Oberfläche von Hand zuordnen lassen
         return {"format": "Tabelle", "artikel": [], "hinweis": str(f), "kopf": zeilen[0], "zuordnung": spalten_vorschlag(zeilen[0])}
-    return {"format": "Tabelle", "artikel": art, "hinweis": "", "kopf": zeilen[0], "zuordnung": zu}
+    return {"format": "Tabelle", "artikel": art, "hinweis": hinweis, "kopf": zeilen[0], "zuordnung": zu}
 
 
 def zip_inhalt(roh):
@@ -293,7 +350,7 @@ def rabatte_speichern(con, lieferant_id, rabatte):
             con.execute("DELETE FROM preis_rabatte WHERE lieferant_id=? AND gruppe=?", (lieferant_id, gr))
         elif 0 <= pz < 100:
             con.execute("INSERT OR REPLACE INTO preis_rabatte (lieferant_id, gruppe, rabatt, geaendert) VALUES (?,?,?,?)",
-                        (lieferant_id, gr, round(pz, 2), date.today().isoformat()))
+                        (lieferant_id, gr, kfm(pz), date.today().isoformat()))
             n += 1
         else:
             raise Fehler("Ein Rabatt liegt zwischen 0 und 100 %.")

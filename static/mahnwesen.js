@@ -98,9 +98,12 @@ async function zahlungBuchen(o, danach) {
     ${mk ? `<div class="zeile"><label></label><div class="hinweis">offen ${eur(o.offen)} + Mahnkosten ${eur(mk)}. Was über den Rechnungsbetrag hinausgeht, wird auf die Mahnkosten gebucht.</div></div>` : ""}
     <div class="zeile"><label>Skontoabzug</label><div><input name="skonto" class="zahl" value="" placeholder="0,00" style="width:120px"> €</div></div>
     <div class="zeile"><label>Zahlart</label><div><select name="art">${opts(E.bezahlarten, "Überweisung")}</select></div></div>
+    <div class="zeile" id="zbBar" style="display:none"><label></label><div class="hinweis" style="color:#8a5a00">Bareinnahmen gehören zusätzlich in ein Kassenbuch (täglich, lückenlos). Das Programm führt keines – es vermerkt nur, dass die Rechnung bar bezahlt wurde.</div></div>
     <div class="zeile"><label>Bemerkung</label><div><input name="bemerkung"></div></div>
     <div class="zeile"><label></label><div><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="zbBest" ${E.zahlbest_vorschlagen !== false ? "checked" : ""} style="flex:0 0 auto"> danach Zahlungsbestätigung per E-Mail an den Kunden</label></div></div>`, "Buchen",
-    hg => { $("#zbBest", hg).onchange = e => { best = e.target.checked; }; });
+    hg => { $("#zbBest", hg).onchange = e => { best = e.target.checked; };
+      const art = $("[name=art]", hg), bar = () => { $("#zbBar", hg).style.display = /^bar|bargeld|kasse/i.test(art.value) ? "" : "none"; };
+      art.addEventListener("change", bar); bar(); });
   if (!d) return;
   try { await api(`offeneposten/${o.id}/zahlung`, {method: "POST", body: {...d, betrag: zahlEin(d.betrag), skonto: zahlEin(d.skonto)}}); toast("Zahlung gebucht"); danach(); }
   catch (e) { return toast(e.message, true); }

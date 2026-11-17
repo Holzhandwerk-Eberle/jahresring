@@ -1,6 +1,7 @@
 """Materialstamm und Lager: Holzwerkstoffe, Massivholz, Oberflächenstoffe, Chemisch-technische Produkte,
 Beschläge, Beschlägesets, Artikel, Lager- und Auftragsbuchungen."""
 import kern
+from kern import kfm
 import json
 import sqlite3
 from datetime import date, datetime
@@ -240,11 +241,11 @@ def aendern(con, mid, d):
     ek = w.get("ek_preis", alt["ek_preis"]) or 0
     for i in ("", "2", "3"):
         if f"aufschlag{i}" in d and f"vk_preis{i}" not in d:
-            w[f"vk_preis{i}"] = round(ek * (1 + w[f"aufschlag{i}"] / 100), 2)
+            w[f"vk_preis{i}"] = kfm(ek * (1 + w[f"aufschlag{i}"] / 100))
         elif f"vk_preis{i}" in d and f"aufschlag{i}" not in d:
-            w[f"aufschlag{i}"] = round((w[f"vk_preis{i}"] / ek - 1) * 100, 2) if ek else 0
+            w[f"aufschlag{i}"] = kfm((w[f"vk_preis{i}"] / ek - 1) * 100) if ek else 0
         elif "ek_preis" in d and f"vk_preis{i}" not in d and (alt[f"aufschlag{i}"] or 0):
-            w[f"vk_preis{i}"] = round(ek * (1 + alt[f"aufschlag{i}"] / 100), 2)
+            w[f"vk_preis{i}"] = kfm(ek * (1 + alt[f"aufschlag{i}"] / 100))
     if not w:
         return alt
     w["geaendert"] = jetzt()
@@ -364,7 +365,7 @@ def ak_buchen(con, d):
     lager = bool(d.get("lager_abgang")) and m is not None
     ep = f(d.get("einzelpreis")) if d.get("einzelpreis") not in (None, "") else (
         m["kalkpreis"] if lager and m else (m["ek_preis"] if m else 0))
-    betrag = round(f(d.get("betrag")), 2) if d.get("betrag") not in (None, "") else round(menge * ep, 2)
+    betrag = kfm(f(d.get("betrag"))) if d.get("betrag") not in (None, "") else kfm(menge * ep)
     cur = con.execute("INSERT INTO auftragskosten (datum, auftrag_id, titel, kostenart, material_id, bezeichnung, menge, einheit, einzelpreis, "
                       "betrag, lager_abgang, bemerkung, angelegt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (d.get("datum") or date.today().isoformat(), aid, int(d.get("titel") or 0), art, m["id"] if m else None,
@@ -438,7 +439,7 @@ def set_laden(con, sid):
     s["positionen"] = zeilen(con.execute(
         "SELECT p.*, m.nummer, m.bezeichnung, m.einheit, m.ek_preis, CASE WHEN m.kategorie IN ('beschlaege','artikel') THEN 0 ELSE m.verschnitt END AS verschnitt FROM material_set_pos p JOIN material m ON m.id=p.material_id "
         "WHERE p.set_id=? ORDER BY p.sort, p.id", (sid,)))
-    s["summe"] = round(sum(p["menge"] * (p["ek_preis"] or 0) * (1 + (p["verschnitt"] or 0) / 100) for p in s["positionen"]), 2)
+    s["summe"] = kfm(sum(p["menge"] * (p["ek_preis"] or 0) * (1 + (p["verschnitt"] or 0) / 100) for p in s["positionen"]))
     return s
 
 

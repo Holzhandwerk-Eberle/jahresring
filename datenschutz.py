@@ -5,7 +5,9 @@ Ausgelöst nur vom Inhaber, je Datensatz, nach Rückfrage. Ohne „ausfuehren“
 ob und ab wann anonymisiert werden darf. Die Fristen sind bewusst großzügig (10 Jahre ab Jahresende des letzten Belegs
 bzw. des Austritts), damit keine steuerliche oder sozialversicherungsrechtliche Aufbewahrungspflicht verletzt wird.
 """
+import json
 import os
+import re
 import secrets
 from datetime import date, datetime
 
@@ -43,12 +45,244 @@ def _weg(daten, pfad):
     return ""
 
 
-def _frist(jahr):
-    return f"{int(jahr) + JAHRE}-12-31"
+def _frist(jahr, jahre=None):
+    return f"{int(jahr) + int(jahre or JAHRE)}-12-31"
+
+
+# ---------------------------------------------------------------- Kunden
+# Wörter, die in Firmen- und Straßennamen vorkommen, aber niemanden erkennbar machen – sie bleiben in den Texten stehen
+ALLERWELT = {"gmbh", "mbh", "kg", "ohg", "gbr", "ag", "ug", "ek", "co", "und", "the", "von", "der", "die", "das", "den", "dem", "des", "für", "bei", "mit",
+             "familie", "firma", "herr", "herrn", "frau", "eheleute", "ehepaar", "schreinerei", "tischlerei", "zimmerei", "holzbau", "bau", "küchen",
+             "möbel", "praxis", "büro", "gemeinde", "stadt", "verein", "hotel", "gasthof", "gasthaus", "restaurant", "architekt", "architekten",
+             "architekturbüro", "ingenieurbüro", "immobilien", "verwaltung", "hausverwaltung", "straße", "strasse", "weg", "platz", "gasse", "ring",
+             "allee", "hof", "haus", "alte", "alter", "neue", "neuer", "obere", "untere", "sankt"}
+_BUCHSTABE = "A-Za-zÄÖÜäöüßéèêáàâóòôúùûñç"
+
+
+def namensteile(k):
+    """Wörter, an denen der Kunde in freien Texten zu erkennen ist: Vor- und Nachname, Kurzname, Firma, Straße."""
+    person, weitere = set(), set()
+    for feld, ziel in (("nachname", person), ("vorname", person), ("kurzname", weitere), ("firma", weitere), ("strasse", weitere), ("zusatz", weitere)):
+        for wort in re.findall(rf"[{_BUCHSTABE}][{_BUCHSTABE}\-]{{2,}}", str(k.get(feld) or "")):
+            for t in {wort, *wort.split("-")}:
+                if len(t) >= 3 and t.lower() not in ALLERWELT:
+                    ziel.add(t)
+    return person, (weitere - person)
+
+
+def _muster(teile):
+    """Ganze Wörter in der Schreibweise des Namens (so bleibt die Farbe „weiß“ stehen, wenn der Kunde Weiß heißt), auch mit Genitiv-s."""
+    if not teile:
+        return None
+    alle = sorted({t for x in teile for t in (x, x.upper())}, key=len, reverse=True)
+    return re.compile(rf"(?<![{_BUCHSTABE}])(?:{'|'.join(re.escape(t) for t in alle)})(?:s|S)?(?![{_BUCHSTABE}])")
+
+
+def schwaerzen_kurz(text, k):
+    """Für Bezeichnungen und Betreffzeilen („Küche Müller“): jedes Namenswort wird durch „…“ ersetzt."""
+    person, weitere = namensteile(k)
+    m = _muster(person | weitere)
+    return re.sub(r"(…\s*)+…", "…", m.sub("…", str(text))) if text and m else text
+
+
+def schwaerzen_lang(text, k):
+    """Für beschreibende Texte (Positionen, Bautagebuch): Ein Name wird dort entfernt, wo er als Name erkennbar ist – mit Anrede,
+    mit Vornamen, oder als voller Vor- und Nachname. Ein Wort allein bleibt stehen: „Schrank“ beim Kunden Schrank ist die Ware."""
+    if not text:
+        return text
+    person, _ = namensteile(k)
+    t = str(text)
+    nach = [x for x in re.findall(rf"[{_BUCHSTABE}][{_BUCHSTABE}\-]{{2,}}", str(k.get("nachname") or "")) if x.lower() not in ALLERWELT]
+    vor = [x for x in re.findall(rf"[{_BUCHSTABE}][{_BUCHSTABE}\-]{{2,}}", str(k.get("vorname") or "")) if x.lower() not in ALLERWELT]
+    if nach:
+        n = "|".join(re.escape(x) for x in sorted(set(nach), key=len, reverse=True))
+        v = "|".join(re.escape(x) for x in sorted(set(vor), key=len, reverse=True)) or "(?!)"
+        anrede = r"(?:Herrn?|Frau|Familie|Fam\.|Eheleute|Ehepaar|Dr\.|Prof\.|Dipl\.-Ing\.)"
+        t = re.sub(rf"{anrede}(?:\s+{anrede})*(?:\s+(?:{v}))?\s+(?:{n})(?:s|S)?(?![{_BUCHSTABE}])", "…", t)
+        t = re.sub(rf"(?<![{_BUCHSTABE}])(?:{v})\s+(?:{n})(?:s|S)?(?![{_BUCHSTABE}])", "…", t)
+        t = re.sub(rf"(?<![{_BUCHSTABE}])(?:{n}),\s*(?:{v})(?![{_BUCHSTABE}])", "…", t)
+    for feld in ("email1", "email2", "email3", "email4", "telefon", "mobil", "telefax"):
+        w = str(k.get(feld) or "").strip()
+        if len(w) >= 6:
+            t = t.replace(w, "…")
+    strasse = " ".join(x for x in (str(k.get("strasse") or "").strip(), str(k.get("hausnr") or "").strip()) if x)
+    if len(strasse) >= 6:
+        t = t.replace(strasse, "…")
+    return t
+
+
+def kunde(con, kid, daten, ausfuehren=False, wer="", version="", hilfe=None):
+    """Nach Ablauf der Aufbewahrungsfristen: Personenbezug eines Kunden entfernen (Art. 17 DSGVO).
+    Zahlen (Beträge, Positionen, Stunden) bleiben für Statistik und Nachkalkulation erhalten; Postleitzahl und Ort bleiben für
+    die Auswertung nach Gebieten stehen. hilfe: jahre_rechnung, rechnungsarten, beleg_dateien(beleg_id) → Pfade,
+    montage_ordner(), bautagebuch_ordner(), korrespondenz_loeschen(con, kid, auftrag_ids)."""
+    hilfe = hilfe or {}
+    k = con.execute("SELECT * FROM kunden WHERE id=?", (kid,)).fetchone()
+    if not k:
+        raise ApiFehler("Kunde nicht gefunden", 404)
+    kd = dict(k)
+    ids = [r["id"] for r in con.execute("SELECT id FROM auftraege WHERE kunde_id=?", (kid,))]
+    ph = ",".join("?" * len(ids)) or "0"
+    jahre_rechnung = int(hilfe.get("jahre_rechnung") or JAHRE)
+    # Frist je Beleg: Rechnungen (Buchungsbelege) nach der eingestellten Frist, übrige Belege (Angebote, AB, Lieferscheine,
+    # Handelsbriefe) 6 Jahre, jeweils ab Ende des Kalenderjahres; maßgeblich ist das späteste Fristende
+    letzter, frist_ende = "", ""
+    for b in con.execute(f"SELECT art, datum FROM belege WHERE (auftrag_id IN ({ph}) OR kunde_id=?) AND status<>'entwurf'", (*ids, kid)):
+        d = b["datum"] or ""
+        if not d[:4].isdigit():
+            continue
+        letzter = max(letzter, d)
+        jahre = jahre_rechnung if b["art"] in (hilfe.get("rechnungsarten") or ()) else 6
+        frist_ende = max(frist_ende, f"{int(d[:4]) + jahre}-12-31")
+    for b in con.execute(f"SELECT datum FROM korrespondenz WHERE (kunde_id=? OR auftrag_id IN ({ph})) AND art LIKE 'mail%'", (kid, *ids)):
+        d = b["datum"] or ""
+        if d[:4].isdigit():
+            frist_ende = max(frist_ende, f"{int(d[:4]) + 6}-12-31")   # geschäftliche E-Mails (Handelsbriefe)
+    if (k["aufbewahren_bis"] or "") > frist_ende:   # Altbestand aus früheren Programmen oder von Hand gesetzt
+        frist_ende = k["aufbewahren_bis"]
+    offen = con.execute(f"SELECT COUNT(*) FROM offene_posten WHERE auftrag_id IN ({ph}) AND IFNULL(offen,0)>0.005", ids).fetchone()[0] if ids else 0
+    erlaubt = (not frist_ende or frist_ende < date.today().isoformat()) and not offen
+    info = {"offene_posten": offen, "kunde": k["kurzname"], "letzter_beleg": letzter, "frist_ende": frist_ende, "erlaubt": erlaubt, "auftraege": len(ids),
+            "ordner": [r["ordner"] for r in con.execute(f"SELECT ordner FROM auftraege WHERE id IN ({ph}) AND IFNULL(ordner,'')<>''", ids)]}
+    if not ausfuehren:
+        return info
+    if offen:
+        raise ApiFehler("Es gibt noch offene Posten zu diesem Kunden.")
+    if not erlaubt:
+        raise ApiFehler(f"Die Aufbewahrungsfrist läuft noch bis {de_datum(frist_ende)}; vorher darf der Kunde nicht anonymisiert werden.")
+
+    dateien = []
+
+    def weg(pfad):
+        rel = _weg(daten, pfad)
+        if rel:
+            dateien.append(rel)
+
+    kurz = lambda t: schwaerzen_kurz(t, kd)   # noqa: E731
+    lang = lambda t: schwaerzen_lang(t, kd)   # noqa: E731
+    leer = {f: "" for f in ("vorname", "nachname", "titel", "firma", "strasse", "hausnr", "zusatz", "telefon", "mobil", "telefax", "email1",
+                            "email2", "email3", "email4", "website", "bemerkungen", "merkmale", "ustid", "iban", "bic", "geburtstag",
+                            "lieferanschrift", "lieferort", "rechnungsanschrift", "rechnungsort", "anrede", "leitweg_id", "lieferantennr")}
+    spalten = _spalten(con, "kunden")
+    werte = {f: v for f, v in leer.items() if f in spalten}
+    werte.update({"kurzname": f"{X} ({k['nummer']})", "anschrift": X, "aktiv": 0, "geaendert": jetzt()})
+    con.execute(f"UPDATE kunden SET {','.join(f + '=?' for f in werte)} WHERE id=?", (*werte.values(), kid))
+
+    # Belege: Kundendaten, Anrede- und Schlusstext, Unterschrift; Namen in Betreff und Positionstexten; abgelegte Dateien
+    behalten = ("nummer", "gruppe", "land", "ust", "preise", "zahlungsziel", "skonto", "skontotage")
+    for b in con.execute(f"SELECT id, betreff, daten, pdf FROM belege WHERE auftrag_id IN ({ph}) OR kunde_id=?", (*ids, kid)).fetchall():
+        for pfad in (hilfe["beleg_dateien"](b["id"]) if hilfe.get("beleg_dateien") else []) + [b["pdf"]]:
+            weg(pfad)
+        try:
+            d = json.loads(b["daten"] or "{}")
+        except ValueError:
+            d = {}
+        d["kunde"] = {**{kk: (vv if kk in behalten else "") for kk, vv in (d.get("kunde") or {}).items()}, "kurzname": X}
+        d.pop("unterschrift", None)
+        for z in d.get("zeilen") or []:
+            if isinstance(z, dict):
+                z["text"] = lang(z.get("text"))
+                for u in z.get("unter") or []:
+                    if isinstance(u, dict):
+                        u["text"] = lang(u.get("text"))
+        for x in d.get("frei") or []:
+            if isinstance(x, dict):
+                x["text"] = lang(x.get("text"))
+        if isinstance(d.get("auftrag"), dict):
+            d["auftrag"]["bezeichnung"] = kurz(d["auftrag"].get("bezeichnung"))
+        if isinstance(d.get("abnahme"), dict):
+            d["abnahme"] = {kk: (lang(vv) if isinstance(vv, str) else vv) for kk, vv in d["abnahme"].items()}
+        con.execute("UPDATE belege SET anschrift=?, betreff=?, einleitung='', schluss='', versendet_an=CASE WHEN IFNULL(versendet_an,'')='' THEN '' ELSE ? END, daten=?, pdf='' WHERE id=?",
+                    (X, kurz(b["betreff"]), X, json.dumps(d, ensure_ascii=False), b["id"]))
+        if _tabelle_da(con, "beleg_versand"):
+            con.execute("UPDATE beleg_versand SET an='', datei='' WHERE beleg_id=?", (b["id"],))
+    if ids:
+        for a in con.execute(f"SELECT id, bezeichnung FROM auftraege WHERE id IN ({ph})", ids).fetchall():
+            con.execute("UPDATE auftraege SET kunde_daten=NULL, bezeichnung=?, bemerkungen='' WHERE id=?", (kurz(a["bezeichnung"]), a["id"]))
+        for p in con.execute(f"SELECT id, text FROM positionen WHERE auftrag_id IN ({ph})", ids).fetchall():
+            neu = lang(p["text"])
+            if neu != p["text"]:
+                con.execute("UPDATE positionen SET text=? WHERE id=?", (neu, p["id"]))
+        for t in con.execute(f"SELECT id, titel FROM termine WHERE auftrag_id IN ({ph})", ids).fetchall():
+            con.execute("UPDATE termine SET titel=?, notiz='' WHERE id=?", (kurz(t["titel"]), t["id"]))
+        if "notiz" in _spalten(con, "zeiten"):
+            con.execute(f"UPDATE zeiten SET notiz='' WHERE auftrag_id IN ({ph}) AND IFNULL(notiz,'')<>''", ids)
+        if _tabelle_da(con, "auftragskosten"):
+            for r in con.execute(f"SELECT id, bemerkung FROM auftragskosten WHERE auftrag_id IN ({ph}) AND IFNULL(bemerkung,'')<>''", ids).fetchall():
+                con.execute("UPDATE auftragskosten SET bemerkung=? WHERE id=?", (lang(r["bemerkung"]), r["id"]))
+        for m in con.execute(f"SELECT id, unterschrift_kunde, unterschrift_monteur, pdf FROM montageberichte WHERE auftrag_id IN ({ph})", ids).fetchall():
+            for datei in (m["unterschrift_kunde"], m["unterschrift_monteur"]):
+                if datei and hilfe.get("montage_ordner"):
+                    weg(os.path.join(hilfe["montage_ordner"](), datei))
+            weg(m["pdf"])
+            con.execute("UPDATE montageberichte SET kunde_name=?, unterschrift_kunde='', unterschrift_monteur='', anmerkungen='', pdf='' WHERE id=?", (X, m["id"]))
+        if _tabelle_da(con, "bautagebuch"):
+            for e in con.execute(f"SELECT * FROM bautagebuch WHERE auftrag_id IN ({ph})", ids).fetchall():
+                try:
+                    fotos = json.loads(e["fotos"] or "[]")
+                except ValueError:
+                    fotos = []
+                for f in fotos:   # Fotos zeigen oft Wohnräume: Sie werden entfernt, der Text des Eintrags bleibt ohne Namen stehen
+                    name = os.path.basename(str((f.get("datei") if isinstance(f, dict) else f) or ""))
+                    if name and hilfe.get("bautagebuch_ordner"):
+                        weg(os.path.join(hilfe["bautagebuch_ordner"](), name))
+                con.execute("UPDATE bautagebuch SET personal=?, arbeiten=?, material=?, behinderungen=?, maengel=?, besonderes=?, fotos='[]' WHERE id=?",
+                            (*(lang(e[f]) for f in ("personal", "arbeiten", "material", "behinderungen", "maengel", "besonderes")), e["id"]))
+        con.execute(f"UPDATE briefe SET empfaenger=?, text='' WHERE auftrag_id IN ({ph})", (X, *ids))
+        con.execute(f"DELETE FROM notizen WHERE auftrag_id IN ({ph})", ids)
+    for b in con.execute(f"SELECT id, betreff, pdf FROM briefe WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids)).fetchall():
+        weg(b["pdf"])
+        con.execute("UPDATE briefe SET empfaenger=?, text='', betreff=?, pdf='' WHERE id=?", (X, kurz(b["betreff"]), b["id"]))
+    con.execute("DELETE FROM notizen WHERE kunde_id=?", (kid,))
+    if _tabelle_da(con, "projekte") and "kunde_id" in _spalten(con, "projekte"):
+        for p in con.execute("SELECT id, bezeichnung FROM projekte WHERE kunde_id=?", (kid,)).fetchall():
+            con.execute("UPDATE projekte SET bezeichnung=?, bemerkungen='' WHERE id=?", (kurz(p["bezeichnung"]), p["id"]))
+    # Offene Posten, Zahlungseingänge, Mahnungen, zugeordnete Kontoumsätze
+    ops = [r["id"] for r in con.execute(f"SELECT id FROM offene_posten WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids))]
+    if ops:
+        op_ph = ",".join("?" * len(ops))
+        con.execute(f"UPDATE zahlungseingaenge SET bemerkung='' WHERE op_id IN ({op_ph})", ops)
+        if _tabelle_da(con, "mahnungen"):
+            for m in con.execute(f"SELECT id, betreff, daten, pdf FROM mahnungen WHERE op_id IN ({op_ph})", ops).fetchall():
+                weg(m["pdf"])
+                try:
+                    md = json.loads(m["daten"] or "{}")
+                except ValueError:
+                    md = {}
+                md["kunde"] = {"nummer": (md.get("kunde") or {}).get("nummer"), "gruppe": (md.get("kunde") or {}).get("gruppe"), "kurzname": X}
+                if isinstance(md.get("auftrag"), dict):
+                    md["auftrag"]["bezeichnung"] = kurz(md["auftrag"].get("bezeichnung"))
+                md.pop("projekt", None)
+                md.pop("projekt_rel", None)
+                con.execute("UPDATE mahnungen SET anschrift=?, betreff=?, text='', schluss='', daten=?, pdf='', versendet_an='' WHERE id=?",
+                            (X, kurz(m["betreff"]), json.dumps(md, ensure_ascii=False), m["id"]))
+        if _tabelle_da(con, "bank_umsaetze"):
+            n_bank = 0
+            for u in con.execute("SELECT id, ziel FROM bank_umsaetze WHERE ziel LIKE '%\"op\"%'").fetchall():
+                try:
+                    ziele = json.loads(u["ziel"] or "[]")
+                except ValueError:
+                    continue
+                if any(isinstance(z, dict) and z.get("art") == "op" and z.get("id") in ops for z in ziele):
+                    for z in ziele:
+                        if isinstance(z, dict) and "text" in z:
+                            z["text"] = kurz(z["text"])
+                    con.execute("UPDATE bank_umsaetze SET name=?, zweck='', gegen_iban='', e2e='', notiz='', ziel=? WHERE id=?", (X, json.dumps(ziele, ensure_ascii=False), u["id"]))
+                    n_bank += 1
+            info["kontoumsaetze"] = n_bank
+    n_k = hilfe["korrespondenz_loeschen"](con, kid, ids) if hilfe.get("korrespondenz_loeschen") else 0
+    for a in con.execute(f"SELECT pfad FROM anhaenge WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids)).fetchall():
+        _weg(daten, a["pfad"])
+    con.execute(f"DELETE FROM anhaenge WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids))
+    con.execute(f"DELETE FROM wiedervorlagen WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids))
+    protokoll.eintragen(con, "kunde_anonymisiert", f"Kunde {k['nummer']}", f"Kunde {k['nummer']} nach Ablauf der Aufbewahrungsfrist anonymisiert "
+                        f"({len(dateien)} abgelegte Dateien entfernt)", {"id": kid, "korrespondenz": n_k, "dateien": dateien}, benutzer=wer, version=version)
+    return {**info, "erledigt": True, "korrespondenz": n_k, "dateien": len(dateien)}
 
 
 # ---------------------------------------------------------------- Lieferanten
-def lieferant(con, lid, daten, ausfuehren=False, wer="", version=""):
+def lieferant(con, lid, daten, ausfuehren=False, wer="", version="", jahre=None):
+    """jahre: Aufbewahrungsfrist für Eingangsrechnungen (Buchungsbelege) laut Einstellung, sonst 10 Jahre."""
     l = con.execute("SELECT * FROM lieferanten WHERE id=?", (lid,)).fetchone()
     if not l:
         raise ApiFehler("Lieferant nicht gefunden", 404)
@@ -59,13 +293,13 @@ def lieferant(con, lid, daten, ausfuehren=False, wer="", version=""):
         for d in (r["belegdatum"] or "", r["bezahlt"] or ""):
             if d[:4].isdigit():
                 letzter = max(letzter, d[:10])
-                frist_ende = max(frist_ende, _frist(d[:4]))
-    for tab, spalte, jahre in (("korrespondenz", "datum", 6), ("briefe", "datum", 6)):
+                frist_ende = max(frist_ende, _frist(d[:4], jahre))
+    for tab, spalte, jahre_brief in (("korrespondenz", "datum", 6), ("briefe", "datum", 6)):
         if "lieferant_id" in _spalten(con, tab):
             for r in con.execute(f"SELECT {spalte} AS d FROM {tab} WHERE lieferant_id=?", (lid,)):
                 d = r["d"] or ""
                 if d[:4].isdigit():
-                    frist_ende = max(frist_ende, f"{int(d[:4]) + jahre}-12-31")
+                    frist_ende = max(frist_ende, f"{int(d[:4]) + jahre_brief}-12-31")
     offen = con.execute("SELECT COUNT(*) FROM zahlungen WHERE lieferant_id=? AND IFNULL(bezahlt,'')=''", (lid,)).fetchone()[0]
     material = con.execute("SELECT COUNT(*) FROM material WHERE lieferant_id=? AND aktiv=1", (lid,)).fetchone()[0]
     erlaubt = (not frist_ende or frist_ende < date.today().isoformat()) and not offen
@@ -193,7 +427,7 @@ def mitarbeiter(con, mid, daten, ausfuehren=False, wer="", version="", sig_ordne
 
 
 # ---------------------------------------------------------------- Löschliste
-def faellig(con, kunde_info):
+def faellig(con, kunde_info, jahre=None):
     """Wer darf jetzt anonymisiert (bzw. als Interessent gelöscht) werden? Für die jährliche Löschprüfung.
     kunde_info(con, id) liefert die Auskunft des Kunden (Frist, erlaubt) wie beim Knopf „Anonymisieren“."""
     heute = date.today()
@@ -214,7 +448,7 @@ def faellig(con, kunde_info):
     for l in con.execute("SELECT id, nummer, kurzname, gruppe, angelegt, geaendert FROM lieferanten WHERE kurzname NOT LIKE ? "
                          "AND IFNULL(gruppe,'') NOT IN ('Mitarbeiter','Finanzamt','Krankenkasse') ORDER BY nummer", (X + "%",)).fetchall():
         try:
-            i = lieferant(con, l["id"], "")
+            i = lieferant(con, l["id"], "", jahre=jahre)
         except ApiFehler:
             continue
         if not i["erlaubt"]:

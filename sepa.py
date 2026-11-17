@@ -2,7 +2,7 @@
 import re
 from datetime import datetime
 
-from kern import ApiFehler
+from kern import ApiFehler, kfm
 
 
 SEPA_UMLAUTE = {"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss", "&": "+"}
@@ -41,7 +41,7 @@ def sepa_xml(e, posten, ausfuehrung):
         bic = ""
     if not name or not iban_ok(iban):
         raise ApiFehler("Für die SEPA-Datei fehlen in den Einstellungen Kontoinhaber oder eine gültige eigene IBAN.")
-    summe = sum(round(p["zahlbetrag"], 2) for p in posten)
+    summe = sum(kfm(p["zahlbetrag"]) for p in posten)
     msg = "JR" + datetime.now().strftime("%Y%m%d%H%M%S%f")   # eindeutig auch bei zwei Dateien in derselben Sekunde
     tx = []
     for p in posten:

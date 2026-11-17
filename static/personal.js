@@ -128,17 +128,18 @@ async function abmelden() {
 async function passwortAendern() {
   const d = await modal("Eigener Zugang", `<div class="form" style="grid-template-columns:1fr">
     ${zeile("E-Mail", `<input name="email" type="email" value="${esc(ICH.email || "")}" placeholder="für „Passwort vergessen?“">`)}
-    ${zeile("Bisheriges Passwort", `<input type="password" name="alt" autocomplete="current-password" placeholder="nur zum Ändern des Passworts">`)}
+    ${zeile("Bisheriges Passwort", `<input type="password" name="alt" autocomplete="current-password" placeholder="zum Ändern von E-Mail oder Passwort">`)}
     ${zeile("Neues Passwort", `<input type="password" name="neu" autocomplete="new-password">`)}
     ${zeile("Wiederholen", `<input type="password" name="neu2" autocomplete="new-password">`)}</div>
-    <p class="hinweis">An die E-Mail-Adresse schickt Jahresring bei „Passwort vergessen?“ einen Code. Nach einer Passwortänderung werden die anderen Geräte abgemeldet.</p>`, "Speichern");
+    <p class="hinweis">An die E-Mail-Adresse schickt Jahresring bei „Passwort vergessen?“ einen Code – deshalb lässt sie sich nur mit dem bisherigen Passwort ändern. Nach einer Passwortänderung werden die anderen Geräte abgemeldet.</p>`, "Speichern");
   if (!d) return;
   if ((d.email || "") !== (ICH.email || "")) {
-    try { const r = await fetch("/api/anmeldung/email", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({email: d.email})});
+    if (!d.alt) return toast("Zum Ändern der E-Mail-Adresse bitte das bisherige Passwort eingeben.", true);
+    try { const r = await fetch("/api/anmeldung/email", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({email: d.email, passwort: d.alt})});
       const j = await r.json(); if (!r.ok) throw new Error(j.fehler); ICH.email = j.email; toast("E-Mail gespeichert"); }
     catch (e) { return toast(e.message, true); }
   }
-  if (!d.neu && !d.alt) return;
+  if (!d.neu) return;
   if (d.neu !== d.neu2) return toast("Die neuen Passwörter sind nicht gleich.", true);
   try {
     const r = await fetch("/api/anmeldung/passwort", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(d)});
@@ -164,7 +165,7 @@ async function benutzerEinstellungen(z) {
     </table>
     ${ICH.rolle === "inhaber" ? `<div class="kachel" style="margin-top:14px">
       <b>Passwort vergessen</b>
-      <p style="margin:6px 0">Auf der Anmeldeseite (auch auf der Stempeluhr) gibt es „Passwort vergessen?“. Jahresring schickt dann einen 6-stelligen Code an die E-Mail-Adresse des Benutzers (Feld „E-Mail“ im Benutzer, sonst die des verknüpften Mitarbeiters, beim Inhaber zuletzt die Absenderadresse). Der Code gilt 15 Minuten und einmal; danach sind alle Geräte des Benutzers abgemeldet, und er bekommt eine Hinweismail.
+      <p style="margin:6px 0">Auf der Anmeldeseite (auch auf der Stempeluhr) gibt es „Passwort vergessen?“. Jahresring schickt dann einen 6-stelligen Code an die E-Mail-Adresse, die am Benutzer selbst hinterlegt ist (Feld „E-Mail“; beim Inhaber ersatzweise die Absenderadresse des Betriebs). Die Adresse aus dem Mitarbeiterstamm zählt dafür nicht; wer keine eigene Adresse hat, lässt das Passwort vom Inhaber neu setzen. Der Code gilt 15 Minuten und einmal; danach sind alle Geräte des Benutzers abgemeldet, und er bekommt eine Hinweismail.
       Falls der Mailversand einmal nicht geht, hilft dem Inhaber ein <b>Notfallschlüssel</b> zum Ausdrucken: ${ICH.notfall_erstellt ? `erzeugt am ${datum(ICH.notfall_erstellt)}` : `<span style="color:var(--rot)">noch keiner erzeugt</span>`}.</p>
       <button class="btn" id="bnNotfall">${ICH.notfall_erstellt ? "Neuen Notfallschlüssel erzeugen" : "Notfallschlüssel erzeugen"}</button></div>` : ""}
     <div class="kachel" style="margin-top:14px">
@@ -173,18 +174,27 @@ async function benutzerEinstellungen(z) {
         <tr><td><b>Eigene Rechte</b></td><td>je Bereich „kein Zugriff“, „nur ansehen“ oder „bearbeiten“, dazu Preise ein/aus und Aufträge nur mit Werkstatt-Reiter</td></tr></table>
     </div>
 
+    ${ICH.rolle === "inhaber" ? `<div class="kachel" style="margin-top:14px">
+      <b>Anmeldung und besondere Daten</b>
+      <div class="form" style="grid-template-columns:1fr;margin-top:8px">
+        ${zeile("Anmeldung gilt", `<div style="display:flex;gap:6px 10px;align-items:center;flex-wrap:wrap"><input id="bnTageB" class="zahl" style="width:64px" value="${esc(E.sitzung_tage_buero ?? 30)}"> Tage ohne Benutzung (Inhaber, Büro, Werkstatt)
+          <span style="margin-left:14px"></span><input id="bnTageM" class="zahl" style="width:64px" value="${esc(E.sitzung_tage_mitarbeiter ?? 120)}"> Tage (Rolle Mitarbeiter, Stempeluhr am Handy)</div>`)}
+        ${zeile("Vorsorge", `<div class="spalte"><label><input type="checkbox" id="bnVorsorge" ${E.vorsorge_nur_inhaber ? "checked" : ""}> Vorsorgekartei und Expositionsverzeichnis sieht nur der Inhaber</label>
+          <span class="hinweis">Ohne Haken sieht sie auch, wer im Arbeitsschutz „bearbeiten“ darf (Rolle Büro). Das Verbandbuch liest ohnehin nur der Inhaber.</span></div>`)}
+      </div></div>` : ""}
+
     <div class="titel" style="margin-top:22px"><h2>Netzwerk und Handys</h2></div>
     <div class="form" style="grid-template-columns:1fr">
-      ${zeile("Im Netzwerk", `<label style="padding-top:5px"><input type="checkbox" id="nzAn" ${E.netzwerk ? "checked" : ""}> Programm im Werkstatt-WLAN erreichbar machen (für Handys und weitere PCs)</label>`)}
+      ${zeile("Im Netzwerk", `<label style="padding-top:5px"><input type="checkbox" id="nzAn" ${E.netzwerk ? "checked" : ""}> Programm im eigenen Netzwerk erreichbar machen (für Handys im WLAN und weitere PCs; der PC selbst kann per Kabel oder WLAN angeschlossen sein)</label>`)}
       ${zeile("Adresse", `<div style="padding-top:5px;line-height:1.6">${netz.aktiv
         ? `Stempeluhr fürs Handy: <b style="font-size:1.1em">http://${esc(netz.ip)}:${netz.port}/stempel</b><br>Büro von einem anderen PC: http://${esc(netz.ip)}:${netz.port}`
         : E.netzwerk ? `<span style="color:var(--rot)">Eingeschaltet – wirkt nach dem nächsten Neustart des Programms.</span> Danach steht hier die Adresse fürs Handy.`
         : `<span class="hinweis">ausgeschaltet – das Programm ist nur hier am PC erreichbar.</span>`}</div>`)}
-      ${netz.aktiv && (E.https || "aus") === "aus" ? zeile("", `<div class="kachel" style="border-left:4px solid var(--rot);margin:0"><b>Die Verbindung im WLAN ist unverschlüsselt.</b> Anmeldung und Daten gehen im Klartext durchs Netz; wer im selben WLAN mitliest, kann sie sehen. Empfohlen: unten „https zusätzlich“ wählen, die Geräte einrichten und danach auf „nur https“ stellen.</div>`) : ""}
+      ${netz.aktiv && (E.https || "aus") === "aus" ? zeile("", `<div class="kachel" style="border-left:4px solid var(--rot);margin:0"><b>Die Verbindung im Netzwerk ist unverschlüsselt.</b> Anmeldung und Daten gehen im Klartext durchs Netz; wer im selben Netzwerk mitliest, kann sie sehen. Empfohlen: unten „https zusätzlich“ wählen, die Geräte einrichten und danach auf „nur https“ stellen.</div>`) : ""}
       ${zeile("Weitere Adressen", `<div class="spalte"><input id="nzHosts" value="${esc(E.netz_adressen || "")}" placeholder="z. B. buero.meinbetrieb.de" style="max-width:420px">
         <span class="hinweis" style="margin-top:4px">Nur nötig, wenn das Programm im eigenen Netz unter einem eigenen Namen mit Punkt aufgerufen wird. Ohne Eintrag gelten: localhost, die IP-Adresse, der Name dieses PCs und Namen wie „pc.fritz.box“ oder „pc.local“. Mehrere durch Komma trennen.</span></div>`)}
       ${zeile("Verschlüsselung (https)", `<div class="spalte"><select id="nzHttps" style="max-width:420px" ${E.netzwerk ? "" : "disabled"}>
-          <option value="aus" ${(E.https || "aus") === "aus" ? "selected" : ""}>aus – nur http (unverschlüsselt im WLAN)</option>
+          <option value="aus" ${(E.https || "aus") === "aus" ? "selected" : ""}>aus – nur http (unverschlüsselt im Netzwerk)</option>
           <option value="zusaetzlich" ${E.https === "zusaetzlich" ? "selected" : ""}>https zusätzlich – beide Adressen funktionieren (zum Einrichten der Geräte)</option>
           <option value="nur" ${E.https === "nur" ? "selected" : ""}>nur https – andere Geräte werden auf die verschlüsselte Adresse umgeleitet</option></select>
         ${(E._https || {}).aktiv ? `<span style="margin-top:6px;line-height:1.6">Verschlüsselte Adresse: <b>https://${esc(netz.ip)}:${E._https.port}</b> · Stempeluhr: <b>https://${esc(netz.ip)}:${E._https.stempel_port || E._https.port}/stempel</b><br>
@@ -196,8 +206,8 @@ async function benutzerEinstellungen(z) {
             : E._https.am_pc ? `<b style="color:var(--rot)">Zertifikat ist in Windows noch nicht als vertrauenswürdig eingetragen</b> – der Browser zeigt deshalb „Nicht sicher“.` : ""}
           <span style="margin-top:4px"><button class="btn" id="nzZertPc">An diesem PC einrichten</button> <button class="btn" id="nzZertNeu">Zertifikat neu ausstellen</button></span>`}</span>`
           : (E.https && E.https !== "aus") ? `<span style="margin-top:6px;color:var(--rot)">${esc((E._https || {}).meldung || "Eingeschaltet – wirkt nach dem nächsten Neustart des Programms.")}</span>` : ""}
-        <span class="hinweis" style="margin-top:6px">Verschlüsselt Anmeldung und Daten im WLAN und ermöglicht die Installation als App. Das Zertifikat wird auf jedem Gerät einmal eingerichtet und gilt nur für diesen PC im eigenen Netz. Wirkt nach einem Neustart des Programms.</span></div>`)}
-      ${zeile("", `<p class="hinweis" style="margin:0">Kommt ein Gerät nicht durch: im Programmordner <b>Handy-Freigabe.bat</b> doppelklicken (richtet die Firewall ein, zeigt Netzwerkprofil und Adressen). Android: Chrome braucht die Berechtigung „Geräte in der Nähe“; iPhone: unter Datenschutz &amp; Sicherheit › Lokales Netzwerk den Browser erlauben. Der PC sollte im Router eine feste IP-Adresse haben. Von außerhalb des WLANs ist das Programm nicht erreichbar; die Stempeluhr puffert Buchungen und überträgt sie, sobald das Handy wieder im WLAN ist.</p>`)}
+        <span class="hinweis" style="margin-top:6px">Verschlüsselt Anmeldung und Daten im Netzwerk und ermöglicht die Installation als App. Das Zertifikat wird auf jedem Gerät einmal eingerichtet und gilt nur für diesen PC im eigenen Netz. Wirkt nach einem Neustart des Programms.</span></div>`)}
+      ${zeile("", `<p class="hinweis" style="margin:0">Kommt ein Gerät nicht durch: im Programmordner <b>Handy-Freigabe.bat</b> doppelklicken (richtet die Firewall ein, zeigt Netzwerkprofil und Adressen). Android: Chrome braucht die Berechtigung „Geräte in der Nähe“; iPhone: unter Datenschutz &amp; Sicherheit › Lokales Netzwerk den Browser erlauben. Handys müssen im normalen WLAN des Routers sein, nicht im Gastzugang. Der PC sollte im Router eine feste IP-Adresse haben und unter Windows als „Privates Netzwerk“ eingestuft sein (Windows-Einstellungen › Netzwerk und Internet; ein neu angeschlossenes Kabelnetz gilt dort oft zunächst als öffentlich). Von außerhalb des eigenen Netzes ist das Programm nicht erreichbar; die Stempeluhr puffert Buchungen und überträgt sie, sobald das Handy wieder im WLAN ist.</p>`)}
     </div>
 
 `;
@@ -221,8 +231,14 @@ async function benutzerEinstellungen(z) {
       benutzerEinstellungen(z);
     } catch (e) { toast(e.message, true); }
   };
+  for (const [id, schluessel] of [["bnTageB", "sitzung_tage_buero"], ["bnTageM", "sitzung_tage_mitarbeiter"]]) if ($("#" + id, z)) $("#" + id, z).onchange = async e => {
+    const n = Math.round(zahlEin(e.target.value));
+    if (!(n >= 1 && n <= 365)) { toast("Bitte 1 bis 365 Tage angeben.", true); e.target.value = E[schluessel]; return; }
+    E = await api("einstellungen", {method: "PUT", body: {[schluessel]: n}}); e.target.value = n; toast("Gespeichert – gilt für neue Anmeldungen");
+  };
+  if ($("#bnVorsorge", z)) $("#bnVorsorge", z).onchange = async e => { E = await api("einstellungen", {method: "PUT", body: {vorsorge_nur_inhaber: e.target.checked}}); toast("Gespeichert"); };
   $("#nzAn").onchange = async e => {
-    if (e.target.checked && !await frage("Programm im Netzwerk erreichbar machen?\n\nDann können sich Handys und andere PCs im selben WLAN anmelden. Jeder braucht einen eigenen Benutzer. Dazu wird die verschlüsselte Adresse (https) eingeschaltet; die Geräte werden einmal eingerichtet. Die Änderung wirkt nach einem Neustart des Programms.", {ok: "Einschalten"})) { e.target.checked = false; return; }
+    if (e.target.checked && !await frage("Programm im Netzwerk erreichbar machen?\n\nDann können sich Handys und andere PCs im selben Netzwerk (WLAN oder Kabel) anmelden. Jeder braucht einen eigenen Benutzer. Dazu wird die verschlüsselte Adresse (https) eingeschaltet; die Geräte werden einmal eingerichtet. Die Änderung wirkt nach einem Neustart des Programms.", {ok: "Einschalten"})) { e.target.checked = false; return; }
     // beim Einschalten gleich die verschlüsselte Adresse dazu (http bleibt zum Einrichten der Geräte erreichbar)
     E = await api("einstellungen", {method: "PUT", body: {netzwerk: e.target.checked, ...(e.target.checked && (E.https || "aus") === "aus" ? {https: "zusaetzlich"} : {})}});
     toast("Gespeichert – bitte das Programm neu starten"); benutzerEinstellungen(z);
@@ -268,13 +284,13 @@ async function benutzerBearbeiten(b, meta, mas, danach) {
   const d = await modal(neu ? "Neuer Benutzer" : `Benutzer ${b.login}`, `<div class="form" style="grid-template-columns:1fr">
       ${zeile("Benutzername", `<input name="login" value="${esc(b.login)}" autocapitalize="none" placeholder="z. B. werkstatt oder max">`)}
       ${zeile("Name", `<input name="name" value="${esc(b.name)}">`)}
-      ${zeile("E-Mail", `<input name="email" type="email" value="${esc(b.email || "")}" placeholder="für „Passwort vergessen?“ (leer = Mail des Mitarbeiters)">`)}
+      ${zeile("E-Mail", `<input name="email" type="email" value="${esc(b.email || "")}" placeholder="für „Passwort vergessen?“ – nur an diese Adresse geht der Code">`)}
       ${zeile("Rolle", `<select name="rolle" id="bnRolle">${optsKV(meta.rollen.map(r => [r.id, r.name]), b.rolle)}</select>`)}
       <div id="bnRolleText" class="hinweis" style="margin:-4px 0 4px 0"></div>
       <div id="bnEigen"></div>
       <div id="bnKalender"></div>
       ${zeile("Mitarbeiter", `<select name="mitarbeiter_id">${optsKV(mas.map(m => [m.id, `${m.nummer} ${m.name}`]), b.mitarbeiter_id, "— keiner —")}</select><span class="hinweis" style="padding-top:5px">für die Stempeluhr und „Meine Zeiten“</span>`)}
-      ${zeile(neu ? "Passwort / PIN" : "Neues Passwort", `<input name="passwort" type="text" autocomplete="off" placeholder="${neu ? "Rolle Mitarbeiter: mind. 4 Zeichen, sonst 6" : "leer = unverändert"}">`)}
+      ${zeile(neu ? "Passwort / PIN" : "Neues Passwort", `<input name="passwort" type="text" autocomplete="off" placeholder="${neu ? "Rolle Mitarbeiter: mind. 6 Zeichen, sonst 8" : "leer = unverändert"}">`)}
       ${!neu ? zeile("Status", `<select name="aktiv">${optsKV([[1, "aktiv"], [0, "gesperrt (kann sich nicht anmelden)"]], b.aktiv)}</select>`) : ""}
     </div>
     ${!neu ? `<div style="display:flex;gap:8px;margin-top:8px">${b.sitzungen ? `<button class="btn" type="button" id="bnAb">Auf allen Geräten abmelden (${b.sitzungen})</button>` : ""}${b.id !== ICH.id ? `<button class="btn rot" type="button" id="bnDel">Benutzer löschen</button>` : ""}</div>` : ""}`,
@@ -295,6 +311,10 @@ async function benutzerBearbeiten(b, meta, mas, danach) {
         if ($("#bnPreise", hg)) $("#bnPreise", hg).onchange = e => eigen.preise = e.target.checked;
       };
       $("#bnRolle", hg).onchange = rolleZeigen; rolleZeigen();
+      // Mitarbeiter gewählt und noch keine Adresse am Zugang: dessen Adresse als Vorschlag eintragen (der Code für „Passwort vergessen?“
+      // geht nur an die Adresse, die hier am Zugang steht – nicht mehr an die aus dem Mitarbeiterstamm)
+      const maWahl = $("[name=mitarbeiter_id]", hg), mailFeld = $("[name=email]", hg);
+      if (maWahl && mailFeld) maWahl.onchange = () => { const m = mas.find(x => String(x.id) === maWahl.value); if (m && m.email && !mailFeld.value.trim()) mailFeld.value = m.email; };
       if ($("#bnAb", hg)) $("#bnAb", hg).onclick = async () => { await api(`benutzer/${b.id}/abmelden`, {method: "POST"}); toast("Auf allen anderen Geräten abgemeldet"); };
       if ($("#bnDel", hg)) $("#bnDel", hg).onclick = async () => {
         if (!await frage(`Benutzer ${b.login} löschen?`)) return;
@@ -479,7 +499,7 @@ async function mitarbeiterSeite(id) {
     const vorschlag = (m.vorname || m.kuerzel || "").toLowerCase().replace(/[^a-z0-9äöüß]/g, "");
     const d = await modal("Benutzer für die Stempeluhr", `<div class="form" style="grid-template-columns:1fr">
       ${zeile("Benutzername", `<input name="login" value="${esc(vorschlag)}" autocapitalize="none">`)}
-      ${zeile("PIN / Passwort", `<input name="passwort" placeholder="mind. 4 Zeichen">`)}
+      ${zeile("PIN / Passwort", `<input name="passwort" placeholder="mind. 6 Zeichen">`)}
       ${zeile("Rolle", `<select name="rolle"><option value="mitarbeiter">Mitarbeiter – nur Stempeluhr und eigene Zeiten</option><option value="werkstatt">Werkstatt – zusätzlich Werkstattpapiere der Aufträge</option></select>`)}</div>`, "Anlegen");
     if (!d) return;
     try { await api("benutzer", {method: "POST", body: {...d, name: m.name, mitarbeiter_id: id}}); toast("Benutzer angelegt"); mitarbeiterSeite(id); } catch (e) { toast(e.message, true); }
@@ -540,11 +560,11 @@ async function zeitenSeitePersonal(mid) {
       <td><select data-k="auftrag_id" style="max-width:300px">${auftragOpts(x.auftrag_id, x.titel)}</select></td>
       <td><select data-k="taet">${taetigkeitOpts(x.auftrag_id, x.kst, x.taetigkeit)}</select></td>
       <td colspan="2"><input data-k="notiz" value="${esc(x.notiz)}" placeholder="Notiz" style="width:100%"></td>
-      <td class="r">${std(x.stunden)} h</td><td class="r nw"><span class="hinweis" style="font-size:12px">${{stempel: "Stempeluhr", nachtrag: "Nachtrag", pc: "Büro"}[x.quelle] || ""}</span> <a href="#" data-zdel="${x.id}">✕</a></td></tr>`;
+      <td class="r">${std(x.stunden)} h</td><td class="r nw">${x.spaet ? `<span class="hinweis" style="font-size:12px;color:#8a5a00" title="Die Stempelung kam nicht im Augenblick des Stempelns beim Programm an (Handy ohne Netz – oder die Zeit wurde später eingegeben). Eingegangen am ${datum((x.eingang || "").slice(0, 10))} um ${esc((x.eingang || "").slice(11, 16))} Uhr, ${x.spaet >= 120 ? Math.round(x.spaet / 60) + " Stunden" : x.spaet + " Minuten"} nach der gestempelten Zeit.">⏱ nachträglich</span> ` : ""}<span class="hinweis" style="font-size:12px">${{stempel: "Stempeluhr", nachtrag: "Nachtrag", pc: "Büro"}[x.quelle] || ""}</span> <a href="#" data-zdel="${x.id}" title="Zeit löschen">✕</a></td></tr>`;
   }
   const summe = Object.values(tageInfo).filter(t => t.datum >= von && t.datum <= bis);
   z.innerHTML = `<div class="titel"><h2>Zeiten</h2><div class="such">${w.html}
-      <button class="btn" id="ztZur">‹</button><b style="padding:6px 4px">KW ${kwNr} · ${datum(von).slice(0, 6)}–${datum(bis)}</b><button class="btn" id="ztVor">›</button><button class="btn" id="ztHeute">heute</button></div>
+      <button class="btn" id="ztZur" title="Vorige Woche">‹</button><b style="padding:6px 4px">KW ${kwNr} · ${datum(von).slice(0, 6)}–${datum(bis)}</b><button class="btn" id="ztVor" title="Nächste Woche">›</button><button class="btn" id="ztHeute">heute</button></div>
       <span class="speicher"></span></div>
     <table class="liste zt">${html}
       <tr class="sum"><td colspan="3">Woche</td><td class="r">Soll ${std(summe.reduce((s, t) => s + t.soll, 0))}</td><td class="r">Ist ${std(summe.reduce((s, t) => s + t.ist, 0))}</td>
@@ -600,7 +620,7 @@ async function abwesenheitSeite() {
   const j = persAuswahl.jahr;
   const [l, mas] = await Promise.all([api(`abwesenheiten?von=${j}-01-01&bis=${j}-12-31`), api("mitarbeiter")]);
   const offen = l.filter(a => a.status === "beantragt");
-  z.innerHTML = `<div class="titel"><h2>Urlaub und Abwesenheit</h2><div class="such"><button class="btn" id="abZur">‹</button><b style="padding:6px">${j}</b><button class="btn" id="abVor">›</button></div>
+  z.innerHTML = `<div class="titel"><h2>Urlaub und Abwesenheit</h2><div class="such"><button class="btn" id="abZur" title="Voriges Jahr">‹</button><b style="padding:6px">${j}</b><button class="btn" id="abVor" title="Nächstes Jahr">›</button></div>
       <div class="rechts"><button class="btn prim" id="abNeu">+ eintragen</button></div></div>
     ${offen.length ? `<div class="kachel" style="border-left:4px solid var(--akzent);margin-bottom:12px"><b>Urlaubsanträge</b>
       <table class="liste" style="margin-top:6px">${offen.map(a => `<tr><td>${esc(a.vorname)} ${esc(a.nachname)}</td><td>${datum(a.von)}${a.bis !== a.von ? " – " + datum(a.bis) : ""}${a.halbtag ? " (halber Tag)" : ""}</td>
@@ -688,7 +708,7 @@ async function monatsbelegSeite(mid, monat) {
   if (!w.id) { z.innerHTML = `<div class="leer">Noch keine Mitarbeiter angelegt.</div>`; return; }
   const d = await api(`monatsbeleg/${w.id}?monat=${monat}`);
   const kst = Object.entries(d.kostenstellen).sort((a, b) => b[1] - a[1]);
-  z.innerHTML = `<div class="titel"><h2>Monatsbeleg</h2><div class="such">${w.html}<button class="btn" id="mbZur">‹</button><b style="padding:6px 4px">${monatName(monat)}</b><button class="btn" id="mbVor">›</button></div>
+  z.innerHTML = `<div class="titel"><h2>Monatsbeleg</h2><div class="such">${w.html}<button class="btn" id="mbZur" title="Voriger Monat">‹</button><b style="padding:6px 4px">${monatName(monat)}</b><button class="btn" id="mbVor" title="Nächster Monat">›</button></div>
       <div class="rechts"><a class="btn" href="/druck/monatsbeleg/${w.id}/${monat}.pdf" target="_blank">📄 PDF</a></div></div>
     <div id="mbSig"></div>
     ${kontenKachel(d)}
@@ -734,12 +754,12 @@ async function lohnSeite(monat) {
   const zst = x => !x ? "" : x.bezahlt ? `<span style="color:var(--gruen)" title="bezahlt am ${datum(x.bezahlt)}">✓</span> <a href="#/zahlung/${x.id}">${esc(x.nummer)}</a>`
     : `<a href="#/zahlung/${x.id}">${esc(x.nummer)}</a>`;
   const summe = k => d.zeilen.reduce((s, r) => s + ((r.lohn || {})[k] || 0), 0);
-  z.innerHTML = `<div class="titel"><h2>Lohnzahlung</h2><div class="such"><button class="btn" id="lzZur">‹</button><b style="padding:6px 4px">${monatName(monat)}</b><button class="btn" id="lzVor">›</button></div><span class="speicher"></span></div>
+  z.innerHTML = `<div class="titel"><h2>Lohnzahlung</h2><div class="such"><button class="btn" id="lzZur" title="Voriger Monat">‹</button><b style="padding:6px 4px">${monatName(monat)}</b><button class="btn" id="lzVor" title="Nächster Monat">›</button></div><span class="speicher"></span></div>
     <p class="hinweis" style="margin-top:0">So läuft es: Zum Monatsende gehen die Monatsbelege (Stunden, Urlaub, Krankheit) an den Steuerberater. Aus der Lohnabrechnung werden hier Brutto, Auszahlung (netto), Lohnsteuer (inkl. Soli/Kirchensteuer) und der Gesamtsozialversicherungsbeitrag eingetragen. „Überweisungen erzeugen“ legt die Zahlungsaufträge an – sie erscheinen unter Lieferanten › Zahlungen und gehen mit der SEPA-Datei an die Bank.</p>
     <table class="liste lz"><tr><th>Mitarbeiter</th><th class="r">Stunden</th><th class="r">Urlaub</th><th class="r">Krank</th><th class="r" title="Stundenlohn × Ist-Stunden bzw. Gehalt">Richtwert</th>
       <th class="r">Brutto</th><th class="r">Auszahlung</th><th class="r">Lohnsteuer</th><th class="r">SV gesamt</th><th>Überweisungen</th><th></th></tr>
       ${d.zeilen.map(r => { const l = r.lohn || {}; const m = r.mitarbeiter; const inp = k => `<input class="zahl" data-lm="${m.id}" data-lk="${k}" value="${l[k] ? n2(l[k]) : ""}" style="width:90px">`;
-        return `<tr><td><a href="#/personal/ma/${m.id}">${esc(m.name)}</a><div class="hinweis">${esc(m.lohnart_name)}</div></td>
+        return `<tr><td><a href="#/personal/ma/${m.id}">${esc(m.name)}</a><div class="hinweis">${esc(m.lohnart_name)}</div>${(r.hinweise || []).map(t => `<div class="hinweis" style="color:#8a5a00;max-width:330px;white-space:normal">⚠ ${esc(t)}</div>`).join("")}</td>
         <td class="r">${std(r.ist)}<div class="hinweis">Soll ${std(r.soll)}</div></td><td class="r">${r.urlaub ? zahlDE(r.urlaub, 1) + " T." : ""}</td><td class="r">${r.krank ? r.krank + " T." : ""}</td>
         <td class="r hinweis">${r.schaetzung ? eur(r.schaetzung) : ""}</td>
         <td class="r">${inp("brutto")}</td><td class="r">${inp("netto")}</td><td class="r">${inp("steuer")}</td><td class="r">${inp("sv")}</td>
@@ -776,7 +796,7 @@ async function ansichtMeine(monat) {
   if (!ICH.mitarbeiter_id) { z.innerHTML = `<div class="leer">Dieser Benutzer ist keinem Mitarbeiter zugeordnet.</div>`; return; }
   monat = monat || heute().slice(0, 7);
   const [d, st, abw] = await Promise.all([api("stempel/monat?monat=" + monat), api("stempel"), api("stempel/abwesenheiten")]);
-  z.innerHTML = `<div class="titel"><h2>Meine Zeiten</h2><div class="such"><button class="btn" id="mzZur">‹</button><b style="padding:6px 4px">${monatName(monat)}</b><button class="btn" id="mzVor">›</button></div>
+  z.innerHTML = `<div class="titel"><h2>Meine Zeiten</h2><div class="such"><button class="btn" id="mzZur" title="Voriger Monat">‹</button><b style="padding:6px 4px">${monatName(monat)}</b><button class="btn" id="mzVor" title="Nächster Monat">›</button></div>
       <div class="rechts"><a class="btn prim" href="/stempel" target="_blank">⏱ Stempeluhr öffnen</a></div></div>
     ${st.laeuft ? `<div class="kachel" style="border-left:4px solid var(--gruen);margin-bottom:10px">Gestempelt seit <b>${st.laeuft.beginn}</b> ${esc(st.laeuft.auftragsnr || "")} ${esc(st.laeuft.auftrag || st.laeuft.taetigkeit || "")}</div>` : ""}
     ${kontenKachel(d)}

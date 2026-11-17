@@ -4,6 +4,7 @@ Werkstatt:  Werkstattauftrag, Stückliste, Materialsummen, Zuschnittliste (CSV)
 Auswertung: Auftragsstunden, Auftragskosten, Soll/Ist-Vergleich, Lohn- und Materialkosten
 """
 import kern
+from kern import zahl_lesen
 import csv
 from kalkulation import fertigdicke, anzahl_verbinden, kostenliste
 import io
@@ -20,10 +21,10 @@ LAGE_KZ = {"oben": "O", "unten": "U", "vorn": "V", "hinten": "H", "mitte": "M"}
 
 
 def f(x):
-    try:
-        return float(x or 0)
-    except (TypeError, ValueError):
-        return 0.0
+    """Zahl aus einem gespeicherten Wert; Texte in deutscher Schreibweise werden gelesen, Unlesbares zählt als 0."""
+    if isinstance(x, (int, float)):
+        return float(x) if x == x and abs(x) != float("inf") else 0.0
+    return (zahl_lesen(x) or 0.0) if x else 0.0
 
 
 def klar(t):

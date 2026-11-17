@@ -49,7 +49,7 @@ async function ansichtKalender(ansicht = "planung", datumStr) {
   z.innerHTML = `
     <div class="titel"><h2 style="min-width:0">${titel}</h2>
       <div class="such">
-        <a class="btn" href="#/kalender/${ansicht}/${vor}">◀</a><a class="btn" href="#/kalender/${ansicht}/${iso(new Date())}">Heute</a><a class="btn" href="#/kalender/${ansicht}/${nach}">▶</a>
+        <a class="btn" href="#/kalender/${ansicht}/${vor}" title="Zurück">◀</a><a class="btn" href="#/kalender/${ansicht}/${iso(new Date())}">Heute</a><a class="btn" href="#/kalender/${ansicht}/${nach}" title="Weiter">▶</a>
         ${ansicht === "planung" ? `<select id="kWochen">${[1, 2, 4, 6, 8, 13, 26].map(w => `<option value="${w}" ${w === KAL.wochen ? "selected" : ""}>${w} ${w === 1 ? "Woche" : "Wochen"}</option>`).join("")}</select>
           <label class="pchk"><input type="checkbox" id="kAng" ${KAL.zeigeAngebote ? "checked" : ""}> Angebote</label>
           <label class="pchk"><input type="checkbox" id="kEnde" ${KAL.zeigeEnde ? "checked" : ""}> Erledigte</label>` : ""}
@@ -389,7 +389,7 @@ function kalenderVorgabe(z) {
           <td><input data-g="${i}" data-k="url" value="${esc(k.url)}" style="width:100%;min-width:300px" placeholder="https://calendar.google.com/calendar/ical/…/private-…/basic.ics"></td>
           <td><input type="color" data-g="${i}" data-k="farbe" value="${esc(k.farbe || "#4f7cba")}"></td>
           <td><input type="checkbox" data-g="${i}" data-k="aktiv" ${k.aktiv !== false ? "checked" : ""}></td>
-          <td style="white-space:nowrap"><button class="btn" data-test="${i}">Testen</button><button class="btn rot" data-gdel="${i}">✕</button></td></tr>`).join("")}</table>
+          <td style="white-space:nowrap"><button class="btn" data-test="${i}">Testen</button><button class="btn rot" data-gdel="${i}" title="Kalender entfernen">✕</button></td></tr>`).join("")}</table>
         <button class="btn" id="gPlus" style="margin-top:6px">+ Kalender</button></div>
       <div class="kachel" style="margin-bottom:12px"><h4>Terminarten</h4>
         <table class="liste"><tr><th>Name</th><th>Farbe</th><th></th></tr>

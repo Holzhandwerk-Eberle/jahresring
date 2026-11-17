@@ -1,5 +1,5 @@
 #!/bin/bash
-# Schnellprüfung vor jedem Bau (etwa zwei Minuten): Syntax, doppelte Namen, Kalkulation, Kalender, neue Prüfungen,
+# Schnellprüfung vor jedem Bau (etwa sechs Minuten): Syntax, doppelte Namen, Kalkulation, Kalender, neue Prüfungen,
 # Bedienoberfläche (Durchlauf, alle Seiten, Inhaltsschutz). Bricht mit Fehlercode ab, wenn etwas nicht stimmt.
 Q=/home/claude/eberle-buero; O=/tmp/claude-0/t/lauf; T=/tmp/claude-0/t; rc=0
 schritt() { name="$1"; shift; if "$@" > $O/tor_$name.txt 2>&1; then echo "ok     $name"; else echo "FEHLER $name  (siehe $O/tor_$name.txt)"; rc=1; fi; }
@@ -24,10 +24,18 @@ schritt dateiname python3 $T/neu/dateiname.py
 bash $T/v25/neu.sh >/dev/null 2>&1
 schritt uebertrag bash -c "python3 $T/neu/uebertrag.py > $O/tor_uebertrag.txt 2>&1"
 schritt preisimport bash -c "bash $T/v25/neu.sh >/dev/null 2>&1; python3 $T/bank/preise.py | grep -q 'FEHLER: \[\]'"
+# Prüfungen zur Umsetzung des Prüfberichts (Version 149): Sicherheit, Rechnen, Bank, Importe, Nachvollziehbarkeit, Datenschutz, Personal
+for n in sicher149 rechnen149 bank149 import149 nachweis149 datenschutz149 personal149; do
+  bash $T/v25/neu.sh >/dev/null 2>&1
+  schritt $n bash -c "python3 $T/neu/$n.py > $O/tor_aus_$n.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_$n.txt"
+done
 bash $T/v25/neu.sh >/dev/null 2>&1
 schritt durchlauf bash -c "cd $T/v25 && timeout 600 node s/t10.js > $O/tor_t10.txt 2>&1; tail -1 $O/tor_t10.txt | grep -q 'fehler \[\]'"
 schritt seiten bash -c "cd $T/v25 && timeout 600 node s/crawl.js > $O/tor_crawl.txt 2>&1; grep -q '^Fehler: 0' $O/tor_crawl.txt && grep -q '^Auffällige Texte: 0' $O/tor_crawl.txt"
 schritt inhaltsschutz bash -c "cd $T/v25 && cp $T/neu/csp.js s/csp.js && timeout 300 node s/csp.js > $O/tor_csp.txt 2>&1; ! grep -q FEHLER $O/tor_csp.txt && grep -q 'keine Verstöße' $O/tor_csp.txt"
+# Druckweg (echter Browser unter Xvfb: gedruckt wird das PDF des Programms) und Zahleneingabe, beide auf den Daten des Durchlaufs
+schritt druckweg bash -c "cd $T/v25 && cp $T/neu/druckweg.js s/druckweg.js && timeout 400 xvfb-run -a node s/druckweg.js > $O/tor_aus_druckweg.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_druckweg.txt"
+schritt zahleneingabe bash -c "cd $T/v25 && cp $T/neu/zahlen.js s/zahlen.js && timeout 400 node s/zahlen.js > $O/tor_aus_zahlen.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_zahlen.txt"
 bash $T/v25/neu.sh >/dev/null 2>&1
 schritt beschlagsets bash -c "cd $T/v25 && cp $T/neu/sets.js s/sets.js && timeout 300 node s/sets.js > $O/tor_sets.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_sets.txt"
 [ $rc = 0 ] && echo "Schnellprüfung bestanden" || echo "Schnellprüfung NICHT bestanden"

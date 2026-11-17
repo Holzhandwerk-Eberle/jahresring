@@ -50,7 +50,7 @@ ol.schritte{margin:0 0 3mm;padding-left:6mm}ol.schritte li{margin:1.2mm 0}
 <tr><th style="width:30%">Bestandteil</th><th>Anforderung</th></tr>
 <tr><td>Betriebssystem</td><td>Windows 10 oder 11 (64 Bit), aktuelle Updates, Windows-Konto mit Kennwort</td></tr>
 <tr><td>Browser</td><td>Microsoft Edge (in Windows enthalten) oder Google Chrome; wird auch zum Erzeugen der PDFs verwendet</td></tr>
-<tr><td>Python</td><td>Python 3.10 oder neuer. Fehlt Python, richtet das Programm es beim ersten Start selbst ein (Internetverbindung nötig). Weitere Pakete sind nicht nötig.</td></tr>
+<tr><td>Python</td><td>Python 3.12 oder neuer (im Einsatz und geprüft: 3.13). Fehlt Python oder ist nur eine ältere Version vorhanden, richtet das Programm es beim ersten Start selbst ein (Internetverbindung nötig). Weitere Pakete sind nicht nötig.</td></tr>
 <tr><td>Speicherplatz</td><td>ca. 50 MB für das Programm, dazu Daten und Sicherungen (je nach Belegen und Fotos einige GB)</td></tr>
 <tr><td>Empfohlen</td><td>BitLocker für das Laufwerk C:, externes Sicherungsziel (USB-Platte oder NAS), feste IP-Adresse des PCs im Router (bei Nutzung mit Handys und Tablets)</td></tr>
 </table>
@@ -79,7 +79,8 @@ ol.schritte{margin:0 0 3mm;padding-left:6mm}ol.schritte li{margin:1.2mm 0}
 <h2>4. Handys, Tablets und weitere PCs im Netzwerk (optional)</h2>
 <ol class="schritte">
 <li>Einstellungen › Benutzer &amp; Netzwerk › „Im Netzwerk“ einschalten und bei „Verschlüsselung (https)“ zunächst „https zusätzlich“ wählen, Programm neu starten.</li>
-<li>Firewall: Hat das Setup sie nicht freigegeben, im Programmordner <b>Handy-Freigabe.bat</b> doppelklicken. Sie gibt die Ports frei, zeigt das Netzwerkprofil (muss „Privat“ sein) und die Adressen.</li>
+<li>Firewall: Hat das Setup sie nicht freigegeben, im Programmordner <b>Handy-Freigabe.bat</b> doppelklicken. Sie gibt die Ports frei, zeigt das Netzwerkprofil (muss „Privat“ sein) und die Adressen. Führt Windows das Netzwerk als öffentlich – bei einem neu angeschlossenen Netzwerkkabel ist das die übliche Voreinstellung –, bietet sie an, es auf „Privat“ zu stellen; von Hand geht das unter Windows-Einstellungen › Netzwerk und Internet.</li>
+<li>Der PC kann per Netzwerkkabel oder per WLAN am Router hängen: Beides gehört zum selben Netz, ein Handy im WLAN erreicht auch einen PC am Kabel. Handys und Tablets müssen im normalen WLAN des Routers sein, nicht im Gastzugang.</li>
 <li>Am Büro-PC fragt Windows beim ersten Start mit https, ob das Zertifikat eingetragen werden soll: mit „Ja“ bestätigen und den Browser neu öffnen.</li>
 <li>Am Gerät <i>http://PC-Adresse:8765/zertifikat</i> öffnen und das Zertifikat nach der Anleitung für Android, iPhone/iPad oder Windows einmalig einrichten. Der dort gezeigte Fingerabdruck stimmt mit dem in den Einstellungen überein.</li>
 <li>Danach die verschlüsselten Adressen verwenden: das Büro unter <i>https://PC-Adresse:8766</i>, die Stempeluhr unter <i>https://PC-Adresse:8767/stempel</i>. Beide lassen sich über das Browsermenü als App installieren, auch nebeneinander auf einem Gerät.</li>
@@ -113,7 +114,7 @@ ol.schritte{margin:0 0 3mm;padding-left:6mm}ol.schritte li{margin:1.2mm 0}
 <li><b>Umzug:</b> Am alten PC das Programm beenden und den Ordner <i>daten</i> aus dem Programmordner auf einen USB-Stick kopieren. Am neuen PC <b>Jahresring-Setup.exe</b> starten und bei der Frage nach den Daten diesen Ordner auswählen.</li>
 <li><b>Nach Ausfall des alten PCs:</b> Am neuen PC installieren und den Inhaber-Zugang anlegen, das externe Sicherungsziel eintragen und unter Einstellungen › Service › Rücksicherung die letzte Sicherung von dort einspielen. Für verschlüsselte Sicherungen wird das Sicherungskennwort verlangt. Das unveränderbare Protokoll wird aus der Sicherung übernommen.</li>
 <li>Neu einzugeben sind das E-Mail-Passwort und das Sicherungskennwort; beide sind an das Windows-Konto des bisherigen PCs gebunden. Solange das Sicherungskennwort nicht neu gesetzt ist, legt das Programm keine Kopien auf dem externen Ziel ab und weist darauf hin.</li>
-<li>Der neue PC hat eine andere Netzwerkadresse und stellt ein neues https-Zertifikat aus. Auf Tablets und Handys das Zertifikat erneut einrichten (Abschnitt 4) und die Apps unter der neuen Adresse installieren. Autostart am neuen PC einschalten.</li>
+<li>Der neue PC hat eine andere Netzwerkadresse und stellt ein neues https-Zertifikat aus. Auf Tablets und Handys das Zertifikat erneut einrichten (Abschnitt 4) und die Apps unter der neuen Adresse installieren. Autostart am neuen PC einschalten. Im Router dem neuen PC eine feste IP-Adresse geben und unter Windows prüfen, dass das Netzwerk als „Privat“ geführt wird (Handy-Freigabe.bat zeigt es an).</li>
 <li>Die Belegprüfung unter Einstellungen › Service › Protokoll nennt Rechnungen, die seit dem übernommenen Stand festgeschrieben wurden und nachzutragen sind. Die Rücksicherung in der Verfahrensdokumentation (Abschnitt 10.2) vermerken.</li>
 </ol>
 
@@ -149,10 +150,13 @@ ol.schritte{margin:0 0 3mm;padding-left:6mm}ol.schritte li{margin:1.2mm 0}
 <tr><th style="width:6%">✓</th><th>Probe</th></tr>
 <tr><td>☐</td><td>Setup starten, Programm öffnet sich im eigenen Fenster; nach einem Neustart des PCs startet es wieder (Autostart) und das Symbol erscheint in der Taskleiste</td></tr>
 <tr><td>☐</td><td>Beleg als PDF speichern und öffnen; PDF im Projektordner vorhanden; Rechnung festschreiben, Archiv-PDF unter daten\belege vorhanden</td></tr>
+<tr><td>☐</td><td>Mehrseitigen Beleg mit Briefbogen über „Drucken“ auf Papier ausgeben: Die Druckansicht zeigt das PDF, der Ausdruck hat Briefkopf, Fußzeile und Seitenzahlen auf den richtigen Seiten (im Druckfenster „Tatsächliche Größe“)</td></tr>
 <tr><td>☐</td><td>Projektordner aus einem Auftrag öffnen (Explorer), Datei aus dem Projektbrowser öffnen</td></tr>
 <tr><td>☐</td><td>E-Mail mit Beleg an sich selbst senden; Mail liegt im Ordner „Gesendet“ des Postfachs</td></tr>
 <tr><td>☐</td><td>Datensicherung erstellen, Sicherung auf dem externen Ziel vorhanden; Probe-Rücksicherung auf einem Test-PC</td></tr>
-<tr><td>☐</td><td>https einschalten, Zertifikat am PC bestätigen; Stempeluhr am Handy über https öffnen und als App installieren</td></tr>
+<tr><td>☐</td><td>Handy-Freigabe.bat ausführen: Programm „im Netzwerk erreichbar“, Netzwerkprofil „Private“, Adresse fürs Handy wird angezeigt</td></tr>
+<tr><td>☐</td><td>https einschalten, Zertifikat am PC bestätigen; Stempeluhr am Handy über https öffnen und als App installieren; eine Stempelung erscheint im Büro unter Mitarbeiter › Zeiten</td></tr>
+<tr><td>☐</td><td>„Passwort vergessen?“ auf der Anmeldeseite: Der Code kommt an der Adresse an, die am Benutzer hinterlegt ist</td></tr>
 <tr><td>☐</td><td>Bildtafel im Arbeitsschutz öffnen; Kontoauszug (CAMT) einlesen; DATEV-Stapel erstellen und der Steuerberatung zum Probeimport geben</td></tr>
 <tr><td>☐</td><td>Einstellungen › Service › Protokoll zeigt „Unverändert“</td></tr>
 </table>
@@ -166,7 +170,7 @@ ol.schritte{margin:0 0 3mm;padding-left:6mm}ol.schritte li{margin:1.2mm 0}
 <tr><td>Programm startet nicht</td><td>daten\protokoll.txt ansehen; start.bat direkt doppelklicken und die Meldung im Fenster lesen</td></tr>
 <tr><td>Meldung „Datenbank ist beschädigt“ beim Start</td><td>Die beschädigte Datei bleibt unter daten\beschaedigt erhalten. Mit „Ja“ wird die jüngste geprüfte Sicherung eingespielt; danach die Belegprüfung ansehen.</td></tr>
 <tr><td>Hinweis auf ein anderes laufendes Jahresring</td><td>Das dort genannte Programm beenden (Symbol unten rechts) und neu starten; es darf nur eine Installation laufen</td></tr>
-<tr><td>Handy oder Tablet erreicht das Programm nicht</td><td>Netzwerk eingeschaltet, Handy-Freigabe.bat ausführen, Netzwerkprofil „Privat“, PC und Gerät im selben WLAN; Android: Chrome-Berechtigung „Geräte in der Nähe“, iPhone: „Lokales Netzwerk“ erlauben</td></tr>
+<tr><td>Handy oder Tablet erreicht das Programm nicht</td><td>Netzwerk eingeschaltet, Handy-Freigabe.bat ausführen, Netzwerkprofil „Privat“, PC und Gerät am selben Router (PC per Kabel oder WLAN, Handy im WLAN, nicht im Gastzugang); Android: Chrome-Berechtigung „Geräte in der Nähe“, iPhone: „Lokales Netzwerk“ erlauben</td></tr>
 <tr><td>Zertifikatswarnung am Gerät</td><td>Zertifikat unter http://PC-Adresse:8765/zertifikat einrichten; nach einem PC-Wechsel erneut</td></tr>
 <tr><td>Externe Sicherung wird nicht abgelegt</td><td>Ziel erreichbar? Steht beim Sicherungskennwort „nicht lesbar“, das Kennwort neu setzen</td></tr>
 <tr><td>Keine PDFs</td><td>Edge bzw. Chrome installieren/aktualisieren</td></tr>

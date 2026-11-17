@@ -1373,7 +1373,7 @@ def bedarf(n):
     return {"beschaeftigte": n, "ersthelfer": ersthelfer, "brandschutzhelfer": brandschutz, "sibe": n > 20}
 
 
-def uebersicht(con, inhaber=False):
+def uebersicht(con, inhaber=False, vorsorge_sicht=True):
     heute = date.today().isoformat()
     bald = (date.today() + timedelta(days=30)).isoformat()
     punkte = []
@@ -1433,7 +1433,7 @@ def uebersicht(con, inhaber=False):
             p("rot", f"{q['art']} {q['name']}: abgelaufen am {de_datum(q['gueltig_bis'])}", "#/arbeitsschutz/nachweise", q["gueltig_bis"])
         elif q["gueltig_bis"] and q["gueltig_bis"] <= (date.today() + timedelta(days=60)).isoformat():
             p("gelb", f"{q['art']} {q['name']}: gültig bis {de_datum(q['gueltig_bis'])} – Fortbildung planen", "#/arbeitsschutz/nachweise", q["gueltig_bis"])
-    for x in vorsorge(con):
+    for x in (vorsorge(con) if vorsorge_sicht else ()):   # Namen und Anlass der Vorsorge nur für den, der die Kartei sehen darf
         if x["faellig"]:
             p("rot" if x["faellig"] == "ueberfaellig" else "gelb", f"Arbeitsmedizinische Vorsorge {x['anlass']} für {x['name']}: "
               + ("fällig seit " if x["faellig"] == "ueberfaellig" else "fällig am ") + de_datum(x["naechste"]), "#/arbeitsschutz/nachweise", x["naechste"])
@@ -1508,7 +1508,7 @@ DRUCK_SKRIPT = kern.skript(kern.DRUCKEN_JS)
 
 
 def seite(titel, kopf_rechts, inhalt, firma, als_pdf, quer=False, extra_css=""):
-    vorschau = "" if als_pdf else ("html{background:#888} body{background:#fff;width:%s;margin:10mm auto;padding:12mm 12mm 14mm 14mm;box-sizing:border-box;box-shadow:0 2px 12px rgba(0,0,0,.3)}"
+    vorschau = "" if als_pdf else ("@media screen{html{background:#888} body{background:#fff;width:%s;margin:10mm auto;padding:12mm 12mm 14mm 14mm;box-sizing:border-box;box-shadow:0 2px 12px rgba(0,0,0,.3)}}"
                                    % ("297mm" if quer else "210mm"))
     return (f'<!doctype html><html lang="de"><head><meta charset="utf-8"><title>{h(titel)}</title><style>{CSS}{"@page{size:A4 landscape}" if quer else ""}{vorschau}{extra_css}</style></head><body>'
             f'<div class="kopf"><div><h1>{h(titel)}</h1></div><div class="unter" style="text-align:right">{h(firma)}<br>{kopf_rechts}</div></div>{inhalt}'

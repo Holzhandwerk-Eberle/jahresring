@@ -1,0 +1,57 @@
+Schaltflächen im Inhaltsbereich: 1022 auf 95 Seiten
+
+== nach Klasse: Anzahl und gemessene Varianten (Höhe, Schrift, Gewicht, Radius)
+  (ohne Klasse)                       560 × | Varianten: {(25, '13px', '3px'): 392, (25, '10px', '3px'): 56, (25, '15px', '3px'): 56, (25, '18px', '3px'): 56} | z. B. ['1. Liste', 'A', 'F', 'K']
+  btn                                 204 × | Varianten: {(30, '14px', '4px'): 204} | z. B. ['+ Beispiel Korpus', '+ Beispiel Nische', '+ Beschlag', '+ Beschlägeset …']
+  btn rot                             137 × | Varianten: {(30, '14px', '4px'): 137} | z. B. ['Belegart löschen', 'Diesen Kontoauszug samt seinen Umsätzen wieder entfernen', 'Löschen', 'entfernen']
+  btn prim                             57 × | Varianten: {(30, '14px', '4px'): 57} | z. B. ['+ Benutzer', '+ Beschlag', '+ Eigene Belegart', '+ Eintrag für heute']
+  ib                                   25 × | Varianten: {(30, '14px', '4px'): 25} | z. B. ['Auftrag löschen', 'Beleg löschen', 'Kunde kopieren', 'Kunde löschen']
+  ws-karte                             12 × | Varianten: {(96, '14px', '6px'): 8, (113, '14px', '6px'): 4} | z. B. ['Auftragskosten Material, Lohn, Gemeinkos', 'Lohn- und Materialkosten Lohnkosten je K', 'Materialsummen Bestellliste: Platten, Ma', 'Soll/Ist-Vergleich Kalkulation gegen geb']
+  btn pk                               10 × | Varianten: {(30, '14px', '4px'): 10} | z. B. ['Neue Position', 'Position kopieren']
+  btn pk rot                            5 × | Varianten: {(30, '14px', '4px'): 5} | z. B. ['Position löschen']
+  aktion                                4 × | Varianten: {(28, '14px', '4px'): 4} | z. B. ['Aus Hauptanschrift übernehmen', 'Briefanrede neu aus Anrede und Nachname bilden']
+  aktiv ws-karte                        4 × | Varianten: {(113, '14px', '6px'): 2, (96, '14px', '6px'): 2} | z. B. ['Auftragsstunden Kalkulierte Stunden je P', 'Werkstattauftrag Anschrift, Vorgabezeite']
+  kp-auf                                2 × | Varianten: {(16, '12px', '0px'): 2} | z. B. ['▾']
+  pl-sperre                             2 × | Varianten: {(20, '14px', '0px'): 2} | z. B. ['01']
+
+== Höhen aller Schaltflächen: {25: 560, 30: 438, 96: 10, 113: 6, 28: 4, 16: 2, 20: 2}
+== Schriftgrößen: {'14px': 460, '13px': 392, '10px': 56, '15px': 56, '18px': 56, '12px': 2} | Radien: {'3px': 560, '4px': 442, '6px': 16, '0px': 4} | Schriftarten: {'Segoe UI': 1022}
+
+== Schaltflächen ohne Klasse „btn“: 609 von 1022
+  (keine)                        h=25 fs=13px  392 × | ['1. Liste', 'A', 'F', 'K'] | Seiten: ['beleg', 'einstellungen', 'position']
+  (keine)                        h=25 fs=10px   56 × | ['A'] | Seiten: ['beleg', 'einstellungen', 'position']
+  (keine)                        h=25 fs=15px   56 × | ['A'] | Seiten: ['beleg', 'einstellungen', 'position']
+  (keine)                        h=25 fs=18px   56 × | ['A'] | Seiten: ['beleg', 'einstellungen', 'position']
+  ib                             h=30 fs=14px   25 × | ['Auftrag löschen', 'Beleg löschen', 'Kunde kopieren', 'Kunde löschen'] | Seiten: ['auftraege', 'auftrag', 'beleg', 'kunde']
+  ws-karte                       h=96 fs=14px    8 × | ['Auftragskosten Materia', 'Lohn- und Materialkost', 'Soll/Ist-Vergleich Kal', 'Zeitbericht Alle gebuc'] | Seiten: ['auftrag']
+  aktion                         h=28 fs=14px    4 × | ['Aus Hauptanschrift übe', 'Briefanrede neu aus An'] | Seiten: ['kunde', 'lieferant']
+  ws-karte                       h=113 fs=14px    4 × | ['Materialsummen Bestell', 'Stückliste Teile je Po'] | Seiten: ['auftrag']
+  kp-auf                         h=16 fs=12px    2 × | ['▾'] | Seiten: ['kalender']
+  pl-sperre                      h=20 fs=14px    2 × | ['01'] | Seiten: ['auftrag']
+  aktiv ws-karte                 h=113 fs=14px    2 × | ['Werkstattauftrag Ansch'] | Seiten: ['auftrag']
+  aktiv ws-karte                 h=96 fs=14px    2 × | ['Auftragsstunden Kalkul'] | Seiten: ['auftrag']
+
+== Schaltflächen mit eigener Formatierung im style-Attribut: 224
+   56 × font-size:10px | ['A']
+   56 × font-size:13px | ['A']
+   56 × font-size:15px | ['A']
+   56 × font-size:18px;line-height:1 | ['A']
+
+== Beschriftungen für gleiche Handlungen
+  Speichern    {'Speichern': 7, 'Übernehmen': 1}
+  Abbrechen    {}
+  Löschen      {'✕': 129, 'entfernen': 5, 'Position löschen': 5, 'Löschen': 3, 'Belegart löschen': 1}
+  Neu          {'+ Termin': 6, 'Neue Position': 5, '＋': 4, '+ Neuer Beleg': 3, '+ Tag': 3, '+ Teil': 2, '+ Beschlag': 2, '+ Tätigkeit …': 2, 'Hinzufügen': 2, '+ Brief': 2, '+ aus Textbaustein': 2, '+ aus anderem Auftrag': 2, '+ aus Vorlage': 2, '+ Neue Position': 2, '+ Titel hinzufügen': 2, '+ Neuer Rapport': 2, '+ Eintrag für heute': 2, '+ Neue Anfrage': 1, '+ Mitarbeiter': 1, '+ eintragen': 1, '+ Werkzeug': 1, '+ Eigene Belegart': 1, '+ Textbaustein': 1, '+ Kostenstelle': 1, '+ Tätigkeit': 1, '+ Neu': 1, '+ Beispiel Nische': 1, '+ Beispiel Korpus': 1, '+ Parameter': 1, '+ Hilfswert': 1, '+ Prüfung': 1, '+ Kalender': 1, '+ Terminart': 1, '+ Sollstundenplan': 1, '+ Benutzer': 1, '+ Kostenzeile': 1, '+ Beschlägeset …': 1}
+  Drucken/PDF  {'Drucken': 7, 'PDF in Projektordner': 7, 'PDF ansehen': 3, '📄 PDF': 1, '📄 Lagerbestand als PDF': 1}
+  Bearbeiten   {}
+
+== reine Symbolschaltflächen: 228 | ohne Erklärung (title/aria-label): 0 []
+== Schaltflächen ganz ohne Text und Erklärung: 0 []
+
+== Eingabefelder: 1190 | Höhen: {30: 1183, 27: 7} | Schrift: {'14px': 1178, '13px': 12} | Radius: {'4px': 1183, '0px': 7}
+   Höhe 27: 7 × | Klassen [''] | Seiten ['#/einstellungen/kalender']
+== h1: 0 | Schriftgrößen {} | Gewicht {}
+== h2: 116 | Schriftgrößen {'19px': 116} | Gewicht {'700': 116}
+== h3: 60 | Schriftgrößen {'16px': 60} | Gewicht {'700': 60}
+== th: 483 | Schriftgrößen {'14px': 483} | Gewicht {'600': 483}
+== Kopfbereich: 234 {('lb-ic', 34): 117, ('lb-ichb', 28): 117}

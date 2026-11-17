@@ -1,5 +1,6 @@
 """Werkzeugverwaltung: Maschinen, Elektrowerkzeuge, Handwerkzeug, Software – mit Kaufdaten, Prüf- und Wartungsterminen."""
 from datetime import date, datetime
+from kern import kfm
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS werkzeuge (
@@ -101,7 +102,7 @@ def art_raten(text):
 
 def anlegen(con, d):
     werte = {k: d.get(k) for k in FELDER if k in d}
-    werte["preis"] = round(zahl(werte.get("preis")), 2)
+    werte["preis"] = kfm(zahl(werte.get("preis")))
     werte["menge"] = zahl(werte.get("menge")) or 1
     if "nutzungsdauer" in werte:
         werte["nutzungsdauer"] = zahl(werte["nutzungsdauer"]) or None
@@ -145,8 +146,8 @@ def restwert(w, stichtag=None):
         return None
     monate = (st.year - y) * 12 + (st.month - m) + 1
     if monate <= 0:
-        return round(preis, 2)
-    return round(max(0.0, preis * (1 - monate / (nd * 12))), 2)
+        return kfm(preis)
+    return kfm(max(0.0, preis * (1 - monate / (nd * 12))))
 
 
 def liste(con, q):
@@ -189,7 +190,7 @@ def api(con, methode, teile, q, daten):
         laden(con, rid)
         werte = {k: (daten or {})[k] for k in FELDER if k in (daten or {})}
         if "preis" in werte:
-            werte["preis"] = round(zahl(werte["preis"]), 2)
+            werte["preis"] = kfm(zahl(werte["preis"]))
         if "menge" in werte:
             werte["menge"] = zahl(werte["menge"]) or 1
         if "nutzungsdauer" in werte:
@@ -303,7 +304,7 @@ def preis_lesen(s):
     elif re.fullmatch(r"-?\d{1,3}(\.\d{3})+", s):  # 8.900 oder 12.500 = Tausenderpunkte
         s = s.replace(".", "")
     try:
-        return round(float(s), 2)
+        return kfm(float(s))
     except ValueError:
         return 0.0
 
@@ -430,11 +431,11 @@ def importieren(con, d):
         return {"kopf": kopf, "beispiele": zeilen[:5], "anzahl": sum(1 for z in zeilen if import_datensatz(z, zuordnung)),
                 "zeilen": len(zeilen), "zuordnung": zuordnung,
                 "blaetter": info.get("blaetter", []), "blatt": info.get("blatt", ""), "excel": "blaetter" in info,
-                "gelb": len(gelbe), "gelb_summe": round(sum(w["preis"] for w in gelbe), 2),
+                "gelb": len(gelbe), "gelb_summe": kfm(sum(w["preis"] for w in gelbe)),
                 "gelb_beispiele": [w["bezeichnung"] for w in gelbe[:6]], "gelbe_ueberspringen": gelbe_weg,
                 "doppelte_nummern": doppelte_nummern,
                 "felder": [[k, n] for k, n, _ in IMPORT_FELDER], "vorschau": vorschau, "doppelte": dop,
-                "summe": round(sum((import_datensatz(z, zuordnung) or {}).get("preis", 0) for z in zeilen), 2)}
+                "summe": kfm(sum((import_datensatz(z, zuordnung) or {}).get("preis", 0) for z in zeilen))}
     modus = d.get("doppelte") or "ueberspringen"
     neu = aktualisiert = uebersprungen = leer = 0
     neue_ids, umnummeriert = set(), []

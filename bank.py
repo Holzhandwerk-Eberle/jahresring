@@ -16,7 +16,7 @@ from datetime import date, datetime
 import base64
 
 import benutzer
-from kern import ApiFehler, de, de_datum, jl, zahl
+from kern import ApiFehler, de, de_datum, jl, kfm, zahl
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS bank_auszuege (
@@ -59,6 +59,8 @@ def schema(con):
     spalten = {r[1] for r in con.execute("PRAGMA table_info(bank_umsaetze)")}
     if "konto" not in spalten:
         con.execute("ALTER TABLE bank_umsaetze ADD COLUMN konto INTEGER")
+    if "hinweise" not in {r[1] for r in con.execute("PRAGMA table_info(bank_auszuege)")}:
+        con.execute("ALTER TABLE bank_auszuege ADD COLUMN hinweise TEXT DEFAULT ''")
 
 
 def jetzt():
@@ -107,8 +109,20 @@ def _betrag(el):
     return -b if _text(el, "CdtDbtInd") == "DBIT" else b
 
 
+def _waehrung(el):
+    for k in (list(el) if el is not None else []):
+        if _ln(k.tag) == "Amt":
+            return (k.get("Ccy") or "").upper()
+    return ""
+
+
 def _iban(t):
     return re.sub(r"\s", "", t or "").upper()
+
+
+# Manche Banken setzen statt einer Referenz einen Platzhalter ein. Der steht dann bei vielen verschiedenen Umsätzen und taugt
+# nicht, um einen Umsatz wiederzuerkennen.
+REF_PLATZHALTER = {"NONREF", "NOREF", "NOTPROVIDED", "NOT PROVIDED", "NOTAVAILABLE", "KEINE", "OHNE", "0", "-"}
 
 
 def _xml_pruefen(roh):
@@ -141,6 +155,7 @@ def _umsaetze_aus(stmt, iban, fmt):
         buchung = _datum(_kind(nt, "BookgDt")) or _datum(_kind(nt, "ValDt"))
         valuta = _datum(_kind(nt, "ValDt")) or buchung
         ref = _text(nt, "AcctSvcrRef") or _text(nt, "NtryRef")
+        platzhalter = ref.strip().upper() in REF_PLATZHALTER
         zusatz = _text(nt, "AddtlNtryInf")
         txs = [t for d in _kinder(nt, "NtryDtls") for t in _kinder(d, "TxDtls")]
         teile = []
@@ -187,9 +202,10 @@ def _umsaetze_aus(stmt, iban, fmt):
                 e2e = ""
             if not zweck and zusatz:
                 zweck.append(zusatz)
-            aus.append({"iban": iban, "buchung": buchung, "valuta": valuta, "betrag": round(vz * tb, 2),
+            aus.append({"iban": iban, "buchung": buchung, "valuta": valuta, "betrag": kfm(vz * tb),
                         "name": name[:140], "gegen_iban": konto, "zweck": " ".join(zweck)[:500], "e2e": e2e[:35],
-                        "referenz": (ref + (f"/{nr + 1}" if einzeln else ""))[:60], "_ref_bank": bool(ref)})
+                        "referenz": (ref + (f"/{nr + 1}" if einzeln else ""))[:60], "_ref_bank": bool(ref) and not platzhalter,
+                        "_ref_platzhalter": bool(ref) and platzhalter, "_waehrung": _waehrung(nt)})
     return aus
 
 
@@ -228,7 +244,12 @@ def camt_lesen(roh, dateiname=""):
         zr = _kind(st, "FrToDt")
         umsaetze = _umsaetze_aus(st, iban, fmt)
         tage = sorted(u["buchung"] for u in umsaetze if u["buchung"])
+        vorgemerkt = sum(1 for nt in _kinder(st, "Ntry") if (_text(nt, "Sts") or _text(nt, "Sts", "Cd")) not in ("", "BOOK"))
         aus.append({"datei": dateiname, "format": fmt, "iban": iban,
+                    # Buchungssalden (Anfang und Ende des Auszugs) – nur damit lässt sich die Vollständigkeit prüfen
+                    "_saldo_buch": (anf[0], saldo["CLBD"][0]) if fmt == "camt.053" and anf and saldo.get("CLBD")
+                                   and anf[0] is not None and saldo["CLBD"][0] is not None and not vorgemerkt else None,
+                    "_waehrungen": sorted({u.pop("_waehrung", "") for u in umsaetze} - {"", "EUR"}),
                     "von": (_text(zr, "FrDtTm") or _text(zr, "FrDt"))[:10] or (tage[0] if tage else ""),
                     "bis": (_text(zr, "ToDtTm") or _text(zr, "ToDt"))[:10] or (tage[-1] if tage else ""),
                     "saldo_anfang": anf[0] if anf else None, "saldo_ende": ende[0] if ende else None,
@@ -238,19 +259,74 @@ def camt_lesen(roh, dateiname=""):
 
 def schluessel_setzen(umsaetze):
     """Eindeutiger Schlüssel je Umsatz, damit sich überschneidende Auszüge (Tagesauszug + Monatsauszug) nichts doppelt
-    anlegen. Mit Bankreferenz: Konto + Referenz; sonst Inhalt + laufende Nummer gleicher Umsätze in derselben Datei."""
-    zaehler = {}
+    anlegen. Mit Bankreferenz: Konto + Referenz + Buchungstag + Betrag; sonst (auch bei Platzhaltern wie „NONREF“) der Inhalt.
+    Gleiche Umsätze innerhalb einer Datei werden durchgezählt.
+    „_alt“ ist der Schlüssel, wie ihn das Programm bis Version 2026.11.01-148 gebildet hat (Referenz ohne Buchungstag, auch für
+    Platzhalter): Damit erkennt einlesen() Umsätze wieder, die mit einer früheren Version eingelesen wurden."""
+    zaehler, zaehler_alt = {}, {}
     for u in umsaetze:
-        if u.pop("_ref_bank", False):
-            basis = f"{u['iban']}|ref|{u['referenz']}|{u['betrag']:.2f}"
-        else:
-            basis = f"{u['iban']}|{u['buchung']}|{u['betrag']:.2f}|{u['name']}|{u['zweck']}|{u['e2e']}"
+        ref_bank, platzhalter = u.pop("_ref_bank", False), u.pop("_ref_platzhalter", False)
+        u.pop("_waehrung", None)
+        inhalt = f"{u['iban']}|{u['buchung']}|{u['betrag']:.2f}|{u['name']}|{u['zweck']}|{u['e2e']}"
+        basis = f"{u['iban']}|ref|{u['referenz']}|{u['buchung']}|{u['betrag']:.2f}" if ref_bank else inhalt
         zaehler[basis] = zaehler.get(basis, 0) + 1
         u["schluessel"] = hashlib.sha256(f"{basis}#{zaehler[basis]}".encode("utf-8")).hexdigest()
+        u["_alt"] = None
+        if ref_bank or platzhalter:
+            alt = f"{u['iban']}|ref|{u['referenz']}|{u['betrag']:.2f}"
+            zaehler_alt[alt] = zaehler_alt.get(alt, 0) + 1
+            u["_alt"] = {"schluessel": hashlib.sha256(f"{alt}#{zaehler_alt[alt]}".encode("utf-8")).hexdigest(), "platzhalter": platzhalter, "nr": zaehler[basis]}
     return umsaetze
 
 
-def einlesen(con, roh, dateiname, ablage_ordner, wer=""):
+def _schon_vorhanden(con, u):
+    """Wurde dieser Umsatz schon mit einer früheren Programmversion eingelesen (Schlüssel alter Art)?"""
+    alt = u.get("_alt")
+    if not alt:
+        return False
+    if not alt["platzhalter"]:
+        r = con.execute("SELECT buchung FROM bank_umsaetze WHERE schluessel=?", (alt["schluessel"],)).fetchone()
+        return bool(r) and (r[0] or "") == (u["buchung"] or "")
+    # Platzhalter: früher zählte nur Referenz + Betrag. Wiedererkannt wird über den Inhalt – der wievielte gleiche Umsatz dieser
+    # Datei ist es, und wie viele davon liegen schon (mit einem Schlüssel alter Art) in der Datenbank?
+    n = con.execute("SELECT COUNT(*) FROM bank_umsaetze WHERE iban=? AND buchung=? AND ABS(betrag-?)<0.005 AND name=? AND zweck=? AND e2e=? AND referenz=?",
+                    (u["iban"], u["buchung"], u["betrag"], u["name"], u["zweck"], u["e2e"], u["referenz"])).fetchone()[0]
+    return n >= alt["nr"]
+
+
+def _de_betrag(v):
+    return de(v) + " €"
+
+
+def auszug_hinweise(con, a, eigene_iban=""):
+    """Was am Auszug auffällt, bevor er verbucht wird: fremdes Konto, Lücke zum vorigen Auszug, Umsätze passen nicht zum
+    Endsaldo, fremde Währung. Nur Hinweise – eingelesen wird trotzdem, entscheiden muss der Benutzer."""
+    hinweise = []
+    iban = a["iban"]
+    bekannt = {r[0] for r in con.execute("SELECT DISTINCT iban FROM bank_auszuege WHERE iban<>''")}
+    eigene = _iban(eigene_iban)
+    if iban and iban not in bekannt and (bekannt or eigene) and iban != eigene:
+        hinweise.append(f"Der Auszug gehört zum Konto {iban}. " + (f"Bisher wurden Auszüge des Kontos {', '.join(sorted(bekannt))} eingelesen" if bekannt else
+                                                                  f"In den Einstellungen steht als eigenes Konto {eigene}")
+                        + " – bitte prüfen, ob es ein eigenes Konto ist.")
+    if a.get("_waehrungen"):
+        hinweise.append(f"Der Auszug enthält Umsätze in {', '.join(a['_waehrungen'])}. Das Programm rechnet in Euro und hat die Beträge ohne Umrechnung übernommen – bitte prüfen.")
+    sb = a.get("_saldo_buch")
+    if sb:
+        summe = kfm(sum(u["betrag"] for u in a["umsaetze"]))
+        if abs(kfm(sb[0] + summe) - sb[1]) > 0.005:
+            hinweise.append(f"Anfangssaldo {_de_betrag(sb[0])} und die {len(a['umsaetze'])} Umsätze ({_de_betrag(summe)}) ergeben {_de_betrag(sb[0] + summe)}, "
+                            f"der Auszug nennt als Endsaldo {_de_betrag(sb[1])} – die Datei ist möglicherweise unvollständig.")
+        if a.get("von") and iban:
+            v = con.execute("SELECT bis, saldo_ende, saldo_datum FROM bank_auszuege WHERE iban=? AND format='camt.053' AND saldo_ende IS NOT NULL "
+                            "ORDER BY bis DESC, id DESC LIMIT 1", (iban,)).fetchone()
+            if v and v[0] and v[0] < a["von"] and abs(v[1] - sb[0]) > 0.005:
+                hinweise.append(f"Der zuletzt eingelesene Auszug dieses Kontos endet am {de_datum(v[0])} mit {_de_betrag(v[1])}, dieser beginnt am {de_datum(a['von'])} "
+                                f"mit {_de_betrag(sb[0])} – dazwischen fehlt mindestens ein Auszug.")
+    return hinweise
+
+
+def einlesen(con, roh, dateiname, ablage_ordner, wer="", eigene_iban=""):
     auszuege = camt_lesen(roh, dateiname)
     if not auszuege:
         raise Fehler("In der Datei sind keine Kontoauszüge.")
@@ -262,15 +338,20 @@ def einlesen(con, roh, dateiname, ablage_ordner, wer=""):
     ablage = os.path.join(str(jahr), f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{sicher}")
     with open(os.path.join(ablage_ordner, ablage), "wb") as f:
         f.write(roh)
-    erg = {"auszuege": 0, "neu": 0, "doppelt": 0, "ids": []}
+    erg = {"auszuege": 0, "neu": 0, "doppelt": 0, "ids": [], "hinweise": []}
     for a in auszuege:
+        hinweise = auszug_hinweise(con, a, eigene_iban)
         us = schluessel_setzen(a["umsaetze"])
-        cur = con.execute("INSERT INTO bank_auszuege (datei, ablage, sha256, format, iban, von, bis, saldo_anfang, saldo_ende, saldo_datum, importiert, benutzer) "
-                          "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (dateiname, ablage, sha, a["format"], a["iban"], a["von"], a["bis"],
-                                                              a["saldo_anfang"], a["saldo_ende"], a["saldo_datum"], jetzt(), wer))
+        cur = con.execute("INSERT INTO bank_auszuege (datei, ablage, sha256, format, iban, von, bis, saldo_anfang, saldo_ende, saldo_datum, importiert, benutzer, hinweise) "
+                          "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (dateiname, ablage, sha, a["format"], a["iban"], a["von"], a["bis"],
+                                                                a["saldo_anfang"], a["saldo_ende"], a["saldo_datum"], jetzt(), wer, "\n".join(hinweise)))
         aid = cur.lastrowid
+        erg["hinweise"] += [h_ for h_ in hinweise if h_ not in erg["hinweise"]]
         neu = doppelt = 0
         for u in us:
+            if _schon_vorhanden(con, u):
+                doppelt += 1
+                continue
             try:
                 c = con.execute("INSERT INTO bank_umsaetze (auszug_id, iban, buchung, valuta, betrag, name, gegen_iban, zweck, e2e, referenz, schluessel, angelegt) "
                                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (aid, u["iban"], u["buchung"], u["valuta"], u["betrag"], u["name"], u["gegen_iban"],
@@ -325,12 +406,12 @@ def zahlungsauftraege(con, offen_nur=True):
 def vorschlag(u, ops, zas, alle_zas=None):
     """Vorschlag für einen Umsatz: {"sicher": bool, "grund": text, "ziele": [{"art", "id", "betrag", "text"}]} oder None."""
     text = _norm(f"{u['zweck']} {u['e2e']}")
-    b = round(u["betrag"], 2)
+    b = kfm(u["betrag"])
     if b > 0:
         treffer = [o for o in ops if _kommt_vor(o["nummer"], text)]
         if treffer:
-            summe = round(sum(o["offen"] + o["mahnkosten"] for o in treffer), 2)
-            summe_ohne_mk = round(sum(o["offen"] for o in treffer), 2)
+            summe = kfm(sum(o["offen"] + o["mahnkosten"] for o in treffer))
+            summe_ohne_mk = kfm(sum(o["offen"] for o in treffer))
             if len(treffer) == 1:
                 o = treffer[0]
                 genau = abs(b - o["offen"]) < 0.01 or abs(b - (o["offen"] + o["mahnkosten"])) < 0.01
@@ -339,14 +420,14 @@ def vorschlag(u, ops, zas, alle_zas=None):
             if abs(b - summe) < 0.01 or abs(b - summe_ohne_mk) < 0.01:
                 mit_mk = abs(b - summe) < 0.01 and abs(b - summe_ohne_mk) >= 0.01
                 return {"sicher": True, "grund": f"{len(treffer)} Rechnungsnummern im Verwendungszweck, Summe passt",
-                        "ziele": [{"art": "op", "id": o["id"], "betrag": round(o["offen"] + (o["mahnkosten"] if mit_mk else 0), 2),
+                        "ziele": [{"art": "op", "id": o["id"], "betrag": kfm(o["offen"] + (o["mahnkosten"] if mit_mk else 0)),
                                    "text": f"{o['art']} {o['nummer']} · {o['kurzname'] or ''}"} for o in treffer]}
             rest, ziele = b, []
             for o in treffer:   # der Reihe nach, älteste zuerst
-                teil = round(min(rest, o["offen"]), 2) if o is not treffer[-1] else round(rest, 2)
+                teil = kfm(min(rest, o["offen"])) if o is not treffer[-1] else kfm(rest)
                 if teil > 0:
                     ziele.append({"art": "op", "id": o["id"], "betrag": teil, "text": f"{o['art']} {o['nummer']} · {o['kurzname'] or ''}"})
-                rest = round(rest - teil, 2)
+                rest = kfm(rest - teil)
             return {"sicher": False, "grund": "Mehrere Rechnungsnummern, Summe weicht ab – bitte prüfen", "ziele": ziele}
         gleich = [o for o in ops if abs(o["offen"] - b) < 0.01]
         if len(gleich) == 1:
@@ -399,7 +480,8 @@ def dateien(con, grenze=30):
         aus.append({"id": min(ids), "datei": g[0]["datei"], "format": g[0]["format"], "importiert": g[0]["importiert"], "benutzer": g[0]["benutzer"],
                     "von": min((a["von"] for a in g if a["von"]), default=""), "bis": max((a["bis"] for a in g if a["bis"]), default=""),
                     "neu": sum(a["neu"] or 0 for a in g), "doppelt": sum(a["doppelt"] or 0 for a in g), "auszuege": len(g),
-                    "saldo_ende": saldo["saldo_ende"] if saldo else None, "umsaetze": n["n"] or 0, "gebucht": n["g"] or 0})
+                    "saldo_ende": saldo["saldo_ende"] if saldo else None, "umsaetze": n["n"] or 0, "gebucht": n["g"] or 0,
+                    "hinweise": [t for a in g for t in (a.get("hinweise") or "").split("\n") if t]})
     return aus
 
 
@@ -417,6 +499,8 @@ def _nachtragen(con, ordner):
         for aid, a in zip(ids, auszuege):
             dazu = 0
             for u in schluessel_setzen(a["umsaetze"]):
+                if _schon_vorhanden(con, u):
+                    continue
                 c = con.execute("INSERT OR IGNORE INTO bank_umsaetze (auszug_id, iban, buchung, valuta, betrag, name, gegen_iban, zweck, e2e, referenz, schluessel, angelegt) "
                                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (aid, u["iban"], u["buchung"], u["valuta"], u["betrag"], u["name"], u["gegen_iban"],
                                                                      u["zweck"], u["e2e"], u["referenz"], u["schluessel"], jetzt()))
@@ -451,6 +535,56 @@ def datei_entfernen(con, aid, ordner):
          + (f", {wieder} aus anderen eingelesenen Auszügen wieder angelegt" if wieder else ""),
          {"sha256": a["sha256"], "ablage": a["ablage"], "umsaetze": n, "wieder_angelegt": wieder, "eingelesen": a["importiert"]})
     return {"ok": True, "umsaetze": n, "wieder_angelegt": wieder}
+
+
+def _frist_grenze(jahre):
+    """Kontoauszüge sind Buchungsbelege: aufzubewahren bis zum Ende des Jahres, das `jahre` Jahre nach dem Auszug liegt.
+    Liefert das späteste Auszugsdatum, dessen Frist heute abgelaufen ist (Auszug aus 2017, 8 Jahre → ab 1.1.2026 löschbar)."""
+    return f"{date.today().year - int(jahre) - 1}-12-31"
+
+
+def alte_auszuege(con, jahre):
+    """Eingelesene Kontoauszüge, deren Aufbewahrungsfrist abgelaufen ist – für die Löschprüfung."""
+    grenze = _frist_grenze(jahre)
+    alt = [a for a in zeilen(con.execute("SELECT * FROM bank_auszuege ORDER BY id")) if (a["bis"] or a["saldo_datum"] or (a["importiert"] or "")[:10] or "9999") <= grenze]
+    if not alt:
+        return {"auszuege": 0, "umsaetze": 0, "bis": "", "grenze": grenze}
+    marken = ",".join("?" * len(alt))
+    n = con.execute(f"SELECT COUNT(*) FROM bank_umsaetze WHERE auszug_id IN ({marken}) AND (IFNULL(name,'') NOT IN ('', 'anonymisiert') OR IFNULL(zweck,'')<>'')", [a["id"] for a in alt]).fetchone()[0]
+    dateien = {a["ablage"] for a in alt if a["ablage"]}
+    return {"auszuege": len(alt), "umsaetze": n, "dateien": len(dateien), "von": min((a["von"] or a["bis"] or "") for a in alt),
+            "bis": max((a["bis"] or a["saldo_datum"] or "") for a in alt), "grenze": grenze}
+
+
+def alte_auszuege_loeschen(con, jahre, ordner):
+    """Nach Ablauf der Aufbewahrungsfrist: die abgelegten Auszugsdateien löschen und in den Umsätzen Name, Verwendungszweck und
+    Gegenkonto entfernen. Beträge, Buchungstage und die Zuordnung zu Rechnungen bleiben (Zahlen für die Buchhaltung)."""
+    grenze = _frist_grenze(jahre)
+    alle = zeilen(con.execute("SELECT * FROM bank_auszuege ORDER BY id"))
+    alt = [a for a in alle if (a["bis"] or a["saldo_datum"] or (a["importiert"] or "")[:10] or "9999") <= grenze]
+    if not alt:
+        return {"auszuege": 0, "umsaetze": 0, "dateien": 0}
+    ids = {a["id"] for a in alt}
+    geloescht = []
+    for ablage in sorted({a["ablage"] for a in alt if a["ablage"]}):
+        if any(a["ablage"] == ablage and a["id"] not in ids for a in alle):
+            continue   # die Datei enthält auch einen jüngeren Auszug: Sie bleibt, bis auch der abgelaufen ist
+        pfad = os.path.normpath(os.path.join(ordner, ablage))
+        if pfad.startswith(os.path.join(os.path.abspath(ordner), "")) and os.path.isfile(pfad):
+            try:
+                os.remove(pfad)
+                geloescht.append(ablage)
+            except OSError:
+                pass
+    marken = ",".join("?" * len(ids))
+    n = con.execute(f"UPDATE bank_umsaetze SET name=CASE WHEN IFNULL(name,'')='' THEN '' ELSE 'anonymisiert' END, zweck='', gegen_iban='', e2e='', notiz='' "
+                    f"WHERE auszug_id IN ({marken}) AND (IFNULL(name,'') NOT IN ('', 'anonymisiert') OR IFNULL(zweck,'')<>'' OR IFNULL(gegen_iban,'')<>'')", list(ids)).rowcount
+    for ablage in geloescht:
+        con.execute("UPDATE bank_auszuege SET ablage='', hinweise='' WHERE ablage=?", (ablage,))
+    HILFE["prot"](con, "bank_auszug_geloescht", f"bis {de_datum(grenze)}", f"{len(geloescht)} Kontoauszugsdateien nach Ablauf der Aufbewahrungsfrist gelöscht "
+                  f"(Auszüge bis {de_datum(max((a['bis'] or a['saldo_datum'] or '') for a in alt))}); in {n} Umsätzen Name, Verwendungszweck und Gegenkonto entfernt",
+                  {"grenze": grenze, "jahre": int(jahre), "auszuege": len(alt), "dateien": geloescht, "umsaetze": n})
+    return {"auszuege": len(alt), "umsaetze": n, "dateien": len(geloescht)}
 
 
 def liste(con, q):
@@ -488,11 +622,62 @@ def liste(con, q):
                 if r:
                     u["vorschlag"] = {"sicher": True, "grund": f"Regel: „{r['suchtext']}“ → Konto", "ziele": [], "konto": r["konto"],
                                       "konto_text": f"{r['konto']} {namen.get(r['konto'], '')}".strip(), "notiz": r["notiz"]}
+    einmal_sicher(us)
     kontostand = kontostand_lesen(con)
     zaehler = {r["status"]: r["n"] for r in con.execute("SELECT status, COUNT(*) AS n FROM bank_umsaetze GROUP BY status")}
     return {"umsaetze": us, "kontostand": kontostand, "anzahl": zaehler, "dateien": dateien(con),
             "auszuege": zeilen(con.execute("SELECT id, datei, format, iban, von, bis, saldo_ende, saldo_datum, neu, doppelt, importiert, benutzer "
                                            "FROM bank_auszuege ORDER BY id DESC LIMIT 30"))}
+
+
+def _rang(u):
+    """Reihenfolge, in der sichere Vorschläge gelten: zuerst die mit Nummer im Verwendungszweck oder Referenz (eindeutig),
+    dann die übrigen (Betrag und Name, Betrag und IBAN); innerhalb der Gruppe die ältesten zuerst."""
+    grund = ((u.get("vorschlag") or {}).get("grund") or "").lower()
+    return (0 if ("nummer" in grund or "referenz" in grund) else 1, u.get("buchung") or "", u.get("id") or 0)
+
+
+def einmal_sicher(us):
+    """Ein offener Posten oder Zahlungsauftrag darf nur einem Umsatz „sicher“ zugedacht sein. Passen zwei Umsätze auf denselben
+    Posten (doppelt überwiesen, oder einer per Rechnungsnummer und ein anderer nur über Betrag und Name), bleibt der zweite
+    ein Vorschlag zum Prüfen."""
+    belegt = {}
+    for u in sorted((u for u in us if u.get("status") == "offen" and (u.get("vorschlag") or {}).get("sicher") and u["vorschlag"].get("ziele")), key=_rang):
+        v = u["vorschlag"]
+        ziele = {(z["art"], z["id"]) for z in v["ziele"]}
+        doppelt = next((belegt[z] for z in ziele if z in belegt), None)
+        if doppelt:
+            v["sicher"] = False
+            v["grund"] += f" – derselbe Posten passt auch zum Umsatz vom {de_datum(doppelt['buchung'])} ({doppelt['name'] or 'ohne Namen'}), bitte prüfen"
+        else:
+            belegt.update({z: u for z in ziele})
+
+
+def sichere_uebernehmen(con):
+    """Alle sicheren Vorschläge übernehmen – einzeln und jeweils neu geprüft: Nach jeder Buchung sind die offenen Posten andere,
+    ein Vorschlag vom Anfang kann dann überholt sein (sonst bekäme eine Rechnung zwei Zahlungen)."""
+    us = [u for u in liste(con, {"status": "offen"})["umsaetze"] if (u.get("vorschlag") or {}).get("sicher")]
+    regeln = regeln_liste(con)
+    n, fehler = 0, []
+    for u in sorted(us, key=_rang):
+        frisch = con.execute("SELECT * FROM bank_umsaetze WHERE id=? AND status='offen'", (u["id"],)).fetchone()
+        if not frisch:
+            continue
+        frisch = dict(frisch)
+        v = vorschlag(frisch, offene_posten(con), zahlungsauftraege(con), zahlungsauftraege(con, offen_nur=False) if frisch["betrag"] < 0 else None)
+        try:
+            if v:
+                if v["sicher"]:
+                    zuordnen(con, u["id"], v["ziele"])
+                    n += 1
+            elif u["vorschlag"].get("konto"):
+                r = regel_fuer(frisch, regeln)
+                if r:
+                    konto_setzen(con, u["id"], r["konto"], r["notiz"] or "")
+                    n += 1
+        except ApiFehler as f:
+            fehler.append(f"{de_datum(u['buchung'])} {u['name']}: {f}")
+    return {"zugeordnet": n, "fehler": fehler}
 
 
 def kontonamen(con):
@@ -568,11 +753,11 @@ def zuordnen(con, uid, ziele):
         raise ApiFehler("Gutschriften gehören zu offenen Posten (Kundenzahlungen), Abbuchungen zu Zahlungsaufträgen.")
     erg, texte = [], []
     if gutschrift:
-        summe = round(sum(zahl(t.get("betrag"), float) for t in ziele), 2)
-        if abs(summe - round(u["betrag"], 2)) > 0.009:
+        summe = kfm(sum(zahl(t.get("betrag"), float) for t in ziele))
+        if abs(summe - kfm(u["betrag"])) > 0.009:
             raise ApiFehler(f"Die aufgeteilten Beträge ({de(summe)} €) ergeben nicht den Umsatz ({de(u['betrag'])} €).")
         for t in ziele:
-            b = round(zahl(t.get("betrag"), float), 2)
+            b = kfm(zahl(t.get("betrag"), float))
             if b <= 0:
                 continue
             op = con.execute("SELECT nummer FROM offene_posten WHERE id=?", (int(t["id"]),)).fetchone()
@@ -667,30 +852,18 @@ def web_api(con, methode, teile, q, d):
         if not d.get("daten"):
             raise ApiFehler("Keine Datei übergeben.")
         roh = base64.b64decode(d["daten"])
-        erg = einlesen(con, roh, str(d.get("dateiname") or "kontoauszug.xml")[:120], os.path.join(HILFE["daten"], "bank"), HILFE["ich_login"]())
+        erg = einlesen(con, roh, str(d.get("dateiname") or "kontoauszug.xml")[:120], os.path.join(HILFE["daten"], "bank"), HILFE["ich_login"](),
+                       HILFE["eigene_iban"](con) if HILFE.get("eigene_iban") else "")
         HILFE["prot"](con, "bank_import", str(d.get("dateiname") or "")[:80], f"Kontoauszug eingelesen: {d.get('dateiname') or ''} · {erg['neu']} neue Umsätze"
-             + (f", {erg['doppelt']} schon vorhanden" if erg["doppelt"] else ""), {"sha256": erg["sha256"], "ablage": erg["ablage"], "neu": erg["neu"], "doppelt": erg["doppelt"]})
+             + (f", {erg['doppelt']} schon vorhanden" if erg["doppelt"] else "") + (f" · Hinweise: {' | '.join(erg['hinweise'])}"[:900] if erg["hinweise"] else ""),
+             {"sha256": erg["sha256"], "ablage": erg["ablage"], "neu": erg["neu"], "doppelt": erg["doppelt"], "hinweise": erg["hinweise"]})
         return erg
     if methode == "DELETE" and sub == "auszuege" and aktion and aktion.isdigit():
         if not benutzer.ist_inhaber():
             raise ApiFehler("Einen eingelesenen Kontoauszug entfernt nur der Inhaber.", 403)
         return datei_entfernen(con, int(aktion), os.path.join(HILFE["daten"], "bank"))
     if methode == "POST" and sub == "sichere":
-        # alle sicheren Vorschläge auf einmal übernehmen
-        daten_ = liste(con, {"status": "offen"})
-        n, fehler = 0, []
-        for u in daten_["umsaetze"]:
-            v = u.get("vorschlag")
-            if v and v["sicher"]:
-                try:
-                    if v.get("konto"):
-                        konto_setzen(con, u["id"], v["konto"], v.get("notiz") or "")
-                    else:
-                        zuordnen(con, u["id"], v["ziele"])
-                    n += 1
-                except ApiFehler as f:
-                    fehler.append(f"{de_datum(u['buchung'])} {u['name']}: {f}")
-        return {"zugeordnet": n, "fehler": fehler}
+        return sichere_uebernehmen(con)
     if methode == "POST" and uid and aktion == "zuordnen":
         return {"ziele": zuordnen(con, uid, d.get("ziele"))}
     if methode == "POST" and uid and aktion == "loesen":

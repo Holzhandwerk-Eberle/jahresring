@@ -54,13 +54,14 @@ from monatsbeleg import monatsbeleg_hash, monatsbeleg_hash_v1, monatsbeleg_signa
 from arbeitsschutz_web import zeichen_liste, arbeitsschutz_api, stempel_arbeitsschutz, as_druck_name, as_druck_html  # noqa: F401
 import kern
 import datenschutz
-from kern import ApiFehler, jetzt, zahl, jl, de, de_datum, h, plus_tage
+from kern import ApiFehler, jetzt, zahl, jl, de, de_datum, h, plus_tage, kfm, zahl_lesen
 from sepa import iban_normal, iban_ok, ibanFormat_py, sepa_xml
 import liquiditaet
 import preise
 import wiedervorlage
 import konten
 import kalkulation
+import nachweis
 import benutzer
 import personal
 import montage
@@ -91,7 +92,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-148"
+VERSION = "2026.11.01-149"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -265,6 +266,12 @@ CREATE TABLE IF NOT EXISTS belege (
     zahlungsziel INTEGER DEFAULT 14, faellig TEXT DEFAULT '', bezug_id INTEGER, pdf TEXT DEFAULT '',
     angelegt TEXT, geaendert TEXT
 );
+CREATE TABLE IF NOT EXISTS beleg_versand (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    beleg_id INTEGER NOT NULL, nummer TEXT DEFAULT '', art TEXT DEFAULT '', zeit TEXT, an TEXT DEFAULT '', weg TEXT DEFAULT '',
+    datei TEXT DEFAULT '', sha256 TEXT DEFAULT '', groesse INTEGER DEFAULT 0, brutto REAL DEFAULT 0, benutzer TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_beleg_versand_beleg ON beleg_versand(beleg_id);
 CREATE TABLE IF NOT EXISTS zahlungseingaenge (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     op_id INTEGER NOT NULL, datum TEXT, betrag REAL DEFAULT 0, art TEXT DEFAULT '', bemerkung TEXT DEFAULT '', angelegt TEXT
@@ -295,6 +302,8 @@ NACHRUESTEN = [
     ("kunden", "newsletter_aus", "INTEGER DEFAULT 0"),
     ("stunden", "titel", "INTEGER DEFAULT 0"),
     ("zeiten", "titel", "INTEGER DEFAULT 0"),
+    ("zeiten", "eingang", "TEXT DEFAULT ''"),      # Stempeluhr: wann die Buchung beim Programm ankam
+    ("zeiten", "spaet", "INTEGER DEFAULT 0"),      # … und um wie viele Minuten nach der gestempelten Uhrzeit (0 = sofort)
     ("auftraege", "leitstand_sort", "REAL DEFAULT 0"),
     ("kunden", "anredeform", "TEXT DEFAULT ''"),
     ("kunden", "titel", "TEXT DEFAULT ''"),
@@ -417,7 +426,6 @@ STANDARD_EINSTELLUNGEN = {
     # Projektordner auf das externe Sicherungsziel sichern: täglich ab der Uhrzeit, frühere Fassungen so viele Tage behalten (0 = immer)
     "projektsicherung": dict(projektsicherung.STANDARD),
     "zeit_gemeinkosten": ["Aufräumen", "Maschinenpflege", "Holz stapeln", "Besorgungen", "Büro", "Sonstiges"],
-    "zeit_rundung": 0,
     "leitstand_schritte": ["Arbeitsvorbereitung", "Zuschnitt", "Hobeln", "Kanten", "Fräsen", "Bankraum", "Oberfläche", "Endkontrolle",
                            "Montage", "Nacharbeiten", "Fertig"],
     "leitstand_status_map": {},
@@ -478,6 +486,11 @@ STANDARD_EINSTELLUNGEN = {
     "agb_bei": ["angebot"],
     "seitenzahlen": True, "seitenzahl_unten": 6, "seitenzahl_rechts": 18,
     "unten_buendig": True,   # Summen, Konditionen, Schlusstext und Gruß unten auf der letzten Seite
+    "uebertrag": True,       # mehrseitige Belege mit Preisen: Zwischensumme am Seitenende und oben auf der Folgeseite (je Beleg umstellbar)
+    "sitzung_tage_buero": 30,          # Anmeldung verfällt nach so vielen Tagen ohne Benutzung (alle Rollen außer Mitarbeiter)
+    "sitzung_tage_mitarbeiter": 120,   # Stempeluhr am Handy
+    "frist_rechnung_jahre": 10,        # Aufbewahrung von Rechnungen vor dem Anonymisieren: 10 (Vorgabe) oder 8 Jahre (Buchungsbelege seit 2025)
+    "vorsorge_nur_inhaber": False,     # Vorsorgekartei und Expositionsverzeichnis nur für den Inhaber (sonst: Arbeitsschutz „bearbeiten“)
     "agb_verbraucher_gruppen": ["Privatkunde"],
     "anfrage_tage": 7,
     "ziel_stundensatz": 0,
@@ -715,6 +728,16 @@ def init_db():
             auftrag_kalk(con, r["id"])
         taet_katalog_ergaenzen(con)
         personal.tage_einstellen(einstellungen(con))
+        e_start = einstellungen(con)
+        benutzer.sitzung_einstellen(e_start.get("sitzung_tage_mitarbeiter"), e_start.get("sitzung_tage_buero"))
+        # Einmalig: „Passwort vergessen“ schickt den Code nur noch an die Adresse am Benutzerkonto. Damit es für bestehende Zugänge
+        # weiter funktioniert, wird die Adresse des verknüpften Mitarbeiters einmal dorthin übernommen – nicht für Inhaber-Zugänge
+        # (für sie gilt ersatzweise die Betriebsadresse) und danach nie wieder von selbst.
+        if not con.execute("SELECT 1 FROM einstellungen WHERE schluessel='_reset_adresse_konto'").fetchone():
+            con.execute("UPDATE benutzer SET email=(SELECT TRIM(m.email) FROM mitarbeiter m WHERE m.id=benutzer.mitarbeiter_id) "
+                        "WHERE IFNULL(email,'')='' AND rolle<>'inhaber' AND mitarbeiter_id IS NOT NULL "
+                        "AND IFNULL((SELECT TRIM(m.email) FROM mitarbeiter m WHERE m.id=benutzer.mitarbeiter_id),'') LIKE '%_@_%'")
+            con.execute("INSERT INTO einstellungen VALUES ('_reset_adresse_konto', 'true')")
         indizes_anlegen(con)
 
 
@@ -1350,9 +1373,13 @@ def einstellungen(con):
     return e
 
 
-def sauber(text):
-    text = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", str(text or "")).strip()
-    return text.rstrip(". ")
+def sauber(text, laenge=150):
+    """Text als Datei- oder Ordnername: verbotene Zeichen entfernt, Länge begrenzt (die Endung bleibt erhalten)."""
+    text = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", str(text or "")).strip().rstrip(". ")
+    if len(text) > laenge:
+        stamm, punkt, endung = text.rpartition(".")
+        text = (stamm[:laenge - len(endung) - 1].rstrip(". ") + "." + endung) if punkt and 0 < len(endung) <= 8 else text[:laenge].rstrip(". ")
+    return text
 
 
 def ordner_name(e, auftrag, kunde):
@@ -1563,11 +1590,21 @@ def vorlage_aus_position(con, p, d):
 
 
 # ---------------------------------------------------------------- DSGVO: Auskunft und Anonymisierung
-AUFBEWAHRUNG_JAHRE = 10   # sicherheitshalber 10 Jahre ab Ende des Jahres des letzten Belegs (§ 147 AO / § 257 HGB, teils 8 Jahre)
+AUFBEWAHRUNG_JAHRE = 10   # Vorgabe: 10 Jahre ab Ende des Jahres des letzten Belegs (§ 147 AO / § 257 HGB)
 
 
-def altbestand_frist(jahr=None):
-    return f"{(jahr or date.today().year) + AUFBEWAHRUNG_JAHRE}-12-31"
+def frist_jahre(e=None):
+    """Aufbewahrungsfrist für Rechnungen und andere Buchungsbelege in Jahren. Seit 2025 genügen 8 Jahre (§ 147 Abs. 3 AO,
+    § 14b UStG); die Vorgabe bleibt bei 10 Jahren, in den Einstellungen lässt sie sich auf 8 oder 9 senken."""
+    try:
+        n = int(float((e or {}).get("frist_rechnung_jahre") or AUFBEWAHRUNG_JAHRE))
+    except (TypeError, ValueError):
+        n = AUFBEWAHRUNG_JAHRE
+    return n if 8 <= n <= 10 else AUFBEWAHRUNG_JAHRE
+
+
+def altbestand_frist(jahr=None, e=None):
+    return f"{(jahr or date.today().year) + frist_jahre(e)}-12-31"
 
 
 def altbestand_sperren(con, jahr=None, bis_angelegt=None):
@@ -1604,6 +1641,16 @@ def kunde_auskunft(con, kid):
         "rapporte": zeilen(con.execute(f"SELECT datum, status, kunde_name FROM montageberichte WHERE auftrag_id IN ({ph})", ids)),
         "hinweis": "Projektordner und E-Mails im Mailprogramm liegen außerhalb des Programms und sind dort zu prüfen.",
     }
+    ops = [r["id"] for r in con.execute(f"SELECT id FROM offene_posten WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids))] or [0]
+    oph = ",".join("?" * len(ops))
+    erg["zahlungen"] = zeilen(con.execute(f"SELECT datum, betrag, art, bemerkung FROM zahlungseingaenge WHERE op_id IN ({oph}) ORDER BY datum", ops))
+    erg["mahnungen"] = zeilen(con.execute(f"SELECT nummer, datum, gesamt, versendet_an FROM mahnungen WHERE op_id IN ({oph}) ORDER BY datum", ops))
+    erg["versandte_belege"] = zeilen(con.execute(f"SELECT v.nummer, v.zeit, v.an, v.weg FROM beleg_versand v JOIN belege b ON b.id=v.beleg_id WHERE b.auftrag_id IN ({ph}) OR b.kunde_id=? "
+                                                 "ORDER BY v.id", (*ids, kid)))
+    erg["kontoumsaetze"] = []
+    for u in con.execute("SELECT buchung, betrag, name, zweck, gegen_iban, ziel FROM bank_umsaetze WHERE ziel LIKE '%\"op\"%'"):
+        if any(isinstance(z_, dict) and z_.get("art") == "op" and z_.get("id") in ops for z_ in jl(u["ziel"], [])):
+            erg["kontoumsaetze"].append({k_: u[k_] for k_ in ("buchung", "betrag", "name", "zweck", "gegen_iban")})
     protokoll.eintragen(con, "datenauskunft", str(kid), f"Datenauskunft für Kunde {k['nummer']} erstellt", {},
                         benutzer=dict(benutzer.aktuell() or {}).get("login", ""), version=VERSION)
     return erg
@@ -1643,6 +1690,11 @@ def auskunft_brief(con, kid):
         liste("Aufträge", [f"{h(x['nummer'])} {h(x['bezeichnung'])} (angelegt {de_datum((x['angelegt'] or '')[:10])}, Status {h(x['status'] or '')})" for x in a["auftraege"]]),
         liste("Belege", [f"{h(x['nummer'] or '(Entwurf)')} · {h(BELEGARTEN.get(x['art'], {}).get('name', x['art']))} vom {de_datum(x['datum'])}"
                          + (f" · {de(x['brutto'])} € brutto" if x.get("brutto") else "") for x in a["belege"]]),
+        liste("Zahlungen, Mahnungen und zugeordnete Kontoumsätze",
+              [f"{de_datum(x['datum'])} · Zahlung {de(x['betrag'])} €{' (' + h(x['art']) + ')' if x.get('art') else ''}" for x in a["zahlungen"]]
+              + [f"{de_datum(x['datum'])} · Mahnung {h(x['nummer'])} über {de(x['gesamt'])} €" for x in a["mahnungen"]]
+              + [f"{de_datum(x['buchung'])} · Kontoumsatz {de(x['betrag'])} € · {h(x['name'] or '')} · {h(x['zweck'] or '')}"
+                 + (f" · Konto {h(x['gegen_iban'])}" if x.get("gegen_iban") else "") for x in a["kontoumsaetze"]]),
         liste("Schriftverkehr (E-Mails, Anrufe, Briefe)", [f"{de_datum((x['datum'] or '')[:10])} · {h(korrespondenz.ARTEN.get(x['art'], x['art']))} · {h(x['betreff'] or '')}"
                                                            for x in a["korrespondenz"]] + [f"{de_datum(x['datum'])} · Brief {h(x['nummer'])} · {h(x['betreff'] or '')}" for x in a["briefe"]]),
         liste("Notizen", [f"{de_datum((x['angelegt'] or '')[:10])}: {h(x['text'])}" for x in a["notizen"]]),
@@ -1650,8 +1702,8 @@ def auskunft_brief(con, kid):
         liste("Dateien, Fotos, Rapporte", [h(x) for x in a["anhaenge"]] + [f"Rapport vom {de_datum(x['datum'])} ({h(x['status'])}), unterschrieben von {h(x['kunde_name'] or '')}" for x in a["rapporte"]]),
         liste("Speicherorte", [h(str(e.get("auskunft_speicherorte") or "").strip() or STANDARD_EINSTELLUNGEN["auskunft_speicherorte"])]),
         liste("Empfänger", [h(str(e.get("auskunft_empfaenger") or "").strip() or STANDARD_EINSTELLUNGEN["auskunft_empfaenger"])]),
-        liste("Speicherdauer", ["Rechnungen 8 bzw. 10 Jahre, Angebote und Geschäftsbriefe 6 Jahre, jeweils ab Ende des Kalenderjahres (§ 147 AO, § 257 HGB); "
-                                "danach werden Ihre Daten gelöscht bzw. anonymisiert"]),
+        liste("Speicherdauer", [f"Rechnungen und Kontoauszüge {frist_jahre(e)} Jahre, Angebote und Geschäftsbriefe 6 Jahre, jeweils ab Ende des Kalenderjahres "
+                                "(§ 147 AO, § 257 HGB); danach werden Ihre Daten gelöscht bzw. anonymisiert"]),
         liste("Herkunft der Daten", ["von Ihnen selbst bei Anfrage und Auftrag"]),
         "<p>Sie haben das Recht auf Berichtigung, Löschung, Einschränkung der Verarbeitung, Widerspruch und Datenübertragbarkeit sowie auf Beschwerde "
         "bei einer Aufsichtsbehörde (in Baden-Württemberg: Der Landesbeauftragte für den Datenschutz und die Informationsfreiheit). "
@@ -1685,77 +1737,27 @@ def _korrespondenz_loeschen(con, kid=None, auftrag_ids=()):
     return n
 
 
+def beleg_dateien(con, bid):
+    """Alle Dateien, die das Programm zu einem Beleg im Datenordner abgelegt hat: Archiv-PDF (auch unter dem früheren Namen),
+    XRechnung daneben und versandte Fassungen."""
+    try:
+        b = beleg_laden(con, bid)
+    except ApiFehler:
+        return []
+    archiv = os.path.join(DATEN, "belege", b["datum"][:4] if b["datum"] else "ohne-datum")
+    pfade = []
+    for name in {beleg_dateiname(b, bid), beleg_dateiname_alt(b, bid)}:
+        pfade += [os.path.join(archiv, name), os.path.join(archiv, name[:-4] + "_XRechnung.xml")]
+    pfade += [os.path.join(DATEN, "belege", r["datei"]) for r in con.execute("SELECT datei FROM beleg_versand WHERE beleg_id=? AND datei<>''", (bid,))]
+    return [p for p in pfade if os.path.isfile(p)]
+
+
 def kunde_anonymisieren(con, kid, ausfuehren=False):
-    """Nach Ablauf der Aufbewahrungsfristen: Personenbezug eines Kunden entfernen (Art. 17 DSGVO).
-    Zahlen (Beträge, Positionen, Stunden) bleiben für Statistik und Nachkalkulation erhalten."""
-    k = con.execute("SELECT * FROM kunden WHERE id=?", (kid,)).fetchone()
-    if not k:
-        raise ApiFehler("Kunde nicht gefunden", 404)
-    ids = [r["id"] for r in con.execute("SELECT id FROM auftraege WHERE kunde_id=?", (kid,))]
-    ph = ",".join("?" * len(ids)) or "0"
-    # Frist je Beleg: Rechnungen (Buchungsbelege) sicherheitshalber 10 Jahre, übrige Belege (Angebote, AB, Lieferscheine,
-    # Handelsbriefe) 6 Jahre, jeweils ab Ende des Kalenderjahres; maßgeblich ist das späteste Fristende
-    letzter, frist_ende = "", ""
-    for b in con.execute(f"SELECT art, datum FROM belege WHERE (auftrag_id IN ({ph}) OR kunde_id=?) AND status<>'entwurf'", (*ids, kid)):
-        d = b["datum"] or ""
-        if not d[:4].isdigit():
-            continue
-        letzter = max(letzter, d)
-        jahre = AUFBEWAHRUNG_JAHRE if BELEGARTEN.get(b["art"], {}).get("rechnung") else 6
-        frist_ende = max(frist_ende, f"{int(d[:4]) + jahre}-12-31")
-    for b in con.execute(f"SELECT datum FROM korrespondenz WHERE (kunde_id=? OR auftrag_id IN ({ph})) AND art LIKE 'mail%'", (kid, *ids)):
-        d = b["datum"] or ""
-        if d[:4].isdigit():
-            frist_ende = max(frist_ende, f"{int(d[:4]) + 6}-12-31")   # geschäftliche E-Mails (Handelsbriefe)
-    if (k["aufbewahren_bis"] or "") > frist_ende:   # Altbestand aus früheren Programmen oder von Hand gesetzt
-        frist_ende = k["aufbewahren_bis"]
-    offen = con.execute(f"SELECT COUNT(*) FROM offene_posten WHERE auftrag_id IN ({ph}) AND IFNULL(offen,0)>0.005", ids).fetchone()[0] if ids else 0
-    erlaubt = (not frist_ende or frist_ende < date.today().isoformat()) and not offen
-    info = {"offene_posten": offen, "kunde": k["kurzname"], "letzter_beleg": letzter, "frist_ende": frist_ende, "erlaubt": erlaubt, "auftraege": len(ids),
-            "ordner": [r["ordner"] for r in con.execute(f"SELECT ordner FROM auftraege WHERE id IN ({ph}) AND IFNULL(ordner,'')<>''", ids)]}
-    if not ausfuehren:
-        return info
-    if offen:
-        raise ApiFehler("Es gibt noch offene Posten zu diesem Kunden.")
-    if not erlaubt:
-        raise ApiFehler(f"Die Aufbewahrungsfrist läuft noch bis {de_datum(frist_ende)}; vorher darf der Kunde nicht anonymisiert werden.")
-    x = "anonymisiert"
-    leer = {f: "" for f in ("vorname", "nachname", "titel", "firma", "strasse", "hausnr", "zusatz", "telefon", "mobil", "telefax", "email1",
-                            "email2", "email3", "email4", "website", "bemerkungen", "merkmale", "ustid", "iban", "bic", "geburtstag",
-                            "lieferanschrift", "lieferort", "rechnungsanschrift", "rechnungsort", "anrede")}
-    spalten = {c[1] for c in con.execute("PRAGMA table_info(kunden)")}
-    werte = {f: v for f, v in leer.items() if f in spalten}
-    werte.update({"kurzname": f"{x} ({k['nummer']})", "anschrift": x, "aktiv": 0, "geaendert": jetzt()})
-    con.execute(f"UPDATE kunden SET {','.join(f + '=?' for f in werte)} WHERE id=?", (*werte.values(), kid))
-    if ids:
-        con.execute(f"UPDATE auftraege SET kunde_daten=NULL WHERE id IN ({ph})", ids)
-        for b in con.execute(f"SELECT id, daten, pdf FROM belege WHERE auftrag_id IN ({ph})", ids).fetchall():
-            d = jl(b["daten"], {})
-            d["kunde"] = {kk: (vv if kk in ("nummer", "gruppe", "land", "ust", "preise", "zahlungsziel", "skonto", "skontotage") else "")
-                          for kk, vv in (d.get("kunde") or {}).items()}
-            d.pop("unterschrift", None)
-            con.execute("UPDATE belege SET anschrift=?, daten=?, pdf='' WHERE id=?", (x, json.dumps(d, ensure_ascii=False), b["id"]))
-            if b["pdf"] and os.path.isfile(b["pdf"]) and os.path.commonpath([os.path.abspath(b["pdf"]), os.path.abspath(DATEN)]) == os.path.abspath(DATEN):
-                os.remove(b["pdf"])
-        for m in con.execute(f"SELECT id, unterschrift_kunde, unterschrift_monteur FROM montageberichte WHERE auftrag_id IN ({ph})", ids).fetchall():
-            for datei in (m["unterschrift_kunde"], m["unterschrift_monteur"]):
-                p = os.path.join(montage.ordner(), datei or "")
-                if datei and os.path.isfile(p):
-                    os.remove(p)
-            con.execute("UPDATE montageberichte SET kunde_name=?, unterschrift_kunde='', unterschrift_monteur='', anmerkungen='' WHERE id=?", (x, m["id"]))
-        con.execute(f"UPDATE briefe SET empfaenger=?, text='' WHERE auftrag_id IN ({ph})", (x, *ids))
-        con.execute(f"DELETE FROM notizen WHERE auftrag_id IN ({ph})", ids)
-    con.execute("UPDATE briefe SET empfaenger=?, text='' WHERE kunde_id=?", (x, kid))
-    con.execute("DELETE FROM notizen WHERE kunde_id=?", (kid,))
-    n_k = _korrespondenz_loeschen(con, kid, ids)
-    for a in con.execute(f"SELECT pfad FROM anhaenge WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids)).fetchall():
-        if a["pfad"] and os.path.isfile(a["pfad"]) and os.path.commonpath([os.path.abspath(a["pfad"]), os.path.abspath(DATEN)]) == os.path.abspath(DATEN):
-            os.remove(a["pfad"])
-    con.execute(f"DELETE FROM anhaenge WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids))
-    con.execute(f"DELETE FROM wiedervorlagen WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids))
-    protokoll.eintragen(con, "kunde_anonymisiert", str(kid), f"Kunde {k['nummer']} nach Ablauf der Aufbewahrungsfrist anonymisiert", {"korrespondenz": n_k},
-                        benutzer=dict(benutzer.aktuell() or {}).get("login", ""), version=VERSION)
-    return {**info, "erledigt": True, "korrespondenz": n_k}
+    """Nach Ablauf der Aufbewahrungsfristen: Personenbezug eines Kunden entfernen (Art. 17 DSGVO) – siehe datenschutz.kunde()."""
+    return datenschutz.kunde(con, kid, DATEN, ausfuehren, ich_login() if ausfuehren else "", VERSION, hilfe={
+        "jahre_rechnung": frist_jahre(einstellungen(con)), "rechnungsarten": {a for a, v in BELEGARTEN.items() if v.get("rechnung")},
+        "beleg_dateien": lambda bid: beleg_dateien(con, bid), "montage_ordner": montage.ordner, "bautagebuch_ordner": bautagebuch.ordner,
+        "korrespondenz_loeschen": _korrespondenz_loeschen})
 
 
 def konstruktion_dateien(con, aid, datei=None):
@@ -2185,8 +2187,8 @@ def statistik(con, kid=None):
         j = (b["datum"] or "")[:4]
         umsatz_jahr[j] = umsatz_jahr.get(j, 0) + u
         umsatz_kunde[b["kunde_id"]] = umsatz_kunde.get(b["kunde_id"], 0) + u
-    erg["umsatz_jahr"] = [{"jahr": j, "umsatz": round(v, 2)} for j, v in sorted(umsatz_jahr.items(), reverse=True) if j]
-    erg["umsatz_gesamt"] = round(sum(umsatz_jahr.values()), 2)
+    erg["umsatz_jahr"] = [{"jahr": j, "umsatz": kfm(v)} for j, v in sorted(umsatz_jahr.items(), reverse=True) if j]
+    erg["umsatz_gesamt"] = kfm(sum(umsatz_jahr.values()))
     # Angebotsquote: Aufträge mit Angebot/KV, davon beauftragt
     e = einstellungen(con)
     vor = set(e.get("status_angebot") or ["Anfrage", "Angebot"]) | {"Abgesagt"}
@@ -2197,8 +2199,8 @@ def statistik(con, kid=None):
     erg["abgesagt"] = sum(1 for r in mit_angebot if (r["status"] or "") == "Abgesagt")
     abgerechnet = con.execute("SELECT COUNT(DISTINCT auftrag_id) FROM belege WHERE art='rechnung' AND status='fest'"
                               + (" AND kunde_id=?" if kid else ""), p).fetchone()[0]
-    erg["durchschnitt_auftrag"] = round(erg["umsatz_gesamt"] / abgerechnet, 2) if abgerechnet else 0
-    erg["offen"] = round(con.execute("SELECT COALESCE(SUM(offen),0) FROM offene_posten" + (" WHERE kunde_id=?" if kid else ""), p).fetchone()[0] or 0, 2)
+    erg["durchschnitt_auftrag"] = kfm(erg["umsatz_gesamt"] / abgerechnet) if abgerechnet else 0
+    erg["offen"] = kfm(con.execute("SELECT COALESCE(SUM(offen),0) FROM offene_posten" + (" WHERE kunde_id=?" if kid else ""), p).fetchone()[0] or 0)
     # Zahlungsdauer: Tage vom Rechnungsdatum bis zur letzten Zahlung bei bezahlten Posten
     tage = []
     for r in con.execute("SELECT o.datum, MAX(z.datum) AS bezahlt FROM offene_posten o JOIN zahlungseingaenge z ON z.op_id=o.id "
@@ -2216,13 +2218,13 @@ def statistik(con, kid=None):
             "SELECT substr(angelegt,1,4) AS jahr, COUNT(*) AS anzahl FROM kunden WHERE IFNULL(angelegt,'')<>'' GROUP BY jahr ORDER BY jahr DESC LIMIT 8"))
         namen = {r["id"]: (r["nummer"], r["kurzname"], r["gruppe"]) for r in con.execute("SELECT id, nummer, kurzname, gruppe FROM kunden")}
         top = sorted(umsatz_kunde.items(), key=lambda x: -x[1])[:10]
-        erg["top_kunden"] = [{"id": k, "nummer": namen.get(k, ("", "", ""))[0], "kurzname": namen.get(k, ("", "?", ""))[1], "umsatz": round(v, 2),
+        erg["top_kunden"] = [{"id": k, "nummer": namen.get(k, ("", "", ""))[0], "kurzname": namen.get(k, ("", "?", ""))[1], "umsatz": kfm(v),
                               "anteil": round(v / erg["umsatz_gesamt"] * 100, 1) if erg["umsatz_gesamt"] else 0} for k, v in top]
         ug = {}
         for k, v in umsatz_kunde.items():
             g = namen.get(k, ("", "", ""))[2] or "ohne Gruppe"
             ug[g] = ug.get(g, 0) + v
-        erg["umsatz_gruppe"] = [{"gruppe": g, "umsatz": round(v, 2)} for g, v in sorted(ug.items(), key=lambda x: -x[1])]
+        erg["umsatz_gruppe"] = [{"gruppe": g, "umsatz": kfm(v)} for g, v in sorted(ug.items(), key=lambda x: -x[1])]
     else:
         r = con.execute("SELECT MIN(angelegt) AS erster, MAX(angelegt) AS letzter FROM auftraege WHERE kunde_id=?",
                         (kid,)).fetchone()
@@ -2327,12 +2329,12 @@ def brief_api(con, methode, rid, unter, q, d):
                     anh.append((name, f.read(), "application/pdf"))
             con.commit()
             try:
-                r = mailversand.senden(cfg, d.get("an"), d.get("cc"), d.get("betreff") or "", d.get("text") or "", anh, kopie_an_mich=bool(d.get("kopie_an_mich")))
+                r = mailversand.senden(cfg, d.get("an"), d.get("cc"), d.get("betreff") or "", d.get("text") or "", anh, kopie_an_mich=bool(d.get("kopie_an_mich")), ablage=MAIL_ABLAGE)
             except mailversand.MailFehler as f:
                 raise ApiFehler(str(f))
             con.execute("UPDATE briefe SET status='per E-Mail versendet' WHERE id=?", (rid,))
             korrespondenz_eintragen(con, "mail_aus", kunde_id=b["kunde_id"], lieferant_id=b["lieferant_id"], auftrag_id=b["auftrag_id"],
-                                    betreff=d.get("betreff") or "", text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"),
+                                    betreff=d.get("betreff") or "", text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"), datei=mail_datei(r),
                                     anhaenge=[x[0] for x in anh])
             return r
     raise ApiFehler("Unbekannte Anfrage", 404)
@@ -2409,11 +2411,11 @@ def newsletter(con, methode, q, d):
         for i in range(0, len(liste), 40):
             paket = liste[i:i + 40]
             try:
-                mailversand.senden(cfg, cfg.get("adresse"), "", d["betreff"], text, anh, bcc=[r["email1"] for r in paket])
+                abgelegt = mail_datei(mailversand.senden(cfg, cfg.get("adresse"), "", d["betreff"], text, anh, bcc=[r["email1"] for r in paket], ablage=MAIL_ABLAGE))
             except mailversand.MailFehler as f:
                 raise ApiFehler(f"Nach {gesendet} Empfängern abgebrochen: {f}")
             for r in paket:
-                korrespondenz_eintragen(con, "mail_aus", kunde_id=r["id"], betreff="Rundmail: " + d["betreff"], text=d["text"], an=r["email1"])
+                korrespondenz_eintragen(con, "mail_aus", kunde_id=r["id"], betreff="Rundmail: " + d["betreff"], text=d["text"], an=r["email1"], datei=abgelegt)
             gesendet += len(paket)
             con.commit()
         return {"gesendet": gesendet}
@@ -2459,6 +2461,18 @@ def scan_api(con, methode, teile, q, d):
 
 def korrespondenz_eintragen(con, art, **kw):
     return korrespondenz.eintragen(con, art, benutzer=dict(benutzer.aktuell() or {}).get("login") or "", **kw)
+
+
+# Jede aus dem Programm verschickte Mail wird vollständig (mit Anhängen) als .eml-Datei abgelegt, im selben Ordner wie die
+# abgeholten Mails. Angebote, Auftragsbestätigungen, Briefe und Mahnungen sind Handelsbriefe: Was der Empfänger bekommen hat,
+# muss sich später genau so wieder zeigen lassen – auch wenn der Beleg danach geändert wurde.
+MAIL_ABLAGE = os.path.join(DATEN, "mails")
+
+
+def mail_datei(r):
+    """Pfad der abgelegten Mail (relativ zum Datenordner) für den Schriftverkehr; aus der Antwort an die Oberfläche entfernt."""
+    pfad = r.pop("datei", None) if isinstance(r, dict) else None
+    return os.path.relpath(pfad, DATEN).replace(os.sep, "/") if pfad else ""
 
 
 def geburtstag_naechster(gb, heute_d):
@@ -2519,14 +2533,14 @@ def kunde_mail(con, kid, methode, q, d):
     if methode == "POST":
         try:
             r = mailversand.senden(cfg, d.get("an"), d.get("cc"), d.get("betreff") or "", d.get("text") or "", [],
-                                   kopie_an_mich=bool(d.get("kopie_an_mich")))
+                                   kopie_an_mich=bool(d.get("kopie_an_mich")), ablage=MAIL_ABLAGE)
         except mailversand.MailFehler as f:
             raise ApiFehler(str(f))
         art = "Geburtstagsmail" if (d.get("betreff") or "") == (e.get("geburtstag_betreff") or "-") else "E-Mail"
         con.execute("INSERT INTO notizen (kunde_id, text, angelegt) VALUES (?,?,?)",
                     (kid, f"{art} gesendet an {d.get('an')}: {d.get('betreff')}", jetzt()))
         korrespondenz_eintragen(con, "mail_aus", kunde_id=kid, auftrag_id=auftrag["id"] if auftrag else None,
-                                betreff=d.get("betreff") or "", text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"))
+                                betreff=d.get("betreff") or "", text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"), datei=mail_datei(r))
         return r
     raise ApiFehler("Unbekannte Anfrage", 404)
 
@@ -2577,11 +2591,11 @@ def zahlbest_mail(con, opid, methode, q, d):
     if methode == "POST":
         try:
             r = mailversand.senden(cfg, d.get("an"), d.get("cc"), d.get("betreff") or "", d.get("text") or "", [],
-                                   kopie_an_mich=bool(d.get("kopie_an_mich")))
+                                   kopie_an_mich=bool(d.get("kopie_an_mich")), ablage=MAIL_ABLAGE)
         except mailversand.MailFehler as f:
             raise ApiFehler(str(f))
         korrespondenz_eintragen(con, "mail_aus", kunde_id=k["id"], auftrag_id=op["auftrag_id"],
-                                betreff=d.get("betreff") or "", text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"))
+                                betreff=d.get("betreff") or "", text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"), datei=mail_datei(r))
         return r
     raise ApiFehler("Unbekannte Anfrage", 404)
 
@@ -2613,13 +2627,13 @@ def lieferant_mail(con, lid, methode, q, d):
     if methode == "POST":
         try:
             r = mailversand.senden(cfg, d.get("an"), d.get("cc"), d.get("betreff") or "", d.get("text") or "", [],
-                                   kopie_an_mich=bool(d.get("kopie_an_mich")))
+                                   kopie_an_mich=bool(d.get("kopie_an_mich")), ablage=MAIL_ABLAGE)
         except mailversand.MailFehler as f:
             raise ApiFehler(str(f))
         con.execute("INSERT INTO notizen (lieferant_id, text, angelegt) VALUES (?,?,?)",
                     (lid, f"E-Mail gesendet an {d.get('an')}: {d.get('betreff')}", jetzt()))
         korrespondenz_eintragen(con, "mail_aus", lieferant_id=lid, auftrag_id=auftrag["id"] if auftrag else None,
-                                betreff=d.get("betreff") or "", text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"))
+                                betreff=d.get("betreff") or "", text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"), datei=mail_datei(r))
         return r
     raise ApiFehler("Unbekannte Anfrage", 404)
 
@@ -2820,11 +2834,11 @@ def auftrag_rechnen(con, aid):
             st = soll_titel.setdefault(str(p["titel"] or 0), {k: 0.0 for k in KATEGORIEN})
             st["nettopreis"] = st.get("nettopreis", 0.0) + gp
             summiere(p, fl(p["menge"]), st)
-    soll["nettopreis"] = round(netto, 2)
+    soll["nettopreis"] = kfm(netto)
     return {"kalk": kalk, "titel": titel, "titel_druck": titel_druck, "positionen": haupt,
-            "netto": round(netto, 2), "titel_summen": {str(k): round(v, 2) for k, v in titel_summen.items()},
-            "titel_stunden": {str(k): round(v, 2) for k, v in titel_stunden.items()},
-            "titel_selbstkosten": {str(k): round(v, 2) for k, v in titel_sk.items()},
+            "netto": kfm(netto), "titel_summen": {str(k): kfm(v) for k, v in titel_summen.items()},
+            "titel_stunden": {str(k): kfm(v) for k, v in titel_stunden.items()},
+            "titel_selbstkosten": {str(k): kfm(v) for k, v in titel_sk.items()},
             "soll": soll, "soll_titel": soll_titel}
 
 
@@ -3187,14 +3201,14 @@ def soll_ist(con, aid, titel=None):
     rg = con.execute("SELECT SUM(art='rechnung'), SUM(netto) FROM belege WHERE auftrag_id=? AND art IN ('rechnung','gutschrift','korrektur') "
                      "AND status='fest'", (aid,)).fetchone()
     if not nur_titel and rg[0]:
-        ist["nettopreis"], erloes = round(rg[1] or 0, 2), f"berechnet laut {rg[0]} festgeschriebener Rechnung{'en' if rg[0] > 1 else ''}"
+        ist["nettopreis"], erloes = kfm(rg[1] or 0), f"berechnet laut {rg[0]} festgeschriebener Rechnung{'en' if rg[0] > 1 else ''}"
     else:
-        basis = round(soll.get("nettopreis", 0), 2) if nur_titel else erg["netto"]
-        ist["nettopreis"] = round(basis * (1 - rab / 100), 2)
+        basis = kfm(soll.get("nettopreis", 0)) if nur_titel else erg["netto"]
+        ist["nettopreis"] = kfm(basis * (1 - rab / 100))
         erloes = f"Kalkulationssumme abzüglich {de(rab, 2 if rab % 1 else 0)} % Kundenrabatt" if rab else "Kalkulationssumme (noch keine Schlussrechnung)"
     ist["wg"] = ist["nettopreis"] - ist["selbstkosten"] - ist["sonder_vertrieb"]
     for z in (soll, ist):
-        z["wg_pz"] = round(z["wg"] / z["selbstkosten"] * 100, 2) if z.get("selbstkosten") else 0
+        z["wg_pz"] = kfm(z["wg"] / z["selbstkosten"] * 100) if z.get("selbstkosten") else 0
     # Positionen mit Preis, aber ohne Kosten (keine Kalkulation): ihr ganzer Preis erscheint als Wagnis und Gewinn
     ohne_kalk = []
 
@@ -3204,7 +3218,7 @@ def soll_ist(con, aid, titel=None):
                 ohne_kosten(k, nr + "." + str(k.get("posnr") or "").split(".")[-1])
         c = p["_calc"]
         if fl(c.get("einzelpreis")) > 0 and not c.get("hat_kalk"):
-            ohne_kalk.append({"posnr": nr, "text": werkstatt.kurztext(p.get("text") or "")[:50], "betrag": round(fl(c["einzelpreis"]), 2)})
+            ohne_kalk.append({"posnr": nr, "text": werkstatt.kurztext(p.get("text") or "")[:50], "betrag": kfm(fl(c["einzelpreis"]))})
     for p in erg["positionen"]:
         if zaehlt(p, {t.get("nr") for t in erg["titel"] if t.get("gesperrt")}) and (not nur_titel or int(p["titel"] or 0) == titel):
             ohne_kosten(p, str(p.get("posnr") or ""))
@@ -3217,14 +3231,14 @@ def soll_ist(con, aid, titel=None):
         t = next((x for x in erg["titel"] if int(x.get("nr") or 0) == nr), {})
         z = {"nr": nr, "name": t.get("name") or ("ohne Titel" if not nr else ""), "gesperrt": bool(t.get("gesperrt")),
              "buchung_gesperrt": bool(t.get("buchung_gesperrt")),
-             "soll_stunden": erg["titel_stunden"].get(str(nr), 0), "ist_stunden": round(ist_h.get(nr, 0) or 0, 2),
-             "netto": erg["titel_summen"].get(str(nr), 0), "ist_kosten": round(ist_k.get(nr, 0) or 0, 2)}
+             "soll_stunden": erg["titel_stunden"].get(str(nr), 0), "ist_stunden": kfm(ist_h.get(nr, 0) or 0),
+             "netto": erg["titel_summen"].get(str(nr), 0), "ist_kosten": kfm(ist_k.get(nr, 0) or 0)}
         if nr == 0 and not (z["soll_stunden"] or z["ist_stunden"] or z["ist_kosten"]):
             continue
         je_titel.append(z)
     return {"soll": soll, "ist": ist, "kostenstellen": [k["kst"] for k in kalk.get("kostenstellen", [])], "titel": je_titel,
             "ohne_kalk": sorted(ohne_kalk, key=lambda x: [int(t) if t.isdigit() else 0 for t in x["posnr"].split(".")]),
-            "ohne_kst": {"stunden": round(ohne_kst, 2), "gk_pz": round(gk_schnitt, 1)} if ohne_kst else None, "erloes": erloes,
+            "ohne_kst": {"stunden": kfm(ohne_kst), "gk_pz": round(gk_schnitt, 1)} if ohne_kst else None, "erloes": erloes,
             "gewaehlt": titel if nur_titel else None,
             "titel_liste": [{"nr": int(t.get("nr") or 0), "name": t.get("name") or ""} for t in erg["titel"] if t.get("nr")]}
 
@@ -3421,7 +3435,7 @@ def beleg_zeilen(erg, art, ust_satz):
                     continue
                 unter.append({"posnr": k["posnr"], "menge": k["menge"], "einheit": k["einheit"], "text": k["text"],
                               "bilder": [x for x in (k.get("bilder") or []) if x.get("drucken", True)],
-                              "ep": k["_calc"]["ep_gesamt"], "gp": round(k["_calc"]["ep_gesamt"] * fl(k["menge"]), 2)})
+                              "ep": k["_calc"]["ep_gesamt"], "gp": kfm(k["_calc"]["ep_gesamt"] * fl(k["menge"]))})
         zeilen.append({"typ": "pos", "id": p["id"], "posnr": p["posnr"], "menge": p["menge"], "einheit": p["einheit"], "text": p["text"],
                        "ep": c["ep_gesamt"], "gp": c["gesamtpreis"], "zeige": p["zeige"],
                        "bilder": [x for x in (p.get("bilder") or []) if x.get("drucken", True)]
@@ -3444,11 +3458,11 @@ def titelName_py(titel, nr):
 
 
 def summen_rechnen(netto, ust_satz, rabatt_pz=0.0):
-    rabatt = round(netto * rabatt_pz / 100, 2)
-    netto_r = round(netto - rabatt, 2)
-    ust = round(netto_r * ust_satz / 100, 2)
-    return {"netto_positionen": round(netto, 2), "rabatt_pz": rabatt_pz, "rabatt": rabatt, "netto": netto_r,
-            "ust_satz": ust_satz, "ust": ust, "brutto": round(netto_r + ust, 2)}
+    rabatt = kfm(netto * rabatt_pz / 100)
+    netto_r = kfm(netto - rabatt)
+    ust = kfm(netto_r * ust_satz / 100)
+    return {"netto_positionen": kfm(netto), "rabatt_pz": rabatt_pz, "rabatt": rabatt, "netto": netto_r,
+            "ust_satz": ust_satz, "ust": ust, "brutto": kfm(netto_r + ust)}
 
 
 def abschlaege_verrechnet(con, aid, ohne_beleg=None):
@@ -3492,9 +3506,9 @@ def lohnanteil_rechnen(erg, summen, ust_satz, mit_wg=True):
             roh += gp if mit_wg and gp - anteil < 0.01 * max(1.0, fl(p["menge"])) else anteil   # reine Arbeitsposition: ganzer Preis
     netto_vor = fl(erg["netto"])
     faktor = (fl(summen.get("netto")) / netto_vor) if netto_vor else 0   # Rabatt anteilig
-    n = round(min(roh * faktor, fl(summen.get("netto"))), 2)
-    u = round(n * fl(ust_satz) / 100, 2)
-    return {"netto": n, "ust": u, "brutto": round(n + u, 2)}
+    n = kfm(min(roh * faktor, fl(summen.get("netto"))))
+    u = kfm(n * fl(ust_satz) / 100)
+    return {"netto": n, "ust": u, "brutto": kfm(n + u)}
 
 
 def beleg_snapshot(con, aid, art, opts=None):
@@ -3559,28 +3573,28 @@ def beleg_snapshot(con, aid, art, opts=None):
         frei = [x for x in (opts.get("frei") or []) if isinstance(x, dict) and (str(x.get("text") or "").strip() or fl(x.get("betrag")))]
         if not frei:
             raise ApiFehler("Bitte mindestens eine Zeile mit Text und Betrag eingeben.")
-        daten["frei"] = [{"text": str(x.get("text") or "").strip(), "betrag": round(fl(x.get("betrag")), 2)} for x in frei]
+        daten["frei"] = [{"text": str(x.get("text") or "").strip(), "betrag": kfm(fl(x.get("betrag")))} for x in frei]
         daten["zeilen"] = [{"typ": "pos", "posnr": f"{i + 1:02d}", "menge": 1, "einheit": "Psch.", "text": x["text"],
-                            "ep": round(vz * x["betrag"], 2), "gp": round(vz * x["betrag"], 2), "zeige": {"posnr": 1, "anzahl": 1, "ep": 1, "gp": 1},
+                            "ep": kfm(vz * x["betrag"]), "gp": kfm(vz * x["betrag"]), "zeige": {"posnr": 1, "anzahl": 1, "ep": 1, "gp": 1},
                             "zaehlt": True, "unter": [], "unterdruck": "verdeckt"} for i, x in enumerate(daten["frei"])]
         if isinstance(opts.get("bezug"), dict) and opts["bezug"].get("nummer"):
             daten["bezug"] = {"nummer": opts["bezug"]["nummer"], "datum": opts["bezug"].get("datum") or "", "id": opts["bezug"].get("id")}
-        daten["summen"] = summen_rechnen(round(sum(z["gp"] for z in daten["zeilen"]), 2), ust_satz, 0)
+        daten["summen"] = summen_rechnen(kfm(sum(z["gp"] for z in daten["zeilen"])), ust_satz, 0)
         s_ = daten["summen"]
         s_["abzug_brutto"], s_["zahlbetrag"] = 0.0, s_["brutto"]
         return daten, k, a
     if art == "abschlag":
         # Prozent-Abschläge vom Auftragsnetto nach Kundenrabatt (so viel wird später tatsächlich berechnet)
         rab = fl(k.get("rabatt"))
-        netto_auftrag = round(erg["netto"] - round(erg["netto"] * rab / 100, 2), 2) if rab else erg["netto"]
+        netto_auftrag = kfm(erg["netto"] - kfm(erg["netto"] * rab / 100)) if rab else erg["netto"]
         dr = opts.get("druck") or druck_standard("abschlag", e)
         mit_summe = dr.get("ab_summe", True)
         if opts.get("prozent"):
-            betrag = round(netto_auftrag * fl(opts["prozent"]) / 100, 2)
+            betrag = kfm(netto_auftrag * fl(opts["prozent"]) / 100)
             pz = f"{de(fl(opts['prozent']), 2 if fl(opts['prozent']) % 1 else 0)} %"
             zusatz = f"{pz} der Auftragssumme von {de(netto_auftrag)} € netto" if mit_summe else f"{pz} der Auftragssumme"
         else:
-            betrag = round(fl(opts.get("betrag")), 2)
+            betrag = kfm(fl(opts.get("betrag")))
             zusatz = f"Auftragssumme {de(netto_auftrag)} € netto" if mit_summe else ""
         nr = con.execute("SELECT COUNT(*) FROM belege WHERE auftrag_id=? AND art='abschlag' AND status IN ('fest','storniert')",
                          (aid,)).fetchone()[0] + 1
@@ -3615,8 +3629,8 @@ def beleg_snapshot(con, aid, art, opts=None):
             if mit:
                 daten["abzuege"].append({"id": b["id"], "nummer": b["nummer"], "datum": b["datum"], "netto": b["netto"], "ust": b["ust"], "brutto": b["brutto"]})
     s = daten["summen"]
-    s["abzug_brutto"] = round(sum(x["brutto"] for x in daten["abzuege"]), 2)
-    s["zahlbetrag"] = round(s["brutto"] - s["abzug_brutto"], 2)
+    s["abzug_brutto"] = kfm(sum(x["brutto"] for x in daten["abzuege"]))
+    s["zahlbetrag"] = kfm(s["brutto"] - s["abzug_brutto"])
     return daten, k, a
 
 
@@ -3678,7 +3692,10 @@ def druck_standard(art, e=None):
            "briefbogen": True, "unterschrift": True, "ab_positionen": "nein", "ab_summe": True,
            "bilder": art in ("angebot", "kv", "ab"),   # Positionsbilder standardmäßig nur in Angebot, KV und AB
            "unten_buendig": bool((e or {}).get("unten_buendig", True)),
-           "uebertrag": bool(preise)}   # mehrseitige Belege: Zwischensumme am Seitenende und am Anfang der Folgeseite
+           # mehrseitige Belege: Zwischensumme am Seitenende und am Anfang der Folgeseite (Betriebsvorgabe in den Einstellungen)
+           "uebertrag": bool(preise) and bool((e or {}).get("uebertrag", True)),
+           # Bruttoanzeige: weicht die Summe der gerundeten Bruttobeträge vom Gesamtbetrag ab, steht die Differenz als eigene Zeile da
+           "rundung": True}
     return {**std, **(((e or {}).get("druck_vorgaben") or {}).get(art) or {})}
 
 
@@ -3689,6 +3706,8 @@ def druck_einstellung(b, e=None):
         d["unten_buendig"] = False   # festgeschriebene Belege behalten ihr bisheriges Druckbild
     if b.get("status") in ("fest", "storniert") and "uebertrag" not in roh:
         d["uebertrag"] = False
+    if b.get("status") in ("fest", "storniert") and "rundung" not in roh:
+        d["rundung"] = False
     if BELEGARTEN.get(b["art"], {}).get("rechnung"):
         d["preise"], d["nummer"] = True, "ja"  # Rechnungen brauchen Preise, Summen und die volle Nummer
         if d["summen"] == "nein":
@@ -3711,6 +3730,7 @@ def beleg_laden(con, bid):
     b["druck"] = druck_einstellung(b, einstellungen(con))
     op = con.execute("SELECT * FROM offene_posten WHERE beleg_id=?", (bid,)).fetchone()
     b["op"] = dict(op) if op else None
+    b["versand"] = versand_liste(con, bid)
     return b
 
 
@@ -3725,6 +3745,31 @@ def art_name(b):
 
 def beleg_titel(b):
     return f"{b['artname']} {b['nummer']}" if b.get("nummer") else f"{b['artname']} (Entwurf)"
+
+
+def versand_festhalten(con, b, bid, roh, an, weg):
+    """Die versandte Fassung eines noch änderbaren Belegs (Angebot, Auftragsbestätigung, Lieferschein …) als eigene Datei
+    festhalten. Solche Belege dürfen weiter bearbeitet werden – was der Kunde bekommen hat, bleibt trotzdem so erhalten, wie es
+    hinausging (Handelsbrief, § 257 HGB). Festgeschriebene Rechnungen brauchen das nicht: Ihr Archiv-PDF ist unveränderlich."""
+    if b["status"] in ("fest", "storniert") or not roh:
+        return None
+    ordner = os.path.join(DATEN, "belege", (b["datum"] or date.today().isoformat())[:4], "versandt")
+    os.makedirs(ordner, exist_ok=True)
+    sha = hashlib.sha256(roh).hexdigest()
+    name = f"{beleg_dateiname(b, bid)[:-4]}_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}_{sha[:8]}.pdf"
+    with open(os.path.join(ordner, name), "wb") as f:
+        f.write(roh)
+    rel = os.path.relpath(os.path.join(ordner, name), os.path.join(DATEN, "belege")).replace(os.sep, "/")
+    vid = con.execute("INSERT INTO beleg_versand (beleg_id, nummer, art, zeit, an, weg, datei, sha256, groesse, brutto, benutzer) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                      (bid, b["nummer"] or "", b["art"], jetzt(), str(an or "")[:200], weg, rel, sha, len(roh), b["brutto"] or 0, ich_login())).lastrowid
+    # (ohne Empfängeradresse: Was im Protokoll steht, lässt sich nie mehr löschen – die Adresse steht am Beleg und im Schriftverkehr)
+    prot(con, "beleg_versandt", b["nummer"] or f"Entwurf {bid}", f"{b['artname']} {b['nummer'] or '(ohne Nummer)'} versandt ({weg}); Fassung festgehalten: {name}",
+         {"id": bid, "versand": vid, "nummer": b["nummer"], "art": b["art"], "weg": weg, "datei": rel, "sha256": sha, "groesse": len(roh), "brutto": b["brutto"]})
+    return vid
+
+
+def versand_liste(con, bid):
+    return [dict(r) for r in con.execute("SELECT id, zeit, an, weg, groesse, brutto, benutzer FROM beleg_versand WHERE beleg_id=? ORDER BY id", (bid,))]
 
 
 def naechste_lfd(con, aid, art):
@@ -3824,9 +3869,12 @@ EINSTELLUNGEN_WERKSTATT = {
     "firma", "programm_version", "app_fenster", "etikett_breite", "etikett_hoehe", "https", "_https", "auftragsstatus", "auftragsgruppen", "positionsstatus", "positionsgruppen",
     "status_ende", "status_angebot", "status_automatik", "termin_typen", "einheiten", "lagerorte", "material_gruppen", "leitstand_schritte",
     "leitstand_status", "leitstand_status_map", "_leitstand_map", "taetigkeiten", "taetigkeit_listen", "taetigkeiten_katalog", "_taet_katalog_stand",
-    "typ_kst", "ist_kategorien", "feiertage_wahl", "frei_wahl", "tage_eigene", "tagesstunden", "zeit_rundung", "zeit_gemeinkosten",
+    "typ_kst", "ist_kategorien", "feiertage_wahl", "frei_wahl", "tage_eigene", "tagesstunden", "zeit_gemeinkosten",
     "zuschnitt_url", "zuschnitt_zugabe", "laender", "land_immer", "_einheiten_neu", "_einheit_xun", "_status_nachgezogen", "sollplaene",
 }
+# Spalten der großen Listen (Kunden, Aufträge): die Listenansicht lädt nur diese, alles Weitere erst beim Öffnen des Datensatzes
+KUNDEN_LISTE = "id, nummer, kurzname, plz, ort, telefon, gruppe, aktiv"
+AUFTRAEGE_LISTE = "a.id, a.nummer, a.bezeichnung, a.kunde_id, a.projekt_id, a.gruppe, a.status, a.leitstand, a.fertigung, a.lieferung"
 KUNDE_OHNE_KUNDENRECHT = ("id", "nummer", "kurzname", "gruppe", "aktiv", "anschrift", "plz", "ort", "land", "anrede", "telefon", "email1",
                           "lieferanschrift", "lieferort", "lieferland", "anredeform", "titel", "vorname", "nachname", "firma", "zusatz",
                           "strasse", "ansprechpartner", "mobil")
@@ -4065,7 +4113,7 @@ def zahlung_plausibel(con, op_id, d):
     op = con.execute("SELECT * FROM offene_posten WHERE id=?", (op_id,)).fetchone()
     if not op:
         return
-    betrag, skonto = round(zahl(d.get("betrag"), float), 2), round(zahl(d.get("skonto"), float), 2)
+    betrag, skonto = kfm(zahl(d.get("betrag"), float)), kfm(zahl(d.get("skonto"), float))
     tag, g = d.get("datum") or date.today().isoformat(), []
     date.fromisoformat(tag)
     if betrag < 0:
@@ -4085,16 +4133,16 @@ def op_zahlung_buchen(con, op_id, d):
     op = con.execute("SELECT * FROM offene_posten WHERE id=?", (op_id,)).fetchone()
     if not op:
         raise ApiFehler("Offener Posten nicht gefunden", 404)
-    betrag = round(zahl(d.get("betrag"), float), 2)
+    betrag = kfm(zahl(d.get("betrag"), float))
     if not betrag:
         raise ApiFehler("Bitte einen Betrag eingeben.")
-    skonto = round(zahl(d.get("skonto"), float), 2)
+    skonto = kfm(zahl(d.get("skonto"), float))
     datum_ = d.get("datum") or date.today().isoformat()
     date.fromisoformat(datum_)
     # Was über den offenen Rechnungsbetrag hinausgeht, deckt zuerst die Mahnkosten
     auf_mk = 0.0
     if (op["mahnkosten"] or 0) > 0 and op["offen"] >= 0 and betrag + skonto > op["offen"] + 0.004:
-        auf_mk = round(min(betrag + skonto - op["offen"], op["mahnkosten"]), 2)
+        auf_mk = kfm(min(betrag + skonto - op["offen"], op["mahnkosten"]))
     ids = [con.execute("INSERT INTO zahlungseingaenge (op_id, datum, betrag, art, bemerkung, angelegt, auf_mahnkosten) VALUES (?,?,?,?,?,?,?)",
                        (op_id, datum_, betrag, d.get("art") or "Überweisung",
                         d.get("bemerkung") or ("davon Mahnkosten " + de(auf_mk) + " €" if auf_mk else ""), jetzt(), auf_mk)).lastrowid]
@@ -4127,6 +4175,10 @@ def prot(con, art, objekt, text, daten=None):
     """Eintrag ins unveränderbare Protokoll (GoBD) mit angemeldetem Benutzer und Programmversion."""
     wer = dict(benutzer.aktuell() or {}).get("login") or "Programm"
     return protokoll.eintragen(con, art, objekt, text, daten, benutzer=wer, version=VERSION)
+
+
+benutzer.MELDEN["fn"] = prot   # Anmeldungen, Sperren nach Fehlversuchen und Änderungen an Benutzern kommen ins Protokoll
+nachweis.HILFE["prot"] = prot    # ebenso Änderungen an Stammdaten und Einstellungen
 
 
 def beleg_kurz(b):
@@ -4170,7 +4222,11 @@ def belege_pruefen(con):
             pdf[d["id"]] = d
         elif r["art"] == "storno" and (d.get("storno") or {}).get("id"):
             storno[d["storno"]["id"]] = d["storno"]
-    fehler, geprueft, mit_abdruck, pdf_ok, ohne = [], 0, 0, 0, 0
+    fehler, geprueft, mit_abdruck, pdf_ok, ohne, anonym = [], 0, 0, 0, 0, 0
+    # Dateien, die beim Anonymisieren nach Fristablauf gelöscht wurden (Kunden, Lieferanten, Mitarbeiter)
+    entfernt = set()
+    for r in con.execute("SELECT daten FROM protokoll WHERE art IN ('anonymisiert','kunde_anonymisiert')"):
+        entfernt.update(jl(r["daten"], {}).get("dateien") or [])
     eb = protokoll.echtbetrieb(con)
     if eb:   # im Echtbetrieb festgeschriebene Rechnungen dürfen nie verschwinden (z. B. nach einer Rücksicherung nachzutragen)
         da = {r[0] for r in con.execute("SELECT id FROM belege")}
@@ -4180,7 +4236,7 @@ def belege_pruefen(con):
                 fehler.append(f"Rechnung {d.get('nummer')} vom {de_datum(d.get('datum'))} ({d.get('kunde')}, brutto {de(fl(d.get('brutto')))} €) "
                               "ist laut Protokoll festgeschrieben, fehlt aber in der Datenbank")
     rechnungsarten = [k for k, v in BELEGARTEN.items() if v.get("rechnung")]
-    sql = (f"SELECT id, art, nummer, datum, netto, ust, brutto, zahlbetrag FROM belege WHERE status IN ('fest','storniert') "
+    sql = (f"SELECT id, art, nummer, datum, netto, ust, brutto, zahlbetrag, geaendert, angelegt FROM belege WHERE status IN ('fest','storniert') "
            f"AND art IN ({','.join('?' * len(rechnungsarten))}) ORDER BY id")
     for row in con.execute(sql, rechnungsarten).fetchall():
         b = dict(row)
@@ -4189,7 +4245,10 @@ def belege_pruefen(con):
         a = pdf.get(b["id"])
         if (p and p.get("inhalt")) or a:   # den Beleginhalt nur laden, wenn er wirklich verglichen wird
             b["daten"] = jl(con.execute("SELECT daten FROM belege WHERE id=?", (b["id"],)).fetchone()[0], {})
-        if not p:
+        if not p and eb and (b.get("geaendert") or b.get("angelegt") or "") >= eb["seit"]:
+            # Im Echtbetrieb schreibt jede Festschreibung einen Protokolleintrag. Fehlt er, ist der Datensatz am Programm vorbei entstanden.
+            fehler.append(f"{b['artname']} {b['nummer']}: festgeschrieben, aber ohne Eintrag im Protokoll")
+        elif not p:
             ohne += 1   # aus der Zeit vor dem Protokoll bzw. aus einer Datenübernahme
         else:
             geprueft += 1
@@ -4199,11 +4258,15 @@ def belege_pruefen(con):
             for k, name in (("netto", "Netto"), ("ust", "USt"), ("brutto", "Brutto")):
                 if abs(fl(p.get(k)) - fl(b[k])) > 0.005:
                     fehler.append(f"{b['artname']} {b['nummer']}: {name} geändert (Protokoll {de(fl(p.get(k)))} €, Datenbank {de(fl(b[k]))} €)")
-            if p.get("inhalt"):
+            # Nach Ablauf der Frist anonymisierte Rechnung: Namen sind aus den Texten entfernt, das Archiv-PDF ist gelöscht –
+            # Nummer, Datum und Beträge werden weiter geprüft, Inhalt und Datei nicht mehr.
+            anon = (b.get("daten", {}).get("kunde") or {}).get("kurzname") == "anonymisiert"
+            if p.get("inhalt") and not anon:
                 mit_abdruck += 1
                 if p["inhalt"] != beleg_fingerabdruck(b):
                     fehler.append(f"{b['artname']} {b['nummer']}: Inhalt (Positionen oder Beträge) weicht vom festgeschriebenen Stand ab")
-        if a and (b["daten"].get("kunde") or {}).get("kurzname") != "anonymisiert":
+            anonym += 1 if anon else 0
+        if a and (b["daten"].get("kunde") or {}).get("kurzname") != "anonymisiert" and "belege/" + (a.get("datei") or "") not in entfernt:
             pfad = os.path.join(DATEN, "belege", a.get("datei") or "")
             if not os.path.isfile(pfad):
                 fehler.append(f"{b['artname']} {b['nummer']}: Archiv-PDF fehlt ({a.get('datei')})")
@@ -4213,9 +4276,6 @@ def belege_pruefen(con):
                 pdf_ok += 1
     # Eingangsrechnungen: abgelegte Originaldatei gegen den Fingerabdruck aus dem Protokoll
     ein_ok = 0
-    entfernt = set()   # beim Anonymisieren eines Lieferanten nach Fristablauf gelöschte Dateien
-    for r in con.execute("SELECT daten FROM protokoll WHERE art='anonymisiert'"):
-        entfernt.update(jl(r["daten"], {}).get("dateien") or [])
     for r in con.execute("SELECT daten FROM protokoll WHERE art='eingangsrechnung' ORDER BY nr"):
         d = jl(r["daten"], {})
         if not d.get("datei") or not d.get("sha256") or d["datei"] in entfernt:
@@ -4228,13 +4288,26 @@ def belege_pruefen(con):
             fehler.append(f"{was}: Originaldatei wurde nach dem Buchen verändert ({d['datei']})")
         else:
             ein_ok += 1
+    # Versandte Fassungen von Angeboten, Auftragsbestätigungen …: Datei vorhanden und unverändert?
+    versandt_ok = 0
+    for r in con.execute("SELECT daten FROM protokoll WHERE art='beleg_versandt' ORDER BY nr"):
+        d = jl(r["daten"], {})
+        if not d.get("datei") or not d.get("sha256") or "belege/" + d["datei"] in entfernt:
+            continue
+        pfad = os.path.join(DATEN, "belege", d["datei"])
+        if not os.path.isfile(pfad):
+            fehler.append(f"Versandte Fassung von {d.get('nummer') or 'Beleg ' + str(d.get('id'))} fehlt ({d['datei']})")
+        elif datei_sha256(pfad) != d["sha256"]:
+            fehler.append(f"Versandte Fassung von {d.get('nummer') or 'Beleg ' + str(d.get('id'))} wurde nachträglich verändert ({d['datei']})")
+        else:
+            versandt_ok += 1
     for jahr in sorted({r[0] for r in con.execute("SELECT substr(datum,1,4) FROM belege WHERE status IN ('fest','storniert') AND lfd>0")}):
         lfd = sorted(r[0] for r in con.execute("SELECT lfd FROM belege WHERE status IN ('fest','storniert') AND lfd>0 AND substr(datum,1,4)=?", (jahr,)))
         doppelt = sorted({x for x in lfd if lfd.count(x) > 1})
         if doppelt:
             fehler.append(f"{jahr}: Rechnungsnummer doppelt vergeben (laufende Nr. {', '.join(map(str, doppelt[:5]))})")
     erg = {"ok": not fehler, "fehler": fehler[:30], "geprueft": geprueft, "mit_fingerabdruck": mit_abdruck, "pdf_geprueft": pdf_ok,
-           "eingang_geprueft": ein_ok, "ohne_protokoll": ohne, "zeit": jetzt()}
+           "eingang_geprueft": ein_ok, "versandt_geprueft": versandt_ok, "ohne_protokoll": ohne, "anonymisiert": anonym, "zeit": jetzt()}
     BELEG_PRUEFUNG.update(ergebnis=erg, zeit=erg["zeit"], text="" if erg["ok"] else
                           "Die Belegprüfung hat Abweichungen bei festgeschriebenen Rechnungen oder abgelegten Eingangsrechnungen gefunden. Details unter Einstellungen › Service › Protokoll.")
     return erg
@@ -4283,6 +4356,7 @@ def beleg_festschreiben(con, bid):
     roh = jl(con.execute("SELECT druck FROM belege WHERE id=?", (bid,)).fetchone()["druck"], {}) or {}
     roh["unten_buendig"] = bool(b["druck"].get("unten_buendig"))
     roh["uebertrag"] = bool(b["druck"].get("uebertrag"))
+    roh["rundung"] = bool(b["druck"].get("rundung", True))
     con.execute("UPDATE belege SET druck=? WHERE id=?", (json.dumps(roh, ensure_ascii=False), bid))
     con.execute("UPDATE belege SET nummer=?, lfd=?, status='fest', datum=?, faellig=?, geaendert=? WHERE id=?",
                 (nummer, lfd, datum, faellig, jetzt(), bid))
@@ -4346,7 +4420,7 @@ def beleg_stornieren(con, bid):
         con.execute("UPDATE offene_posten SET offen=0 WHERE id=?", (op["id"],))
     con.execute("INSERT INTO offene_posten (nummer, art, kunde_id, auftrag_id, datum, betrag, faellig, offen, mahnstufe, beleg_id) "
                 "VALUES (?,?,?,?,?,?,?,?,0,?)", (st["nummer"], st["artname"], st["kunde_id"], st["auftrag_id"], st["datum"],
-                                               -round(gezahlt, 2), st["datum"], -round(gezahlt, 2), sid))
+                                               -kfm(gezahlt), st["datum"], -kfm(gezahlt), sid))
     prot(con, "storno", b["nummer"], f"{b['artname']} {b['nummer']} storniert durch Stornorechnung {st['nummer']}",
          {"original": beleg_kurz(b), "storno": {**beleg_kurz(st), "inhalt": beleg_fingerabdruck(st)}})
     return st
@@ -4375,7 +4449,38 @@ def browser_finden():
 HTTPS = {"aktiv": False, "modus": "aus", "port": 0, "stempel_port": 0, "meldung": ""}
 
 
-class HttpsServer(ThreadingHTTPServer):
+# Obergrenze gleichzeitiger Verbindungen aus dem Netz. Jede Verbindung belegt einen Arbeitsfaden; ohne Grenze könnte ein einzelnes
+# Gerät im WLAN mit vielen offenen, stummen Verbindungen den PC ausbremsen. Verbindungen vom Büro-PC selbst zählen nicht mit,
+# damit das Programm dort auch dann bedienbar bleibt.
+MAX_VERBINDUNGEN_NETZ = 120
+VERBINDUNGEN_NETZ = threading.BoundedSemaphore(MAX_VERBINDUNGEN_NETZ)
+
+
+class Begrenzt:
+    request_queue_size = 64   # Warteschlange für gleichzeitig eintreffende Verbindungen (Vorgabe von Python: 5)
+
+    def process_request(self, request, client_address):
+        zaehlt = client_address[0] not in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+        if zaehlt and not VERBINDUNGEN_NETZ.acquire(blocking=False):
+            self.shutdown_request(request)   # voll: sofort trennen statt warten lassen
+            return
+        try:
+            super().process_request(request, (client_address, zaehlt))
+        except Exception:
+            if zaehlt:
+                VERBINDUNGEN_NETZ.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        client_address, zaehlt = client_address
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            if zaehlt:
+                VERBINDUNGEN_NETZ.release()
+
+
+class HttpsServer(Begrenzt, ThreadingHTTPServer):
     """Zweiter Zugang über https (eigenes Zertifikat, siehe zert.py). Der TLS-Handshake läuft im Thread der jeweiligen
     Verbindung, damit ein hängendes Gerät nicht alle anderen aufhält."""
     allow_reuse_address = os.name != "nt"
@@ -4502,7 +4607,7 @@ wird einmalig das Zertifikat des Büro-PCs als vertrauenswürdig eingerichtet. E
 <p class="h">Wird der Büro-PC neu aufgesetzt, entsteht ein neues Zertifikat; es ist dann auf den Geräten erneut einzurichten und das alte kann entfernt werden.</p></html>"""
 
 
-class BueroServer(ThreadingHTTPServer):
+class BueroServer(Begrenzt, ThreadingHTTPServer):
     """Unter Windows darf SO_REUSEADDR denselben Port mehrfach belegen – dann laufen mehrere Programme
     nebeneinander und die Anfragen landen mal hier, mal dort. Daher exklusiv binden."""
     allow_reuse_address = os.name != "nt"
@@ -4852,10 +4957,10 @@ def uebertrag_werte(b):
     s = d.get("summen", {})
     faktor = 1 + (s.get("ust_satz", 19) / 100) if d.get("brutto_anzeige") else 1
     pos = [z for z in d.get("zeilen", []) if z.get("typ") == "pos"]
-    netto = [round(fl(z.get("gp")), 2) if z.get("zaehlt", True) and not z.get("info") and z.get("zeige", {}).get("gp", 1) else 0.0 for z in pos]
+    netto = [kfm(fl(z.get("gp"))) if z.get("zaehlt", True) and not z.get("info") and z.get("zeige", {}).get("gp", 1) else 0.0 for z in pos]
     if len(pos) < 2 or abs(sum(netto) - fl(s.get("netto_positionen", s.get("netto", 0)))) > 0.02:
         return None   # nie einen Übertrag drucken, der nicht zur Summe des Belegs passt
-    return [round(v * faktor, 2) for v in netto]
+    return [kfm(v * faktor) for v in netto]
 
 
 def uebertrag_zeilen(werte, m):
@@ -4866,7 +4971,7 @@ def uebertrag_zeilen(werte, m):
     erste, letzte = min(seite_von), m["JRTABENDE"][0]
     zeilen = []
     for p in range(erste, letzte):
-        summe = round(sum(v for v, sv in zip(werte, seite_von) if sv <= p), 2)
+        summe = kfm(sum(v for v, sv in zip(werte, seite_von) if sv <= p))
         if not any(v and sv <= p for v, sv in zip(werte, seite_von)):
             continue   # bis hierher nur Textpositionen: nichts zu übertragen
         zeilen += [(p, "unten", de(summe)), (p + 1, "oben", de(summe))]
@@ -4902,6 +5007,71 @@ def druck_plan(bid, b, e):
 
 def druck_zusatz(plan, mit_abstand=True):
     return (f"&abstand={plan['abstand']}" if mit_abstand and plan["abstand"] else "") + (f"&ue={plan['ue']}" if plan["ue"] else "")
+
+
+def beleg_archiv_pfad(b, bid):
+    """Archiv-PDF eines festgeschriebenen Belegs, wenn die Datei vorhanden ist – sonst None."""
+    if b["status"] not in ("fest", "storniert"):
+        return None
+    archiv = os.path.join(DATEN, "belege", b["datum"][:4] if b["datum"] else "ohne-datum")
+    for name in (beleg_dateiname(b, bid), beleg_dateiname_alt(b, bid)):
+        pfad = os.path.join(archiv, name)
+        if os.path.isfile(pfad) and os.path.getsize(pfad) >= 500:
+            return pfad
+    return None
+
+
+# Druckansicht: Gedruckt wird immer das PDF des Programms (dieselbe Datei wie in „PDF ansehen“, im Archiv und im Versand) –
+# so kann der Ausdruck nicht vom abgelegten Beleg abweichen. Die Seite zeigt das PDF und öffnet das Druckfenster des Browsers.
+# Lässt sich kein PDF erzeugen, wird ersatzweise die Bildschirmfassung gedruckt (ohne Seitenzahlen).
+DRUCKANSICHT_JS = """(function () {
+  var f = document.getElementById("pdf"), st = document.getElementById("st"), kn = document.getElementById("dr"), ersatz = document.body.getAttribute("data-ersatz"), erster = true;
+  function drucken() {
+    try { f.contentWindow.focus(); f.contentWindow.print(); }
+    catch (e) { st.textContent = "Bitte das Druckersymbol in der Leiste des PDFs benutzen."; }
+  }
+  f.addEventListener("load", function () {
+    var typ = "application/pdf";
+    try { typ = f.contentDocument.contentType || typ; } catch (e) { /* PDF-Anzeige des Browsers: kein Zugriff nötig */ }
+    if (typ.indexOf("pdf") < 0) {
+      if (ersatz) location.replace(ersatz); else st.textContent = "Das PDF konnte nicht erzeugt werden.";
+      return;
+    }
+    st.textContent = ""; kn.disabled = false;
+    if (erster) { erster = false; setTimeout(drucken, 700); }
+  });
+  kn.addEventListener("click", drucken);
+})();"""
+
+
+def druckansicht_html(titel, pdf_url, ersatz_url):
+    return f"""<!doctype html><html lang="de"><head><meta charset="utf-8"><title>{h(titel)}</title><style>
+html, body {{ margin: 0; height: 100%; background: #525659; }}
+.leiste {{ position: fixed; top: 0; left: 0; right: 0; height: 40px; box-sizing: border-box; background: #3b3530; color: #fff; padding: 0 14px; display: flex; gap: 12px; align-items: center; font: 14px system-ui, "Segoe UI", Arial, sans-serif; }}
+.leiste button {{ font: inherit; padding: 4px 14px; border-radius: 5px; border: 0; background: #b8834f; color: #fff; cursor: pointer; }}
+.leiste button:disabled {{ opacity: .5; cursor: default; }} .leiste span {{ color: #ddd; }}
+iframe {{ position: fixed; top: 40px; left: 0; width: 100%; height: calc(100% - 40px); border: 0; background: #525659; }}
+</style></head><body data-ersatz="{h(ersatz_url)}">
+<div class="leiste"><b>{h(titel)}</b><span id="st">Das PDF wird erzeugt …</span><span style="flex:1"></span><button id="dr" disabled>Drucken</button></div>
+<iframe id="pdf" src="{h(pdf_url)}" title="{h(titel)}"></iframe>
+{kern.skript(DRUCKANSICHT_JS)}
+</body></html>"""
+
+
+ERSATZ_STIL = ('<style>.ersatzhinweis{position:fixed;top:0;left:0;right:0;z-index:9;background:#7a2e1f;color:#fff;'
+               'font:14px system-ui,"Segoe UI",Arial,sans-serif;padding:8px 14px;text-align:center}'
+               '@media print{.ersatzhinweis{display:none!important}}</style>')
+
+
+def ersatz_hinweis(html_text, zusatz=""):
+    """Ersatzdruck (das PDF ließ sich nicht erzeugen): Hinweis über der Bildschirmfassung, der nicht mitgedruckt wird."""
+    i = html_text.find("<body")
+    j = html_text.find(">", i) + 1 if i >= 0 else 0
+    if not j:
+        return html_text
+    text = ("Das PDF ließ sich gerade nicht erzeugen. Gedruckt wird ersatzweise diese Bildschirmfassung" + zusatz
+            + ". Den Grund nennt der Hinweis „PDF-Vorschau nicht möglich“ in der Vorschau eines Belegs.")
+    return html_text[:j] + f'<div class="ersatzhinweis">{h(text)}</div>' + ERSATZ_STIL + html_text[j:]
 
 
 def pdf_rendern(bid, ziel):
@@ -5235,18 +5405,20 @@ def mail_senden(con, bid, d):
     con.commit()  # Festschreibung bleibt erhalten, auch wenn der Versand scheitert
     try:
         r = mailversand.senden(cfg, d.get("an"), d.get("cc"), d.get("betreff") or b["betreff"], d.get("text") or "", anh,
-                               kopie_an_mich=bool(d.get("kopie_an_mich")))
+                               kopie_an_mich=bool(d.get("kopie_an_mich")), ablage=MAIL_ABLAGE)
     except mailversand.MailFehler as f:
         raise ApiFehler(str(f))
     jetzt_txt = datetime.now().strftime("%d.%m.%Y %H:%M")
     con.execute("UPDATE belege SET versendet=?, versendet_an=? WHERE id=?", (datetime.now().isoformat(timespec="minutes"), d.get("an"), bid))
+    if "beleg" in gewaehlt and anh:
+        versand_festhalten(con, b, bid, anh[0][1], d.get("an"), "E-Mail")
     if b["art"] in ("angebot", "kv"):
         status_fortschreiben(con, beleg_laden(con, bid))
     con.execute("INSERT INTO notizen (kunde_id, auftrag_id, text, angelegt) VALUES (?,?,?,?)",
                 (b["kunde_id"], b["auftrag_id"], f"E-Mail gesendet an {d.get('an')}: {d.get('betreff')} "
                  f"({', '.join(x[0] for x in anh) or 'ohne Anhang'})", jetzt()))
     korrespondenz_eintragen(con, "mail_aus", kunde_id=b["kunde_id"], auftrag_id=b["auftrag_id"], betreff=d.get("betreff") or "",
-                            text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"), anhaenge=[x[0] for x in anh])
+                            text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"), datei=mail_datei(r), anhaenge=[x[0] for x in anh])
     r["beleg"] = beleg_laden(con, bid)
     r["zeit"] = jetzt_txt
     return r
@@ -5301,13 +5473,32 @@ def projekt_zeitbericht_html(con, pid, q, pdf=False):
             f'{inhalt}<div class="fuss">{h(e.get("firma_inhaber") or e.get("firma") or "")} · {datetime.now():%d.%m.%Y · %H:%M}</div></div></body></html>')
 
 
+PAPIERE_MIT_PREISEN = ("kosten", "sollist", "lohnmaterial")   # Auswertungen, die nur aus Beträgen bestehen
+
+
+def ohne_preise(q=None):
+    """True, wenn in dieser Anfrage keine Preise gezeigt werden dürfen: der Benutzer hat kein Preisrecht – oder das PDF wird
+    intern im Auftrag eines solchen Benutzers erzeugt (Kennzeichen ohnepreise=1 in der Adresse, siehe preis_kennzeichen)."""
+    r = benutzer.aktuelle_rechte()
+    return bool((r is not None and not r.get("preise", True)) or (q or {}).get("ohnepreise") == "1")
+
+
+def preis_kennzeichen(q=None):
+    """Zusatz für die interne Adresse der PDF-Erzeugung: Der Browser im Hintergrund ruft ohne Benutzer ab und sähe sonst alles."""
+    return "&ohnepreise=1" if ohne_preise(q) else ""
+
+
 def papier_html(con, aid, art, q, pdf=False):
     """Werkstattpapiere und Auswertungen (siehe werkstatt.py)."""
+    if ohne_preise(q) and art in PAPIERE_MIT_PREISEN:
+        raise ApiFehler("Dafür fehlt die Berechtigung (Auswertung mit Preisen).", 403)
     a = auftrag_laden(con, aid)
     k = auftrag_kunde(con, aid)
     e = einstellungen(con)
     erg = auftrag_rechnen(con, aid)
     opts = {x: q.get(x, "1") != "0" for x in ("anschrift", "telefon", "bemerkungen", "bilder", "preise")}
+    if ohne_preise(q):
+        opts["preise"] = False
     opts["erklaerung"] = q.get("erklaerung") == "1"
     opts["handfelder"] = q.get("handfelder") == "1"
     opts["ausgabe"] = q.get("ausgabe", "titel")
@@ -5374,8 +5565,13 @@ def papier_pdf(con, aid, art, q):
         ziel_ordner = os.path.join(DATEN, "tmp")
         os.makedirs(ziel_ordner, exist_ok=True)
     ziel = os.path.join(ziel_ordner, name)
-    query = "&".join(f"{k}={quote(str(v))}" for k, v in q.items() if k != "art")
-    pdf_url_rendern(f"http://127.0.0.1:{PORT}/papier/{aid}/{art}?pdf=1&{query}", ziel)
+    r0 = benutzer.aktuelle_rechte()
+    if r0 and not r0["inhaber"] and r0["auftrag_reiter"] == "werkstatt" and art not in werkstatt.WERKSTATT and art != "montageauftrag":
+        raise ApiFehler("Dafür fehlt die Berechtigung (nur Werkstatt).", 403)
+    if ohne_preise() and art in PAPIERE_MIT_PREISEN:
+        raise ApiFehler("Dafür fehlt die Berechtigung (Auswertung mit Preisen).", 403)
+    query = "&".join(f"{k}={quote(str(v))}" for k, v in q.items() if k not in ("art", "ohnepreise", "intern"))
+    pdf_url_rendern(f"http://127.0.0.1:{PORT}/papier/{aid}/{art}?pdf=1&{query}{preis_kennzeichen()}", ziel)
     erg = {"pfad": ziel, "hinweis": None if ordner else hinweis}
     if ordner:
         erg["projekt_rel"] = os.path.relpath(ziel, ordner).replace(os.sep, "/")
@@ -5600,6 +5796,7 @@ def beleg_pdf(con, bid):
 # ---------- Formatierter Text (fett, kursiv, unterstrichen, Größe, Aufzählung) ----------
 from html.parser import HTMLParser
 from html import escape as _esc
+from html import unescape as _unescape
 
 RT_TAGS = {"b", "strong", "i", "em", "u", "br", "p", "div", "ul", "ol", "li", "span"}
 RT_MUSTER = re.compile(r"<(b|strong|i|em|u|br|p|div|ul|ol|li|span)\b[^>]*>|&(lt|gt|amp|nbsp|quot);", re.I)
@@ -5798,7 +5995,7 @@ def zahlungsplan_text(e, dr, s):
     rest = int(fl(dr.get("plan_rest") if dr.get("plan_rest") not in (None, "") else e.get("zahlungsplan_rest") or 10))
     w_von, wochen = plan_wochen(dr.get("plan_wochen")) or (0.0, 0.0)
     wz = lambda w: de(w, 0 if w == int(w) else 1)   # noqa: E731
-    werte = {"anzahlung": de(pz, 0 if pz == int(pz) else 2), "anzahlung_betrag": de(round(fl(s.get("brutto")) * pz / 100, 2)),
+    werte = {"anzahlung": de(pz, 0 if pz == int(pz) else 2), "anzahlung_betrag": de(kfm(fl(s.get("brutto")) * pz / 100)),
              "rest_tage": str(rest), "lieferwochen": wz(wochen) if w_von == wochen else f"{wz(w_von)} bis {wz(wochen)}"}
 
     def fuellen(t):
@@ -5871,14 +6068,14 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False, ue=None):
             gruppen_start.append(titel_vorher if titel_vorher is not None else len(rows))
             titel_vorher = None
             pos_nr += 1
-            rows.append(f'<tr class="pos{" textpos" if ist_text else ""}"><td>{UB_MARKE.format(f"JRP{pos_nr}") if marken else ""}{h(z["posnr"]) if zg.get("posnr") else ""}{'<div class="alt">ALT</div>' if z.get("alternativ") else ""}</td><td class="r nw">{menge}</td>'
+            rows.append(f'<tr class="pos{" textpos" if ist_text else ""}{" kurz" if text_zeilen(z["text"]) <= KURZ_ZEILEN else ""}"><td>{UB_MARKE.format(f"JRP{pos_nr}") if marken else ""}{h(z["posnr"]) if zg.get("posnr") else ""}{'<div class="alt">ALT</div>' if z.get("alternativ") else ""}</td><td class="r nw">{menge}</td>'
                         f'<td>{text_html(z["text"], not ist_text)}{hinweis}</td><td class="r nw">{ep}</td><td class="r nw">{gp}</td></tr>')
             pos_bilder = bilder_html(z.get("bilder")) if dr.get("bilder", True) else ""
             if z.get("unter") and z.get("unterdruck") != "verdeckt":
                 for u in z["unter"]:
                     um = f'{de(u["menge"], 2 if u["menge"] % 1 else 0)} {h(u["einheit"])}' if z["unterdruck"] != "text" else ""
                     mit_preis = z["unterdruck"] == "beleg" and preise
-                    rows.append(f'<tr class="unter"><td>{h(z["posnr"])}.{h(u["posnr"])}</td><td class="r nw">{um}</td><td>{text_html(u["text"])}</td>'
+                    rows.append(f'<tr class="unter{" kurz" if text_zeilen(u["text"]) <= KURZ_ZEILEN else ""}"><td>{h(z["posnr"])}.{h(u["posnr"])}</td><td class="r nw">{um}</td><td>{text_html(u["text"])}</td>'
                                 f'<td class="r nw">{"<small>" + betrag(u["ep"]) + "</small>" if mit_preis else ""}</td>'
                                 f'<td class="r nw">{"<small>(" + betrag(u["gp"]) + ")</small>" if mit_preis else ""}</td></tr>')
                     rows.append(bilder_html(u.get("bilder")))
@@ -5896,6 +6093,16 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False, ue=None):
     elif preise and dr.get("summen") != "nein":
         sz = []
         if brutto:
+            # Die Positionen zeigen gerundete Bruttobeträge, gerechnet wird aus der Nettosumme: Wer die Positionen addiert,
+            # kommt um einzelne Cent auf einen anderen Betrag. Diese Differenz steht dann als eigene Zeile über der Summe.
+            gezaehlt = [z for z in d.get("zeilen", []) if z.get("typ") == "pos" and z.get("zaehlt", True) and not z.get("info") and z.get("zeige", {}).get("gp", 1)]
+            netto_pos = fl(s.get("netto_positionen", s.get("netto", 0)))
+            if dr.get("rundung") and gezaehlt and abs(sum(kfm(fl(z.get("gp"))) for z in gezaehlt) - netto_pos) < 0.005:
+                einzeln = kfm(sum(kfm(fl(z.get("gp")) * faktor) for z in gezaehlt))
+                diff = kfm((kfm(netto_pos * faktor) if s.get("rabatt") else fl(s["brutto"])) - einzeln)
+                if abs(diff) >= 0.005:
+                    sz.append(("Summe der Einzelbeträge", f"{de(einzeln)} €"))
+                    sz.append(("Rundungsdifferenz (Umsatzsteuer aus der Nettosumme)", f"{de(diff)} €"))
             if s.get("rabatt"):
                 sz.append(("Summe Positionen brutto", de(s["netto_positionen"] * faktor)))
                 sz.append((f"abzüglich {de(s['rabatt_pz'], 2 if s['rabatt_pz'] % 1 else 0)} % Rabatt", "-" + de(s["rabatt"] * faktor)))
@@ -6014,7 +6221,7 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False, ue=None):
 {f'<div class="einl rt">{rich_html(text_einsetzen(b["einleitung"], beleg_platzhalter(b)))}</div>' if dr.get("anrede", True) else ""}
 {tabelle_oben}
 {ende_block_start}{UB_MARKE.format("JRTABENDE") if marken else ''}
-{'<style>table.pos tr.pos, table.pos tr.unter { page-break-inside: auto !important; break-inside: auto !important; } table.pos td { padding-top: 1.4mm; padding-bottom: 1.4mm; }</style>' if b.get("kompakt") else ''}
+{'<style>table.pos tr.pos, table.pos tr.unter { page-break-inside: auto !important; break-inside: auto !important; } table.pos tr.kurz { page-break-inside: avoid !important; break-inside: avoid !important; } table.pos td { padding-top: 1.4mm; padding-bottom: 1.4mm; orphans: 3; widows: 3; }</style>' if b.get("kompakt") else ''}
 {f'<div class="ub-abstand" style="height:{abstand:.2f}mm"></div>' if abstand > 0 else ''}{UB_MARKE.format("JRUBANFANG") if marken else ''}
 {zusammen_html}
 {summe_html}
@@ -6035,6 +6242,18 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False, ue=None):
         agb_seiten = []   # im PDF wird das Original-AGB-PDF angehängt (klein und gestochen scharf)
     agb_html = "".join(f'<div class="agb"><img class="voll" src="{u}"></div>' for u in agb_seiten)
     return briefbogen_html(e, fi, beleg_titel(b), anschrift_html, info_html, inhalt, als_pdf, entwurf=entwurf, agb_html=agb_html, ue=ue)
+
+
+# „Platz optimieren“ darf lange Positionen am Seitenende teilen. Kurze Positionen (bis KURZ_ZEILEN Zeilen) bleiben trotzdem
+# zusammen – zwei Zeilen unten und zwei auf der Folgeseite sparen keinen Platz, lesen sich aber schlecht.
+KURZ_ZEILEN = 6
+
+
+def text_zeilen(text, breite=62):
+    """Geschätzte Zeilenzahl eines Positionstextes im Druck (Zeilenumbrüche + Umbruch langer Zeilen)."""
+    t = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</li>|</h\d>", "\n", str(text or ""))
+    t = _unescape(re.sub(r"<[^>]+>", "", t))
+    return sum(max(1, -(-len(z.strip()) // breite)) for z in t.strip().split("\n")) if t.strip() else 1
 
 
 # Bildschirmansicht eines Belegs auf dem Briefbogen: Ist der Inhalt länger als eine Seite, würde die Fußzeile des Briefbogens mitten
@@ -6074,10 +6293,12 @@ def briefbogen_html(e, fi, titel, anschrift_html, info_html, inhalt, als_pdf, en
     if brief:
         L = {**STANDARD_EINSTELLUNGEN["brief_layout"], **(e.get("brief_layout") or {})}
         erste, folge = f"/api/vorlage/{brief[0]}", f"/api/vorlage/{brief[1] if len(brief) > 1 else brief[0]}"
+        # Alles, was nur die Ansicht am Bildschirm betrifft (Blatt auf grauem Grund), steht in „@media screen“: Beim Drucken aus
+        # dem Browser gelten dann dieselben Regeln wie im PDF – sonst verschöbe sich der Inhalt gegen den Briefbogen.
         bildschirm = "" if als_pdf else """
-html{background:#888} body{width:210mm;margin:10mm auto;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.3);position:relative}
-.bg-folge{display:none} .agb{margin-top:10mm;box-shadow:0 2px 12px rgba(0,0,0,.3)}
-@media screen { html.lang .bg-erste{height:%smm;overflow:hidden} html.lang .bg-erste img{height:297mm}
+@media screen { html{background:#888} body{width:210mm;margin:10mm auto;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.3);position:relative}
+  .bg-folge{display:none} .agb{margin-top:10mm;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+  html.lang .bg-erste{height:%smm;overflow:hidden} html.lang .bg-erste img{height:297mm}
   .ohne-umbruch{display:none} html.lang .ohne-umbruch{display:block;position:absolute;top:-8mm;left:0;right:0;margin:0;text-align:center;font:9pt/1.3 "Segoe UI",Arial,sans-serif;color:#f2f2f2} }
 @media print { .ohne-umbruch{display:none} }""" % max(20, L["inhalt_start"])
         return f"""{titel_html}
@@ -6117,7 +6338,7 @@ table.seite > tbody > tr > td {{ padding: 0 {L["rechts"]}mm 0 {L["links"]}mm; }}
 @page agb {{ margin: 0; }}
 body {{ font: 10pt/1.38 "Segoe UI", Arial, sans-serif; color: #222; margin: 0; }}
 {BELEG_CSS}
-{'' if als_pdf else 'html{background:#888} body{background:#fff;width:210mm;margin:10mm auto;padding:12mm 18mm 10mm 24mm;box-shadow:0 2px 12px rgba(0,0,0,.3)} .fuss{position:static!important;margin-top:20mm}'}
+{'' if als_pdf else '@media screen{html{background:#888} body{background:#fff;width:210mm;margin:10mm auto;padding:12mm 18mm 10mm 24mm;box-shadow:0 2px 12px rgba(0,0,0,.3)} .fuss{position:static!important;margin-top:20mm}}'}
 table.seite {{ width: 100%; border-collapse: collapse; }}
 table.seite > thead td, table.seite > tfoot td {{ padding: 0; }}
 .fussplatz {{ height: {22 + uh}mm; }} .ue-platz {{ height: {uh}mm; }}
@@ -6300,7 +6521,7 @@ def mahnung_erstellen(con, opid, d):
          betr["zinsen"], betr["zinstage"], betr["zinssatz"], betr["pauschale"], betr["gesamt"], kunde_block(k),
          d.get("betreff") or sc["name"], d.get("text") or "", d.get("schluss") or "", json.dumps(daten, ensure_ascii=False), jetzt()))
     mid = cur.lastrowid
-    neue_kosten = round(betr["gebuehr"] + betr["zinsen"] + betr["pauschale"], 2)
+    neue_kosten = kfm(betr["gebuehr"] + betr["zinsen"] + betr["pauschale"])
     con.execute("UPDATE offene_posten SET mahnstufe=?, mahnkosten=ROUND(IFNULL(mahnkosten,0)+?,2) WHERE id=?", (stufe + 1, neue_kosten, opid))
     con.execute("INSERT INTO notizen (kunde_id, auftrag_id, text, angelegt) VALUES (?,?,?,?)",
                 (op["kunde_id"], op["auftrag_id"], f"{sc['name']} {nummer} zu Rechnung {op['nummer']} erstellt: "
@@ -6414,7 +6635,7 @@ def mahnung_loeschen(con, mid):
     juengste = con.execute("SELECT MAX(id) FROM mahnungen WHERE op_id=?", (m["op_id"],)).fetchone()[0]
     if juengste != mid:
         raise ApiFehler("Es kann nur die jeweils letzte Mahnung eines Postens gelöscht werden.")
-    kosten = round((m["gebuehr"] or 0) + (m["zinsen"] or 0) + (m["pauschale"] or 0), 2)
+    kosten = kfm((m["gebuehr"] or 0) + (m["zinsen"] or 0) + (m["pauschale"] or 0))
     con.execute("DELETE FROM mahnungen WHERE id=?", (mid,))
     vorige = con.execute("SELECT stufe FROM mahnungen WHERE op_id=? ORDER BY id DESC LIMIT 1", (m["op_id"],)).fetchone()
     con.execute("UPDATE offene_posten SET mahnstufe=?, mahnkosten=MAX(0, ROUND(IFNULL(mahnkosten,0)-?,2)) WHERE id=?",
@@ -6477,12 +6698,12 @@ def mahnung_mail_senden(con, mid, d):
     con.commit()
     try:
         r = mailversand.senden(cfg, d.get("an"), d.get("cc"), d.get("betreff") or m["betreff"], d.get("text") or "", anh,
-                               kopie_an_mich=bool(d.get("kopie_an_mich")))
+                               kopie_an_mich=bool(d.get("kopie_an_mich")), ablage=MAIL_ABLAGE)
     except mailversand.MailFehler as f:
         raise ApiFehler(str(f))
     con.execute("UPDATE mahnungen SET versendet=?, versendet_an=? WHERE id=?", (datetime.now().isoformat(timespec="minutes"), d.get("an"), mid))
     korrespondenz_eintragen(con, "mail_aus", kunde_id=m["kunde_id"], auftrag_id=m["auftrag_id"], betreff=d.get("betreff") or "",
-                            text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"), anhaenge=[x[0] for x in anh])
+                            text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"), datei=mail_datei(r), anhaenge=[x[0] for x in anh])
     con.execute("INSERT INTO notizen (kunde_id, auftrag_id, text, angelegt) VALUES (?,?,?,?)",
                 (m["kunde_id"], m["auftrag_id"], f"E-Mail gesendet an {d.get('an')}: {d.get('betreff')} "
                  f"({', '.join(x[0] for x in anh) or 'ohne Anhang'})", jetzt()))
@@ -6520,17 +6741,17 @@ def eingang_rechnen(erg):
     tol = lambda n: 0.02 + 0.01 * n
     zeilen = [z for z in erg.get("zeilen") or [] if isinstance(z.get("netto"), (int, float))]
     if erg.get("format") and zeilen and netto is not None:
-        summe = round(sum(z["netto"] for z in zeilen), 2)
+        summe = kfm(sum(z["netto"] for z in zeilen))
         if abs(summe - netto) > tol(len(zeilen)):
             w.append(f"Die Zeilen ergeben netto {de(summe)} €, die Rechnung nennt {de(netto)} €.")
     if None not in (netto, ust, brutto) and abs(netto + ust - brutto) > 0.02:
-        w.append(f"Netto {de(netto)} € + Umsatzsteuer {de(ust)} € ergibt {de(round(netto + ust, 2))} €, die Rechnung nennt brutto {de(brutto)} €.")
+        w.append(f"Netto {de(netto)} € + Umsatzsteuer {de(ust)} € ergibt {de(kfm(netto + ust))} €, die Rechnung nennt brutto {de(brutto)} €.")
     satz = zahlw("ust_satz")
     einheitlich = bool(zeilen) and all(z.get("ust_satz") == satz for z in erg.get("zeilen") or [])   # nicht bei gemischten Steuersätzen
     if None not in (netto, ust) and satz and einheitlich and (r.get("waehrung") or "EUR") == "EUR" and abs(netto * satz / 100 - ust) > max(0.05, 0.01 * len(zeilen)):
-        w.append(f"{de(satz, 0)} % Umsatzsteuer auf {de(netto)} € wären {de(round(netto * satz / 100, 2))} €, die Rechnung nennt {de(ust)} €.")
+        w.append(f"{de(satz, 0)} % Umsatzsteuer auf {de(netto)} € wären {de(kfm(netto * satz / 100))} €, die Rechnung nennt {de(ust)} €.")
     if None not in (brutto, zb) and abs(brutto - (voraus or 0) - zb) > 0.02:
-        w.append(f"Brutto {de(brutto)} €" + (f" abzüglich Anzahlung {de(voraus)} €" if voraus else "") + f" ergibt {de(round(brutto - (voraus or 0), 2))} €, als Zahlbetrag steht {de(zb)} € in der Rechnung.")
+        w.append(f"Brutto {de(brutto)} €" + (f" abzüglich Anzahlung {de(voraus)} €" if voraus else "") + f" ergibt {de(kfm(brutto - (voraus or 0)))} €, als Zahlbetrag steht {de(zb)} € in der Rechnung.")
     return w
 
 
@@ -6695,7 +6916,7 @@ def eingang_buchen(con, d):
             datei = f"{stamm_}_{n_}{os.path.splitext(tmp)[1]}"
         shutil.move(tmp, datei)
     # Zahlungsauftrag
-    betrag = round(zahl(k.get("betrag"), float), 2)
+    betrag = kfm(zahl(k.get("betrag"), float))
     bezahlt = k.get("bezahlt") or ""
     werte = {"nummer": naechste_zahlungsnummer(con), "lieferant_id": lid, "auftrag_id": None, "belegnr": belegnr, "belegdatum": belegdatum,
              "bemerkung": k.get("bemerkung") or "", "empfaenger": l["empfaenger"] or l["kurzname"],
@@ -6718,7 +6939,7 @@ def eingang_buchen(con, d):
     for z in d.get("zeilen") or []:
         aktion = z.get("aktion") or "kosten"
         menge = zahl(z.get("menge"), float) or 1
-        netto = round(zahl(z.get("netto"), float), 2)
+        netto = kfm(zahl(z.get("netto"), float))
         ep = round(netto / menge, 4) if menge else 0
         bez = (z.get("bezeichnung") or "").strip() or "(ohne Bezeichnung)"
         mid = int(z.get("material_id") or 0) or None
@@ -7013,10 +7234,11 @@ LISTEN = {"werkzeuge": "Werkzeug- und Maschinenliste", "lager": "Lagerbestand"}
 def liste_html(con, art, q, pdf=False):
     e = einstellungen(con)
     heute_d = date.today()
+    ohne = ohne_preise(q)   # Benutzer ohne Preisrecht: Bestands- bzw. Werkzeugliste ohne Preise und Werte
     if art == "werkzeuge":
         daten = werkzeuge.liste(con, q)
-        mit_rest = any(w["restwert"] is not None for w in daten)
-        kopf = ["Nr.", "Bezeichnung", "Art", "Hersteller", "Seriennr.", "Standort", "Gekauft", "Status", "Preis netto"] + (["Restwert"] if mit_rest else [])
+        mit_rest = any(w["restwert"] is not None for w in daten) and not ohne
+        kopf = ["Nr.", "Bezeichnung", "Art", "Hersteller", "Seriennr.", "Standort", "Gekauft", "Status"] + ([] if ohne else ["Preis netto"]) + (["Restwert"] if mit_rest else [])
         zeilen_html, summe, gwg, je_art, rest, rest_n = [], 0.0, 0.0, {}, 0.0, 0
         for w in daten:
             p = w["preis"] or 0
@@ -7029,7 +7251,7 @@ def liste_html(con, art, q, pdf=False):
             zeilen_html.append(
                 f'<tr><td>{h(w["nummer"])}</td><td>{h((w["bezeichnung"] or "").splitlines()[0])}</td><td>{h(w["art"])}</td>'
                 f'<td>{h(w["hersteller"])}</td><td>{h(w["seriennr"])}</td><td>{h(w["standort"])}</td><td class="nw">{de_datum(w["kaufdatum"])}</td>'
-                f'<td>{h(w["status"])}</td><td class="r nw">{de(p)} €{" <small>GWG</small>" if w["gwg"] else ""}</td>'
+                f'<td>{h(w["status"])}</td>' + ("" if ohne else f'<td class="r nw">{de(p)} €{" <small>GWG</small>" if w["gwg"] else ""}</td>')
                 + (f'<td class="r nw">{de(w["restwert"]) + " €" if w["restwert"] is not None else ""}</td>' if mit_rest else "") + '</tr>')
         filter_txt = " · ".join(x for x in [
             {"aktiv": "alle aktiven", "faellig": "Prüfung/Wartung fällig", "": "alle einschließlich ausgemustert"}.get(q.get("status", "aktiv"), q.get("status")),
@@ -7040,8 +7262,10 @@ def liste_html(con, art, q, pdf=False):
                 f'<tr><td>davon geringwertige Wirtschaftsgüter (bis {de(werkzeuge.GWG_GRENZE, 0)} € netto je Stück)</td><td class="r nw">{de(gwg)} €</td></tr>'
                 + (f'<tr class="ges"><td>Restbuchwert heute, linear ({rest_n} Stück mit Nutzungsdauer)</td><td class="r nw">{de(rest)} €</td></tr>' if rest_n else "")
                 + '</table>' + ('<p class="klein">Restwert: lineare Abschreibung über die eingetragene Nutzungsdauer, monatsgenau ab dem Kaufmonat – ein Anhaltspunkt, maßgeblich ist das Anlagenverzeichnis der Buchhaltung.</p>' if rest_n else ""))
-        breiten = ('<col style="width:13mm"><col><col style="width:30mm"><col style="width:22mm"><col style="width:24mm"><col style="width:22mm"><col style="width:19mm"><col style="width:20mm"><col style="width:26mm">'
-                   + ('<col style="width:22mm">' if mit_rest else ""))
+        breiten = ('<col style="width:13mm"><col><col style="width:30mm"><col style="width:22mm"><col style="width:24mm"><col style="width:22mm"><col style="width:19mm"><col style="width:20mm">'
+                   + ("" if ohne else '<col style="width:26mm">') + ('<col style="width:22mm">' if mit_rest else ""))
+        if ohne:
+            fuss = f'<p class="klein">{len(daten)} Werkzeuge und Maschinen.</p>'
     elif art == "lager":
         stichtag = q.get("stichtag") or ""
         mats = [m for m in material.liste(con, {"lager": "1", "status": "alle"})]
@@ -7054,20 +7278,20 @@ def liste_html(con, art, q, pdf=False):
             mats = [m for m in mats if (m.get("lagerort") or "") == q["lagerort"]]
         mats = [m for m in mats if abs(m["bestand"] or 0) > 1e-9]
         mats.sort(key=lambda m: (list(material.KATEGORIEN).index(m["kategorie"]) if m["kategorie"] in material.KATEGORIEN else 99, m["nummer"]))
-        kopf = ["Nr.", "Bezeichnung", "Lagerort", "Bestand", "Preis je Einheit", "Wert"]
+        kopf = ["Nr.", "Bezeichnung", "Lagerort", "Bestand"] + ([] if ohne else ["Preis je Einheit", "Wert"])
         zeilen_html, summe, je_kat, letzte = [], 0.0, {}, None
         for m in mats:
             if m["kategorie"] != letzte:
                 letzte = m["kategorie"]
-                zeilen_html.append(f'<tr class="gr"><td colspan="6">{h(material.KATEGORIEN.get(letzte, letzte))}</td></tr>')
+                zeilen_html.append(f'<tr class="gr"><td colspan="{len(kopf)}">{h(material.KATEGORIEN.get(letzte, letzte))}</td></tr>')
             preis = m["lagerpreis"] or m["ek_preis"] or 0   # Bestandswert immer zum Durchschnittspreis
-            wert = round(max(m["bestand"] or 0, 0) * preis, 2)   # ein rechnerisch negativer Bestand (fehlender Zugang) ist kein negativer Wert
+            wert = kfm(max(m["bestand"] or 0, 0) * preis)   # ein rechnerisch negativer Bestand (fehlender Zugang) ist kein negativer Wert
             summe += wert
             je_kat[letzte] = je_kat.get(letzte, 0) + wert
             zeilen_html.append(
                 f'<tr><td>{h(m["nummer"])}</td><td>{h((m["bezeichnung"] or "").splitlines()[0])}</td><td>{h(m.get("lagerort") or "")}</td>'
-                f'<td class="r nw">{de(m["bestand"], 3 if (m["bestand"] or 0) % 1 else 0)} {h(m["einheit"])}</td><td class="r nw">{de(preis)} €</td>'
-                f'<td class="r nw">{de(wert)} €</td></tr>')
+                f'<td class="r nw">{de(m["bestand"], 3 if (m["bestand"] or 0) % 1 else 0)} {h(m["einheit"])}</td>'
+                + ("" if ohne else f'<td class="r nw">{de(preis)} €</td><td class="r nw">{de(wert)} €</td>') + '</tr>')
         filter_txt = " · ".join(x for x in [f"Stand {de_datum(stichtag)}" if stichtag else f"Stand {de_datum(heute_d.isoformat())}",
                                             f"Lagerort {q['lagerort']}" if q.get("lagerort") else "alle Lagerorte"] if x)
         summen = "".join(f'<tr><td>{h(material.KATEGORIEN.get(k, k))}</td><td class="r nw">{de(v)} €</td></tr>' for k, v in je_kat.items())
@@ -7075,7 +7299,9 @@ def liste_html(con, art, q, pdf=False):
                 f'<tr class="ges"><td>Gesamtwert Lager netto ({len(mats)} Artikel)</td><td class="r nw">{de(summe)} €</td></tr></table>'
                 f'<p class="klein">Bewertet mit dem gleitenden Durchschnittspreis aus den Lagerzugängen (ohne Lagerbuchung: Einkaufspreis).'
                 f'{" Bestände zum Stichtag aus den Lagerbewegungen, bewertet mit dem heutigen Durchschnittspreis." if stichtag else ""}</p>')
-        breiten = '<col style="width:16mm"><col><col style="width:28mm"><col style="width:28mm"><col style="width:28mm"><col style="width:28mm">'
+        breiten = '<col style="width:16mm"><col><col style="width:28mm"><col style="width:28mm">' + ("" if ohne else '<col style="width:28mm"><col style="width:28mm">')
+        if ohne:
+            fuss = f'<p class="klein">{len(mats)} Artikel mit Bestand.</p>'
     else:
         raise ApiFehler("Unbekannte Liste", 404)
     titel = LISTEN[art]
@@ -7084,7 +7310,7 @@ def liste_html(con, art, q, pdf=False):
     return f"""<!doctype html><html lang="de"><head><meta charset="utf-8"><title>{h(titel)}</title><style>
 @page {{ size: A4 {"landscape" if quer else "portrait"}; margin: 12mm 12mm 14mm 14mm; }}
 body {{ font: 9pt/1.35 Calibri, "Segoe UI", Arial, sans-serif; color: #222; margin: 0; }}
-{"" if pdf else "html{background:#888} body{background:#fff;width:" + ("297mm" if quer else "210mm") + ";margin:10mm auto;padding:12mm 12mm 14mm 14mm;box-sizing:border-box;box-shadow:0 2px 12px rgba(0,0,0,.3)}"}
+{"" if pdf else "@media screen{html{background:#888} body{background:#fff;width:" + ("297mm" if quer else "210mm") + ";margin:10mm auto;padding:12mm 12mm 14mm 14mm;box-sizing:border-box;box-shadow:0 2px 12px rgba(0,0,0,.3)}}"}
 .kopf {{ display: flex; justify-content: space-between; align-items: flex-end; border-bottom: .8pt solid #333; padding-bottom: 2mm; margin-bottom: 3mm; }}
 h1 {{ font-size: 15pt; margin: 0; }} .unter {{ color: #555; font-size: 9pt; }}
 table.l {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
@@ -7243,8 +7469,8 @@ def start_daten(con, jahr):
             angebotsvolumen += a["wert"] or 0
             angebote.append(a)
         else:
-            a["berechnet"] = round(umsatz_auftrag.get(a["id"], 0), 2)
-            a["rest"] = round(max(0, a["netto"] - a["berechnet"]), 2)
+            a["berechnet"] = kfm(umsatz_auftrag.get(a["id"], 0))
+            a["rest"] = kfm(max(0, a["netto"] - a["berechnet"]))
             auftragsbestand += a["rest"]
             a["ist_stunden"] = round(con.execute("SELECT COALESCE(SUM(stunden),0) FROM stunden WHERE auftrag_id=?",
                                                  (a["id"],)).fetchone()[0], 1)
@@ -7281,20 +7507,20 @@ def start_daten(con, jahr):
     return {
         "jahr": jahr, "heute": heute_iso,
         "kennzahlen": {
-            "umsatz": round(umsatz, 2), "umsatz_brutto": round(umsatz_brutto, 2), "umsatz_ust": round(umsatz_brutto - umsatz, 2), "umsatz_vj": round(umsatz_vj_bis_stichtag, 2), "umsatz_vj_gesamt": round(sum(monate[vj]), 2),
-            "material": round(material, 2), "kosten_eingang": round(kosten_gesamt, 2), "rohertrag": round(rohertrag, 2),
+            "umsatz": kfm(umsatz), "umsatz_brutto": kfm(umsatz_brutto), "umsatz_ust": kfm(umsatz_brutto - umsatz), "umsatz_vj": kfm(umsatz_vj_bis_stichtag), "umsatz_vj_gesamt": kfm(sum(monate[vj])),
+            "material": kfm(material), "kosten_eingang": kfm(kosten_gesamt), "rohertrag": kfm(rohertrag),
             "rohertrag_pz": round(rohertrag / umsatz * 100, 1) if umsatz else 0,
-            "stunden": round(stunden, 1), "ertrag_je_stunde": round(rohertrag / stunden, 2) if stunden else 0,
+            "stunden": round(stunden, 1), "ertrag_je_stunde": kfm(rohertrag / stunden) if stunden else 0,
             "ziel_stundensatz": fl(e.get("ziel_stundensatz")),
-            "forderungen": round(ford[0], 2), "forderungen_ueberfaellig": round(ford[1], 2), "anzahl_ueberfaellig": ford[2],
-            "verbindlichkeiten": round(verb[0], 2), "verbindlichkeiten_7t": round(verb[1], 2),
-            "verbindlichkeiten_ueberfaellig": round(verb[2], 2), "verbindlichkeiten_anzahl_ueberfaellig": verb[3],
+            "forderungen": kfm(ford[0]), "forderungen_ueberfaellig": kfm(ford[1]), "anzahl_ueberfaellig": ford[2],
+            "verbindlichkeiten": kfm(verb[0]), "verbindlichkeiten_7t": kfm(verb[1]),
+            "verbindlichkeiten_ueberfaellig": kfm(verb[2]), "verbindlichkeiten_anzahl_ueberfaellig": verb[3],
             "material_basis": "Zahlung" if nach_zahlung else "Rechnungsdatum",
             "rechnungspost": con.execute("SELECT COUNT(*) FROM rechnungspost WHERE status='neu'").fetchone()[0],
-            "angebotsvolumen": round(angebotsvolumen, 2), "auftragsbestand": round(auftragsbestand, 2),
+            "angebotsvolumen": kfm(angebotsvolumen), "auftragsbestand": kfm(auftragsbestand),
             "quote_erteilt": erteilt, "quote_abgesagt": abgesagt, "quote_offen": offen_q,
         },
-        "monate": {"aktuell": [round(x, 2) for x in monate[jahr]], "vorjahr": [round(x, 2) for x in monate[vj]]},
+        "monate": {"aktuell": [kfm(x) for x in monate[jahr]], "vorjahr": [kfm(x) for x in monate[vj]]},
         "anfragen": anfragen, "angebote": angebote, "laufend": laufend,
         "ueberfaellig": ueberfaellig, "zahlungen_faellig": zahlungen_faellig, "termine": termine,
         "beschaffung": [x for x in reste.beschaffung(reste.laden(con)[0]) if x["zu_bestellen"] > 0],
@@ -7355,7 +7581,8 @@ def auftrag_material_nummern(con, aid):
 
 
 def api(methode, teile, q, daten):
-    with verbindung() as con:
+    # nachweis.Rahmen: hält bei Änderungen an Stammdaten und Einstellungen den Stand davor fest und schreibt danach ins Protokoll
+    with verbindung() as con, nachweis.Rahmen(con, methode, teile, daten):
         res = teile[0] if teile else ""
         if methode != "GET" and res != "service":
             # Schreibende Anfragen holen sich die Schreibsperre gleich zu Beginn. Sonst kann eine Anfrage, die erst liest und
@@ -7385,12 +7612,19 @@ def api(methode, teile, q, daten):
         if res == "datenschutz" and teile[1:] == ["faellig"] and methode == "GET":
             if not benutzer.ist_inhaber():
                 raise ApiFehler("Die Löschliste sieht nur der Inhaber.", 403)
-            return datenschutz.faellig(con, lambda c, kid: kunde_anonymisieren(c, kid))
+            erg_f = datenschutz.faellig(con, lambda c, kid: kunde_anonymisieren(c, kid), frist_jahre(einstellungen(con)))
+            erg_f["kontoauszuege"] = bank.alte_auszuege(con, frist_jahre(einstellungen(con)))
+            erg_f["frist_rechnung_jahre"] = frist_jahre(einstellungen(con))
+            return erg_f
+        if res == "datenschutz" and teile[1:] == ["kontoauszuege"] and methode == "POST":
+            if not benutzer.ist_inhaber():
+                raise ApiFehler("Kontoauszüge löscht nur der Inhaber.", 403)
+            return bank.alte_auszuege_loeschen(con, frist_jahre(einstellungen(con)), os.path.join(DATEN, "bank"))
         if res in ("lieferanten", "mitarbeiter") and rid and unter == "anonymisieren" and methode in ("GET", "POST"):
             if not benutzer.ist_inhaber():
                 raise ApiFehler("Anonymisieren darf nur der Inhaber.", 403)
             if res == "lieferanten":
-                return datenschutz.lieferant(con, rid, DATEN, methode == "POST", ich_login(), VERSION)
+                return datenschutz.lieferant(con, rid, DATEN, methode == "POST", ich_login(), VERSION, jahre=frist_jahre(einstellungen(con)))
             erg_a = datenschutz.mitarbeiter(con, rid, DATEN, methode == "POST", ich_login(), VERSION,
                                             sig_ordner=(os.path.join(DATEN, "unterschriften"), arbeitsschutz.sig_ordner(DATEN)))
             if methode == "POST":
@@ -7859,10 +8093,15 @@ def api(methode, teile, q, daten):
                     threading.Thread(target=lambda: (time.sleep(1.5), update_pruefen()), daemon=True).start()
                 if isinstance(daten.get("sollplaene"), list):
                     daten["sollplaene"] = personal.plaene_pruefen(daten["sollplaene"])
+                if "frist_rechnung_jahre" in daten:   # nur 8 bis 10 Jahre zulässig, als ganze Zahl abgelegt
+                    daten["frist_rechnung_jahre"] = frist_jahre({"frist_rechnung_jahre": daten["frist_rechnung_jahre"]})
                 for k, v in daten.items():
                     if k in STANDARD_EINSTELLUNGEN:
                         con.execute("INSERT OR REPLACE INTO einstellungen VALUES (?, ?)",
                                     (k, json.dumps(v, ensure_ascii=False)))
+                if "sitzung_tage_buero" in daten or "sitzung_tage_mitarbeiter" in daten:
+                    e_neu = einstellungen(con)
+                    benutzer.sitzung_einstellen(e_neu.get("sitzung_tage_mitarbeiter"), e_neu.get("sitzung_tage_buero"))
                 if any(k in daten for k in ("feiertage_wahl", "frei_wahl", "tage_eigene", "sollplaene")):
                     personal.tage_einstellen(einstellungen(con))
                     if "sollplaene" in daten:
@@ -8007,7 +8246,7 @@ def api(methode, teile, q, daten):
                     if v:
                         bild_variante_speichern(datei, art, v)
                 liste.append({"datei": datei,
-                              "name": os.path.basename(d.get("dateiname") or "Bild"), "groesse": d.get("groesse") or "mittel",
+                              "name": sauber(os.path.basename(d.get("dateiname") or "")) or "Bild", "groesse": d.get("groesse") or "mittel",
                               "text": "", "drucken": True})
                 con.execute("UPDATE positionen SET bilder=?, geaendert=? WHERE id=?", (json.dumps(liste, ensure_ascii=False), jetzt(), rid))
                 return position_antwort(con, rid)
@@ -8094,7 +8333,7 @@ def api(methode, teile, q, daten):
                 schritt = fl((daten or {}).get("schritt") or 1)
                 # auf 6 Stellen runden, damit z. B. 100,00 nicht als 99,9999… auf 99 abgerundet wird
                 ziel = (math.ceil if modus == "auf" else math.floor)(round(a["ep_gesamt"] / schritt, 6)) * schritt
-                ep = round(ziel - a["unter_ep"], 2)
+                ep = kfm(ziel - a["unter_ep"])
                 con.execute("UPDATE positionen SET einzelpreis=?, preis_manuell=1, geaendert=? WHERE id=?", (ep, jetzt(), rid))
                 return position_antwort(con, rid)
             if methode == "POST" and unter == "berechnen":
@@ -8403,7 +8642,7 @@ def api(methode, teile, q, daten):
                     beleg_aktualisieren(con, rid)
                 if b["art"] in FREI_ARTEN and isinstance(d.get("frei"), list):   # Zeilen von Gutschrift/Korrektur ändern
                     dd = beleg_laden(con, rid)["daten"]
-                    dd["frei"] = [{"text": str(x.get("text") or "").strip(), "betrag": round(fl(x.get("betrag")), 2)}
+                    dd["frei"] = [{"text": str(x.get("text") or "").strip(), "betrag": kfm(fl(x.get("betrag")))}
                                   for x in d["frei"] if isinstance(x, dict) and (str(x.get("text") or "").strip() or fl(x.get("betrag")))]
                     if not dd["frei"]:
                         raise ApiFehler("Bitte mindestens eine Zeile mit Text und Betrag eingeben.")
@@ -8420,6 +8659,12 @@ def api(methode, teile, q, daten):
                     raise ApiFehler("Vom Kunden unterschriebene Belege werden nicht gelöscht.", 403)
                 if b["status"] in ("fest", "storniert"):
                     raise ApiFehler("Festgeschriebene Rechnungen dürfen nicht gelöscht werden (GoBD). Bitte stornieren.")
+                if b.get("versendet"):
+                    von_hand = (b.get("versendet_an") or "").startswith(VERMERK)
+                    raise ApiFehler(f"{b['artname']} {b['nummer']} wurde am {de_datum(b['versendet'][:10])} "
+                                    + ("als versendet vermerkt" if von_hand else f"per E-Mail an {b.get('versendet_an') or 'den Kunden'} gesendet")
+                                    + " und gehört damit zum Schriftverkehr mit dem Kunden. Versandte Belege werden nicht gelöscht – ein überholtes Angebot bleibt "
+                                    "einfach stehen, ein neues bekommt eine eigene Nummer." + (" War der Vermerk ein Versehen: erst „Vermerk zurücknehmen“." if von_hand else ""), 409)
                 con.execute("DELETE FROM belege WHERE id=?", (rid,))
                 prot(con, "beleg_geloescht", b["nummer"] or f"Entwurf {rid}", f"{b['artname']} {b['nummer'] or '(Entwurf ohne Nummer)'} gelöscht", beleg_kurz(b))
                 return {"ok": True, "auftrag_id": b["auftrag_id"]}
@@ -8455,6 +8700,11 @@ def api(methode, teile, q, daten):
                     weg = str((daten or {}).get("weg") or "").strip()[:80] or "von Hand"
                     con.execute("UPDATE belege SET versendet=?, versendet_an=? WHERE id=?",
                                 (datetime.now().isoformat(timespec="minutes"), VERMERK + weg, rid))
+                    try:   # die übergebene Fassung festhalten (wie beim Versand per E-Mail)
+                        with open(beleg_pdf(con, rid)["archiv"], "rb") as f:
+                            versand_festhalten(con, beleg_laden(con, rid), rid, f.read(), "", weg)
+                    except (ApiFehler, OSError) as f:
+                        print("Versandte Fassung nicht festgehalten:", f)
                     status_fortschreiben(con, beleg_laden(con, rid))
                 else:
                     con.execute("UPDATE belege SET versendet='', versendet_an='' WHERE id=?", (rid,))
@@ -8555,14 +8805,15 @@ def api(methode, teile, q, daten):
             vorher = con.execute("SELECT IFNULL(MAX(id),0) FROM kunden").fetchone()[0]
             erg = kunden_import(con, daten or {})
             # importierte Kunden stammen aus einem früheren Programm: Altbestand sperren
-            bis = f"{date.today().year + AUFBEWAHRUNG_JAHRE}-12-31"
+            bis = f"{date.today().year + frist_jahre(einstellungen(con))}-12-31"
             con.execute("UPDATE kunden SET aufbewahren_bis=? WHERE id>? AND IFNULL(aufbewahren_bis,'')<?", (bis, vorher, bis))
             return erg
 
         # ---------- Kunden ----------
         if res == "kunden":
             if methode == "GET" and rid is None:
-                sql, p = "SELECT * FROM kunden WHERE 1=1", []
+                # „felder=liste“: nur die Spalten der Kundenliste (bei Tausenden Kunden ein Zehntel der Datenmenge)
+                sql, p = f"SELECT {KUNDEN_LISTE if q.get('felder') == 'liste' else '*'} FROM kunden WHERE 1=1", []
                 such = (q.get("q") or "").strip().lower()
                 if such:
                     felder = SUCHFELDER.get(q.get("feld", "alle"), SUCHFELDER["alle"])
@@ -8658,7 +8909,8 @@ def api(methode, teile, q, daten):
         # ---------- Aufträge ----------
         if res == "auftraege":
             if methode == "GET" and rid is None:
-                sql = ("SELECT a.*, k.kurzname AS kunde, k.nummer AS kundennr, pr.nummer AS projekt_nr, pr.bezeichnung AS projekt FROM auftraege a "
+                kurz = q.get("felder") == "liste"   # nur die Spalten der Auftragsliste
+                sql = (f"SELECT {AUFTRAEGE_LISTE if kurz else 'a.*'}, k.kurzname AS kunde, k.nummer AS kundennr, pr.nummer AS projekt_nr, pr.bezeichnung AS projekt FROM auftraege a "
                        "JOIN kunden k ON k.id=a.kunde_id LEFT JOIN projekte pr ON pr.id=a.projekt_id WHERE 1=1")
                 p = []
                 if q.get("projekt"):
@@ -9071,7 +9323,7 @@ def api(methode, teile, q, daten):
                         fehler.append(f"{z['nummer']} hat keinen Betrag")
                         continue
                     mit_skonto = bool(z["skonto"]) and z["skonto_bis"] and z["skonto_bis"] >= ausf
-                    zb = round(z["betrag"] * (1 - z["skonto"] / 100), 2) if mit_skonto else round(z["betrag"], 2)
+                    zb = kfm(z["betrag"] * (1 - z["skonto"] / 100)) if mit_skonto else kfm(z["betrag"])
                     teile_zweck = [z["belegnr"] and f"Rg. {z['belegnr']}",
                                    z["belegdatum"] and f"vom {z['belegdatum'][8:10]}.{z['belegdatum'][5:7]}.{z['belegdatum'][:4]}",
                                    l["unsere_kundennr"] and f"KdNr {l['unsere_kundennr']}",
@@ -9084,7 +9336,7 @@ def api(methode, teile, q, daten):
                     raise ApiFehler("SEPA-Datei nicht erstellt: " + "; ".join(fehler))
                 xml = sepa_xml(einstellungen(con), posten, ausf)
                 return {"xml": xml, "dateiname": f"SEPA_{ausf}_{len(posten)}_Zahlungen.xml",
-                        "summe": round(sum(p["zahlbetrag"] for p in posten), 2), "anzahl": len(posten)}
+                        "summe": kfm(sum(p["zahlbetrag"] for p in posten)), "anzahl": len(posten)}
             if methode == "PUT" and rid:
                 werte = zahlung_daten(daten or {})
                 if werte:
@@ -9157,7 +9409,7 @@ def api(methode, teile, q, daten):
             erg = sorted(gruppen.values(), key=lambda g: g["schluessel"])
             for g in erg:
                 for k in ("brutto", "netto", "vorsteuer"):
-                    g[k] = round(g[k], 2)
+                    g[k] = kfm(g[k])
             return erg
 
         if res == "naechste_zahlung" and methode == "GET":
@@ -9304,8 +9556,37 @@ def api(methode, teile, q, daten):
     raise ApiFehler("Unbekannte Anfrage", 404)
 
 
+MAX_ANFRAGE_OHNE_RECHTE = 8 * 1024 * 1024   # Benutzer ohne Rechte in einem Bereich (Stempeluhr): Unterschrift ja, große Dateien nein
+
+
+def anfrage_grenze():
+    """Größte Anfrage für den angemeldeten Benutzer: Wer in keinem Bereich Rechte hat (Rolle Mitarbeiter), lädt keine Dateien hoch."""
+    r = benutzer.aktuelle_rechte()
+    if r is None or r.get("inhaber") or any(v for v in (r.get("bereiche") or {}).values()):
+        return MAX_ANFRAGE
+    return MAX_ANFRAGE_OHNE_RECHTE
+
+
+# Kurze Textfelder (Namen, Nummern, Betreff …): Mehr als KURZFELD_MAX Zeichen sind dort immer ein Versehen oder Unfug und
+# würden Listen, Belege und Dateinamen sprengen. Längere Texte (Positionstext, Bemerkungen, Dateiinhalte) haben eigene Felder.
+KURZFELD_MAX = 300
+KURZFELDER = {"kurzname", "name", "vorname", "nachname", "firma", "strasse", "hausnr", "plz", "ort", "land", "telefon", "mobil", "telefax",
+              "email", "email1", "email2", "email3", "email4", "website", "iban", "bic", "ustid", "login", "bezeichnung", "betreff",
+              "titel", "nummer", "belegnr", "kuerzel", "einheit", "gruppe", "status", "typ", "kategorie", "lagerort", "hersteller",
+              "artikelnr", "seriennr", "standort", "leitweg_id", "zusatz", "bestellnr", "matnr"}   # Dateinamen kürzt sauber() selbst
+KURZFELD_NAMEN = {"kurzname": "Kurzname", "bezeichnung": "Bezeichnung", "betreff": "Betreff", "titel": "Titel",
+                  "strasse": "Straße", "email": "E-Mail", "email1": "E-Mail", "nummer": "Nummer"}
+
+
+def kurzfelder_pruefen(daten):
+    for k, v in daten.items():
+        if k in KURZFELDER and isinstance(v, str) and len(v) > KURZFELD_MAX:
+            raise ApiFehler(f"Der Text im Feld „{KURZFELD_NAMEN.get(k, k.capitalize())}“ ist zu lang (höchstens {KURZFELD_MAX} Zeichen).")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version, sys_version = "Jahresring", ""   # keine Python-Version nach außen melden
+    timeout = 30   # stumme Verbindungen nach 30 Sekunden trennen (sonst hielte jedes hängende Gerät einen Arbeitsfaden fest)
 
     def log_message(self, *args):
         pass
@@ -9353,7 +9634,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(inhalt)
 
     def json(self, obj, code=200, extra=None):
-        self.senden(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8", extra)
+        self.senden(code, kern.json_text(obj).encode("utf-8", "replace"), "application/json; charset=utf-8", extra)
 
     def cookie(self):
         for teil in (self.headers.get("Cookie") or "").split(";"):
@@ -9465,7 +9746,13 @@ class Handler(BaseHTTPRequestHandler):
         # Schutz gegen Anfragen fremder Webseiten (CSRF): ändernde Anfragen nur von der eigenen Adresse
         if methode not in ("GET", "HEAD"):
             herkunft = self.headers.get("Origin") or ""
-            if herkunft and herkunft != "null" and urlparse(herkunft).netloc.lower() != (self.headers.get("Host") or "").lower():
+            # „Sec-Fetch-Site“ setzt der Browser selbst (eine Seite kann es nicht fälschen): cross-site = von einer fremden Seite
+            # ausgelöst. Die Herkunft „null“ (abgeschottete Rahmen, manche Weiterleitungen) zählt nur noch mit diesem Nachweis als eigen;
+            # Browser ohne das Kennzeichen (sehr alte) bleiben wie bisher zugelassen.
+            sfs = (self.headers.get("Sec-Fetch-Site") or "").lower()
+            fremd = (herkunft == "null" and sfs not in ("", "same-origin", "none")) or sfs == "cross-site" or \
+                (herkunft and herkunft != "null" and urlparse(herkunft).netloc.lower() != (self.headers.get("Host") or "").lower())
+            if fremd:
                 return self.json({"fehler": "Anfrage von fremder Seite abgelehnt."}, 403)
         try:
             # 1. öffentlich: Programmdateien, Logo, Version, Anmeldung
@@ -9507,6 +9794,24 @@ class Handler(BaseHTTPRequestHandler):
             mm = re.fullmatch(r"/druck/monatsbeleg/(\d+)/", pfad[:pfad.rindex("/") + 1])
             if mm and int(mm.group(1)) == (dict(benutzer.aktuell() or {}).get("mitarbeiter_id") or -1):
                 return   # den eigenen Monatsbeleg darf jeder Mitarbeiter ansehen
+        r0 = benutzer.aktuelle_rechte()
+        nur_werkstatt = bool(r0 and not r0["inhaber"] and r0["auftrag_reiter"] == "werkstatt")
+        if re.fullmatch(r"/api/belege/\d+/(xrechnung|zugferd)\.xml", pfad):
+            # E-Rechnungs-Daten enthalten Kunde, Positionen und Beträge: wie die Druckansicht nur mit Auftragsrecht, nicht für „nur Werkstatt“
+            if not benutzer.darf("auftraege", 1) or nur_werkstatt:
+                raise benutzer.Fehler("Dafür fehlt die Berechtigung.", 403)
+            return
+        if pfad.startswith("/api/bild/") and not any(benutzer.darf(x, 1) for x in ("auftraege", "material", "kunden")):
+            raise benutzer.Fehler("Dafür fehlt die Berechtigung.", 403)   # Positionsbilder: nicht für Benutzer ganz ohne Bereichsrechte
+        mp = re.fullmatch(r"/papier/(\d+)/([a-z]+)", pfad)
+        if mp and (nur_werkstatt or ohne_preise()):
+            # Die Oberfläche bietet der Werkstatt nur diese Papiere an; der Server muss es auch durchsetzen (Adresse von Hand eingegeben)
+            if nur_werkstatt and mp.group(2) not in werkstatt.WERKSTATT and mp.group(2) != "montageauftrag":
+                raise benutzer.Fehler("Dafür fehlt die Berechtigung (nur Werkstatt).", 403)
+            if mp.group(2) in PAPIERE_MIT_PREISEN:
+                raise benutzer.Fehler("Dafür fehlt die Berechtigung (Auswertung mit Preisen).", 403)
+        if pfad.startswith("/papier/projekt/") and (nur_werkstatt or ohne_preise()):
+            raise benutzer.Fehler("Dafür fehlt die Berechtigung.", 403)   # Projekt-Nachkalkulation und Projekt-Zeitbericht
         regeln = [(r"/api/service/", ["einstellungen"]), (r"/druck/mahnung", ["op"]), (r"/druck/monatsbeleg", ["personal"]), (r"/druck/arbeitsschutz", ["arbeitsschutz"]), (r"/druck/", ["auftraege"]), (r"/papier/", ["auftraege"]),
                   (r"/liste/", ["material"]), (r"/zuschnitt", ["auftraege"]), (r"/api/mahnungen/", ["op"]),
                   (r"/api/zahlungen/", ["lieferanten"]), (r"/api/eingang/", ["lieferanten"]),
@@ -9535,7 +9840,12 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         if n > 64 * 1024:   # Anmeldung ohne Sitzung: nur kleine Anfragen annehmen
             return self.json({"fehler": "Anfrage zu groß."}, 413)
-        d = json.loads(self.rfile.read(n).decode("utf-8")) if methode in ("POST", "PUT") and n else {}
+        try:
+            d = kern.json_lesen(self.rfile.read(n)) if methode in ("POST", "PUT") and n else {}
+        except ValueError as f:
+            return self.json({"fehler": str(f) if isinstance(f, kern.JsonFehler) else "Die Anfrage ist nicht lesbar."}, 400)
+        if not isinstance(d, dict):
+            return self.json({"fehler": "Die Anfrage hat nicht den erwarteten Aufbau."}, 400)
         with verbindung() as con:
             if methode == "GET" and not teil:
                 b = benutzer.sitzung_benutzer(con, self.token)
@@ -9589,7 +9899,7 @@ class Handler(BaseHTTPRequestHandler):
                             "Wenn Sie das nicht selbst angefordert haben, können Sie diese Mail ignorieren; Ihr bisheriges Passwort bleibt gültig.\n\n"
                             f"{e.get('firma') or 'Jahresring'}")
                     try:
-                        mailversand.senden(cfg, an, "", f"Jahresring: Code zum Zurücksetzen des Passworts ({code})", text, [], kopie_an_mich=False)
+                        mailversand.senden(cfg, an, "", "Jahresring: Code zum Zurücksetzen des Passworts", text, [], kopie_an_mich=False)
                     except mailversand.MailFehler as f:
                         con.rollback()
                         raise benutzer.Fehler(f"Die Mail mit dem Code konnte nicht gesendet werden: {f}")
@@ -9621,8 +9931,13 @@ class Handler(BaseHTTPRequestHandler):
                 if not b:
                     raise benutzer.Fehler("Bitte anmelden.", 401)
                 if teil == "email":
+                    if not benutzer.pw_pruefen(d.get("passwort"), b["pw_hash"]):
+                        raise benutzer.Fehler("Zum Ändern der E-Mail-Adresse bitte das Passwort eingeben (an diese Adresse geht der Code "
+                                              "für „Passwort vergessen“).")
                     werte = benutzer._daten(con, {"email": d.get("email")}, b)
                     con.execute("UPDATE benutzer SET email=?, geaendert=? WHERE id=?", (werte["email"], jetzt(), b["id"]))
+                    prot(con, "benutzer", b["login"], f"{b['login']} hat die eigene E-Mail-Adresse für „Passwort vergessen“ geändert: "
+                         f"{benutzer.maskieren(b['email']) or '–'} → {benutzer.maskieren(werte['email']) or '–'}")
                     con.commit()
                     return self.json({"ok": True, "email": werte["email"]})
                 if b["rolle"] != "inhaber":
@@ -9642,6 +9957,7 @@ class Handler(BaseHTTPRequestHandler):
                 benutzer.pw_regeln(d.get("neu"), b["rolle"])
                 con.execute("UPDATE benutzer SET pw_hash=?, geaendert=? WHERE id=?", (benutzer.pw_hash(d["neu"]), jetzt(), b["id"]))
                 con.execute("DELETE FROM sitzungen WHERE benutzer_id=? AND token<>?", (b["id"], benutzer.token_hash(self.token)))
+                prot(con, "benutzer", b["login"], f"{b['login']} hat das eigene Passwort geändert (von {self.ip()}); andere Geräte abgemeldet")
                 con.commit()
                 return self.json({"ok": True})
         return self.json({"fehler": "Unbekannte Anfrage"}, 404)
@@ -9650,7 +9966,7 @@ class Handler(BaseHTTPRequestHandler):
         return isinstance(self.connection, ssl.SSLSocket)
 
     def setze_cookie(self, token):
-        return (f"{benutzer.COOKIE}={token}; Path=/; Max-Age={benutzer.SITZUNG_TAGE * 86400}; HttpOnly; SameSite=Strict"
+        return (f"{benutzer.COOKIE}={token}; Path=/; Max-Age={max(benutzer.SITZUNG.values()) * 86400}; HttpOnly; SameSite=Strict"
                 + ("; Secure" if self.ist_https() else ""))   # über https angemeldet: Anmeldung nie unverschlüsselt mitschicken
 
     def do_GET(self):
@@ -9671,12 +9987,32 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if re.fullmatch(r"/druck/\d+\.pdf", u.path) and methode == "GET":
                 bid = int(u.path.split("/")[2][:-4])
+                with verbindung() as con:
+                    archiv = beleg_archiv_pfad(beleg_laden(con, bid), bid)
+                if archiv:   # festgeschrieben: genau die abgelegte Datei zeigen, nichts neu erzeugen
+                    with open(archiv, "rb") as f:
+                        return self.senden(200, f.read(), "application/pdf",
+                                           {"Content-Disposition": f"inline; filename*=UTF-8''{quote(os.path.basename(archiv))}"})
                 tmp = os.path.join(DATEN, "tmp")
                 os.makedirs(tmp, exist_ok=True)
-                ziel = os.path.join(tmp, f"vorschau-{bid}.pdf")
+                ziel = os.path.join(tmp, f"vorschau-{bid}-{threading.get_ident()}.pdf")
                 pdf_rendern(bid, ziel)
                 with open(ziel, "rb") as f:
-                    return self.senden(200, f.read(), "application/pdf", {"Content-Disposition": "inline; filename=vorschau.pdf"})
+                    inhalt = f.read()
+                try:
+                    os.remove(ziel)   # die Vorschau wird nur für diese Antwort gebraucht (kein Beleginhalt bleibt im Arbeitsordner liegen)
+                except OSError:
+                    pass
+                return self.senden(200, inhalt, "application/pdf", {"Content-Disposition": "inline; filename=vorschau.pdf"})
+            m = re.fullmatch(r"/druck/(\d+)/versandt/(\d+)\.pdf", u.path)
+            if m and methode == "GET":
+                with verbindung() as con:
+                    v = con.execute("SELECT datei FROM beleg_versand WHERE id=? AND beleg_id=?", (int(m.group(2)), int(m.group(1)))).fetchone()
+                pfad = os.path.normpath(os.path.join(DATEN, "belege", v["datei"])) if v and v["datei"] else ""
+                if not pfad or not pfad.startswith(os.path.normpath(os.path.join(DATEN, "belege"))) or not os.path.isfile(pfad):
+                    return self.json({"fehler": "Die versandte Fassung ist nicht (mehr) vorhanden."}, 404)
+                with open(pfad, "rb") as f:
+                    return self.senden(200, f.read(), "application/pdf", {"Content-Disposition": f"inline; filename*=UTF-8''{quote(os.path.basename(pfad))}"})
             if u.path.startswith("/api/vorlage/") and methode == "GET":
                 name = u.path.split("/")[-1]
                 pfad = os.path.join(VORLAGEN_PFAD, name)
@@ -9805,8 +10141,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(200, html_text.encode("utf-8"), "text/html; charset=utf-8")
             m = re.fullmatch(r"/druck/mahnung/(\d+)", u.path)
             if m and methode == "GET":
+                if q.get("drucken") == "1":
+                    with verbindung() as con:
+                        mh = mahnung_laden(con, int(m.group(1)))
+                    html_text = druckansicht_html(f"{(mh['daten'] or {}).get('stufenname') or 'Mahnung'} {mh['nummer']}", f"/api/mahnungen/{mh['id']}/pdf",
+                                                  f"/druck/mahnung/{mh['id']}?drucken=html")
+                    return self.senden(200, html_text.encode("utf-8"), "text/html; charset=utf-8")
                 with verbindung() as con:
                     html_text = mahnung_html(con, int(m.group(1)), als_pdf=q.get("pdf") == "1")
+                if q.get("drucken") == "html":
+                    html_text = ersatz_hinweis(html_text)
                 return self.senden(200, html_text.encode("utf-8"), "text/html; charset=utf-8")
             m = re.fullmatch(r"/api/mahnungen/(\d+)/pdf", u.path)
             if m and methode == "GET":
@@ -9818,21 +10162,21 @@ class Handler(BaseHTTPRequestHandler):
                                        {"Content-Disposition": f"inline; filename*=UTF-8''{quote(os.path.basename(pfad))}"})
             if re.fullmatch(r"/druck/\d+", u.path) and methode == "GET":
                 bid = int(u.path.split("/")[2])
+                if q.get("drucken") == "1":
+                    with verbindung() as con:
+                        bd = beleg_laden(con, bid)
+                    html_text = druckansicht_html(beleg_titel(bd), f"/druck/{bid}.pdf", f"/druck/{bid}?drucken=html")
+                    return self.senden(200, html_text.encode("utf-8"), "text/html; charset=utf-8")
                 abstand = 0.0
                 try:
                     abstand = max(0.0, min(250.0, float(q.get("abstand") or 0)))
                 except ValueError:
                     pass
                 ue = {"zeilen": []} if q.get("ue") == "platz" else {"zeilen": UE_PLAN[q["ue"]]} if q.get("ue") in UE_PLAN else None
-                if "drucken" in q and not abstand and ue is None:
-                    # Drucken aus dem Browser: Abstand für „letzte Seite unten bündig“ und den Übertrag vorher messen
-                    with verbindung() as con:
-                        bd = beleg_laden(con, bid)
-                        e = einstellungen(con)
-                    plan = druck_plan(bid, bd, e)
-                    abstand, ue = plan["abstand"], ({"zeilen": UE_PLAN[plan["ue"]]} if plan["ue"] else None)
                 with verbindung() as con:
                     html_text = druck_html(con, bid, als_pdf=q.get("pdf") == "1", abstand=abstand, marken=q.get("marken") == "1", ue=ue)
+                if q.get("drucken") == "html":
+                    html_text = ersatz_hinweis(html_text, " – ohne Seitenzahlen und ohne Übertrag")
                 return self.senden(200, html_text.encode("utf-8"), "text/html; charset=utf-8")
             m = re.fullmatch(r"/api/service/export/([A-Za-z0-9_.\-]+\.zip)", u.path)
             if m and methode == "GET":
@@ -9878,12 +10222,17 @@ class Handler(BaseHTTPRequestHandler):
                 if m.group(2):
                     tmp = os.path.join(DATEN, "tmp")
                     os.makedirs(tmp, exist_ok=True)
-                    ziel = os.path.join(tmp, f"liste-{m.group(1)}.pdf")
-                    query = "&".join(f"{k}={quote(str(v))}" for k, v in q.items())
-                    pdf_url_rendern(f"http://127.0.0.1:{PORT}/liste/{m.group(1)}?pdf=1&{query}", ziel)
-                    name = f"{LISTEN[m.group(1)]} {date.today().isoformat()}.pdf"
-                    with open(ziel, "rb") as f:
-                        return self.senden(200, f.read(), "application/pdf", {"Content-Disposition": f"inline; filename*=UTF-8''{quote(name)}"})
+                    ziel = os.path.join(tmp, f"liste-{m.group(1)}-{secrets.token_hex(4)}.pdf")
+                    query = "&".join(f"{k}={quote(str(v))}" for k, v in q.items() if k not in ("ohnepreise", "intern"))
+                    try:
+                        pdf_url_rendern(f"http://127.0.0.1:{PORT}/liste/{m.group(1)}?pdf=1&{query}{preis_kennzeichen()}", ziel)
+                        name = f"{LISTEN[m.group(1)]} {date.today().isoformat()}.pdf"
+                        with open(ziel, "rb") as f:
+                            inhalt = f.read()
+                    finally:
+                        if os.path.exists(ziel):
+                            os.remove(ziel)
+                    return self.senden(200, inhalt, "application/pdf", {"Content-Disposition": f"inline; filename*=UTF-8''{quote(name)}"})
                 with verbindung() as con:
                     html_text = liste_html(con, m.group(1), q, pdf=q.get("pdf") == "1")
                 return self.senden(200, html_text.encode("utf-8"), "text/html; charset=utf-8")
@@ -9955,12 +10304,19 @@ class Handler(BaseHTTPRequestHandler):
             daten = None
             if methode in ("POST", "PUT"):
                 n = int(self.headers.get("Content-Length") or 0)
-                if n > MAX_ANFRAGE:
-                    raise ApiFehler(f"Die Datei bzw. Anfrage ist zu groß (höchstens {MAX_ANFRAGE // 1048576} MB).", 413)
-                daten = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+                grenze = anfrage_grenze()
+                if n > grenze:
+                    raise ApiFehler(f"Die Datei bzw. Anfrage ist zu groß (höchstens {grenze // 1048576} MB).", 413)
+                try:
+                    daten = kern.json_lesen(self.rfile.read(n)) if n else {}
+                except kern.JsonFehler as f:
+                    raise ApiFehler(str(f))
+                except ValueError:
+                    raise ApiFehler("Die Anfrage ist nicht lesbar.")
                 if not isinstance(daten, dict):
                     raise ApiFehler("Die Anfrage hat nicht den erwarteten Aufbau.")
                 benutzer.pruefen(methode, teile, q, daten)
+                kurzfelder_pruefen(daten)
             sk = stand_schluessel(teile)
             if sk and methode in ("PUT", "DELETE"):
                 stand_pruefen(sk, self.headers.get("X-Stand"), self.token)
@@ -10022,7 +10378,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.json({"fehler": str(f)}, f.code)   # fachliche Meldung eines Programmteils (z. B. „Rapport nicht gefunden“)
                 return
             traceback.print_exc()
-            self.json({"fehler": f"Interner Fehler: {f}"}, 500)
+            if isinstance(f, UnicodeError):
+                self.json({"fehler": "Die Eingabe enthält ungültige Zeichen."}, 400)
+            elif isinstance(f, OSError):   # Meldung des Betriebssystems ohne den Ordnerpfad des Servers
+                self.json({"fehler": f"Interner Fehler: {f.strerror or type(f).__name__} (Einzelheiten stehen im Programmprotokoll)."}, 500)
+            else:
+                self.json({"fehler": f"Interner Fehler: {f}"}, 500)
 
     def anhang(self, aid):
         with verbindung() as con:
@@ -10291,11 +10652,11 @@ def montage_mail(con, methode, mid, d):
             anh.append((name, f.read(), "application/pdf"))
     con.commit()
     try:
-        r = mailversand.senden(cfg, d.get("an"), d.get("cc"), d.get("betreff") or "", d.get("text") or "", anh, kopie_an_mich=bool(d.get("kopie_an_mich")))
+        r = mailversand.senden(cfg, d.get("an"), d.get("cc"), d.get("betreff") or "", d.get("text") or "", anh, kopie_an_mich=bool(d.get("kopie_an_mich")), ablage=MAIL_ABLAGE)
     except mailversand.MailFehler as f:
         raise ApiFehler(str(f))
     korrespondenz_eintragen(con, "mail_aus", kunde_id=a["kunde_id"], auftrag_id=a["id"], betreff=d.get("betreff") or "",
-                            text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"), anhaenge=[x[0] for x in anh])
+                            text=d.get("text") or "", an=d.get("an") or "", message_id=r.get("message_id"), datei=mail_datei(r), anhaenge=[x[0] for x in anh])
     return r
 
 
@@ -10429,6 +10790,7 @@ export.HILFE.update({"daten": DATEN, "basis": BASIS, "version": VERSION, "einste
 preise.HILFE.update({"prot": lambda *a, **k: prot(*a, **k)})
 bank.HILFE.update({"daten": DATEN, "prot": lambda *a, **k: prot(*a, **k), "ich_login": lambda: ich_login(),
                    "skr": lambda con: export.datev_cfg(einstellungen(con))["skr"],
+                   "eigene_iban": lambda con: einstellungen(con).get("sepa_iban") or "",
                    "op_zahlung_buchen": lambda *a, **k: op_zahlung_buchen(*a, **k), "zahlungseingang_loeschen": lambda *a, **k: zahlungseingang_loeschen(*a, **k)})
 liquiditaet.HILFE.update({"einstellungen": lambda con: einstellungen(con), "auftrag_rechnen": lambda con, aid: auftrag_rechnen(con, aid),
                           "beleg_umsatz": lambda b: beleg_umsatz(b)})
