@@ -1361,7 +1361,7 @@ def exposition_loeschen(con, eid):
     if not e:
         raise Fehler("Eintrag nicht gefunden.", 404)
     if not e["loeschbar"]:
-        raise Fehler(f"Das Expositionsverzeichnis wird {EXPO_JAHRE} Jahre nach Ende der Exposition aufbewahrt (§ 14 Abs. 3 GefStoffV). "
+        raise Fehler(f"Das Expositionsverzeichnis wird {EXPO_JAHRE} Jahre nach Ende der Exposition aufbewahrt (§ 10a GefStoffV). "
                      "Löschen geht nur am Tag der Erfassung (Tippfehler) oder nach Ablauf der Frist.", 409)
     con.execute("DELETE FROM as_exposition WHERE id=?", (eid,))
 

@@ -91,7 +91,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-146"
+VERSION = "2026.11.01-147"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -1052,7 +1052,7 @@ def update_pruefen():
             text = r.read(200_000).decode("utf-8", "replace")
         gefunden = sorted({v for v in re.findall(r"\b\d{4}\.\d{2}\.\d{2}-\d+\b", text)}, key=_version_zahl)
         if not gefunden:
-            raise ValueError("unter der Adresse steht keine Versionsnummer (erwartet z. B. 2026.11.01-146)")
+            raise ValueError("unter der Adresse steht keine Versionsnummer (erwartet z. B. 2026.11.01-147)")
         neueste = gefunden[-1]
         UPDATE.update(neu=neueste if _version_zahl(neueste) > _version_zahl(VERSION) else "", geprueft=jetzt(), fehler="")
     except Exception as f:  # noqa: BLE001  keine Verbindung, falsche Adresse, Schlüssel abgelaufen …
