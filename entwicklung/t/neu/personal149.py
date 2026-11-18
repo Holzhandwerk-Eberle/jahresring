@@ -41,7 +41,10 @@ jetzt = datetime.now(); iso = lambda d: d.strftime("%Y-%m-%dT%H:%M")
 print("== M2: Stempelzeiten")
 # gestern: live gestempelt geht nicht nachzustellen – deshalb heute, mit Abstand zu Mitternacht unkritisch
 r = A("POST", "stempel", {"aktion": "start", "zeit": iso(jetzt - timedelta(hours=3)), "client_id": "c1"}, c=max_)
-r2 = A("POST", "stempel", {"aktion": "ende", "zeit": iso(jetzt - timedelta(hours=1)), "client_id": "c2"}, c=max_)
+ende1 = jetzt - timedelta(hours=1)
+if ende1.date() != (jetzt - timedelta(hours=3)).date():   # nachts zwischen 1 und 3 Uhr: Ende noch auf den Vortag legen, sonst reicht die Stempelung über Mitternacht
+    ende1 = ende1.replace(hour=0, minute=0) - timedelta(minutes=1)
+r2 = A("POST", "stempel", {"aktion": "ende", "zeit": iso(ende1), "client_id": "c2"}, c=max_)
 z = zeiten()
 ok("Beginn vor 3 Stunden und Ende vor 1 Stunde nachgereicht: übernommen (Handy ohne Netz kommt vor)", r["_s"] == 200 and r2["_s"] == 200 and len(z) == 1 and z[0]["ende"], (r, r2, z))
 ok("… und gekennzeichnet: Eingangszeit und Verzug in Minuten (rund 180)", z and z[0]["eingang"][:10] == jetzt.strftime("%Y-%m-%d") and 170 <= z[0]["spaet"] <= 190, z and (z[0]["eingang"], z[0]["spaet"]))
