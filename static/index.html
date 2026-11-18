@@ -2307,6 +2307,10 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
     </div>
     <div class="form einst-pane" data-pane="programm">
       ${programmFensterZeilen()}
+      <div class="sektion">Startseite</div>
+      ${zeile("Arbeitsschutz", `<div class="spalte"><label><input type="checkbox" name="start_arbeitsschutz" id="startAS" ${E.start_arbeitsschutz !== false ? "checked" : ""}> Erinnerungen des Arbeitsschutzes auf der Startseite anzeigen</label>
+        <span class="hinweis">Gemeint ist der Hinweis auf fällige und bald fällige Punkte aus der Übersicht des Arbeitsschutzes (unter anderem Gefährdungsbeurteilungen, Unterweisungen, Gefahrstoffe, Nachweise, Vorsorge, Prüfungen der Arbeitsmittel). Ausgeschaltet bleiben sie unter Arbeitsschutz › Übersicht vollständig sichtbar. Der Schalter wirkt nur auf diese Erinnerungen, alle anderen Hinweise der Startseite bleiben. Sobald Mitarbeiter beschäftigt werden, wieder einschalten.</span>
+        <span class="hinweis" id="startASWarn" style="color:var(--rot);display:none"></span></div>`, true)}
       <div class="sektion">Daten</div>
       ${zeile("Datenordner", `<code style="padding-top:4px;word-break:break-all">${esc(E._datenordner)}</code>`, true)}
       <div class="zeile voll"><label>Sicherung</label><div class="hinweis" style="padding-top:8px">Die Datenbank wird täglich in „daten\\backup“ gesichert (30 Tage). Ein zusätzliches Sicherungsziel außerhalb dieses PCs und das Sicherungskennwort stehen unter Service › Datensicherung.</div></div>
@@ -2336,6 +2340,15 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
   $("#logoWeg").onclick = async () => { await api("einstellungen/logo", {method: "POST", body: {}}); logoZeigen(); };
   const bsp = () => { const v = $("[name=ordnerschema]").value; $("#bsp").textContent = v.replace("{auftrag}", new Date().getFullYear() + "-0001").replace("{projekt}", "Einbauschrank").replace("{kundennr}", "100000").replace("{name}", "Müller"); };
   bsp(); $("[name=ordnerschema]").oninput = bsp;
+  // Warnung am Schalter „Erinnerungen des Arbeitsschutzes“: ausgeschaltet, obwohl Mitarbeiter angelegt sind. Die Zahl wird frisch
+  // geholt, weil die geladenen Einstellungen älter sein können als ein eben angelegter Mitarbeiter.
+  const startASWarn = () => {
+    const w = $("#startASWarn"), n = E._mitarbeiter || 0; if (!w) return;
+    w.textContent = n ? `${n === 1 ? "Es ist 1 Mitarbeiter angelegt" : `Es sind ${n} Mitarbeiter angelegt`}: Die Erinnerungen sollten eingeschaltet sein.` : "";
+    w.style.display = n && !$("#startAS").checked ? "" : "none";
+  };
+  startASWarn(); $("#startAS").onchange = startASWarn;
+  api("einstellungen").then(e => { E._mitarbeiter = e._mitarbeiter; startASWarn(); }).catch(() => {});
   $("#einstTitel").ondblclick = () => nummernkreise();
   // Reiter innerhalb des Formulars ohne Neuladen wechseln, damit ungespeicherte Eingaben erhalten bleiben
   const zeigePane = t => {
@@ -2751,7 +2764,7 @@ async function render() {
   }
 }
 window.addEventListener("hashchange", render);
-const VERSION = "2026.11.01-150";
+const VERSION = "2026.11.01-151";
 (async () => {
   try {
     const v = await api("version").catch(() => ({}));

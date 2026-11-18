@@ -121,6 +121,7 @@ async function asUebersicht() {
   const farbe = {rot: "var(--rot)", gelb: "#c9a227", info: "#7a8a99"};
   const symbol = ok => ok === true ? `<span style="color:var(--gruen);font-weight:700">✓</span>` : ok === false ? `<span style="color:var(--rot);font-weight:700">✗</span>` : `<span class="hinweis">–</span>`;
   z.innerHTML = `<div class="titel"><h2>Arbeitsschutz</h2><span class="hinweis">${d.bedarf.beschaeftigte} Beschäftigte</span></div>
+    ${E.start_arbeitsschutz === false && darf("start") && darf("arbeitsschutz", 2) ? `<p class="hinweis" id="asStartAus" style="margin:0 0 10px">Die Erinnerungen auf der Startseite sind ausgeschaltet${ICH.rechte.inhaber ? ` (<a href="#/einstellungen/programm">Einstellungen › Programm</a>)` : ""}. Fällige Punkte stehen nur hier.</p>` : ""}
     <div class="as-zwei">
       <section class="kachel"><h4>Zu erledigen</h4>
         ${d.punkte.length ? `<ul class="as-punkte">${d.punkte.map(p => `<li><span class="as-dot" style="background:${farbe[p.stufe]}"></span><a href="${p.link}">${esc(p.text)}</a></li>`).join("")}</ul>`
@@ -888,13 +889,19 @@ async function asExposition(mas) {
   $$("[data-exdel]", box).forEach(b => b.onclick = async () => { if (await frage("Eintrag im Expositionsverzeichnis löschen?")) { try { await api("arbeitsschutz/exposition/" + b.dataset.exdel, {method: "DELETE"}); asExposition(mas); } catch (f) { toast(f.message, true); } } });
 }
 
-// Startseite: kurzer Hinweis, wenn im Arbeitsschutz etwas fällig ist
-async function asStartHinweis(box) {
-  if (!box || !darf("arbeitsschutz", 2)) return;
+// Startseite: Erinnerung an fällige und bald fällige Punkte. Sie lässt sich unter Einstellungen › Programm ausschalten (nur sie).
+// Ist sie aus und sind Mitarbeiter angelegt, steht für den Inhaber stattdessen der Hinweis, sie wieder einzuschalten.
+async function asStartHinweis(box, st) {
+  if (!box) return;
+  if (st ? st.anzeigen === false : E.start_arbeitsschutz === false) {   // der Stand der Startseite ist frischer als die geladenen Einstellungen
+    if (st && st.mitarbeiter && ICH.rechte.inhaber) box.innerHTML = `<div class="kachel" id="stASAus" style="border-left:4px solid #c9a227;margin-bottom:12px">Arbeitsschutz: Die Erinnerungen auf der Startseite sind ausgeschaltet, ${st.mitarbeiter === 1 ? "es ist aber 1 Mitarbeiter angelegt" : `es sind aber ${st.mitarbeiter} Mitarbeiter angelegt`}. Mit Beschäftigten gehören Gefährdungsbeurteilung und Unterweisungen zu den Pflichten des Arbeitgebers; bitte wieder einschalten. <a href="#/einstellungen/programm">Einstellungen › Programm ›</a></div>`;
+    return;
+  }
+  if (!darf("arbeitsschutz", 2)) return;
   try {
     const d = await api("arbeitsschutz/uebersicht");
     const rot = d.punkte.filter(p => p.stufe === "rot").length, gelb = d.punkte.filter(p => p.stufe === "gelb").length;
     if (!rot && !gelb) return;
-    box.innerHTML = `<div class="kachel" style="border-left:4px solid ${rot ? "var(--rot)" : "#c9a227"};margin-bottom:12px">Arbeitsschutz: ${rot ? `${rot} Punkt(e) fällig` : ""}${rot && gelb ? ", " : ""}${gelb ? `${gelb} bald fällig bzw. offen` : ""} – ${esc(d.punkte[0].text)} <a href="#/arbeitsschutz">Zur Übersicht ›</a></div>`;
+    box.innerHTML = `<div class="kachel" id="stASHinweis" style="border-left:4px solid ${rot ? "var(--rot)" : "#c9a227"};margin-bottom:12px">Arbeitsschutz: ${rot ? `${rot} Punkt(e) fällig` : ""}${rot && gelb ? ", " : ""}${gelb ? `${gelb} bald fällig bzw. offen` : ""} – ${esc(d.punkte[0].text)} <a href="#/arbeitsschutz">Zur Übersicht ›</a></div>`;
   } catch (e) {}
 }

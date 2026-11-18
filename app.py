@@ -93,7 +93,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-150"
+VERSION = "2026.11.01-151"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -416,6 +416,7 @@ STANDARD_EINSTELLUNGEN = {
     "taetigkeit_listen": None,
     "girocode": True,
     "app_fenster": True,
+    "start_arbeitsschutz": True,   # Erinnerungen des Arbeitsschutzes auf der Startseite anzeigen (Einstellungen › Programm); nur diese sind abschaltbar
     "netzwerk": False,
     "update": {"adresse": "", "schluessel": ""},   # Update-Hinweis: Adresse einer Datei mit der neuesten Versionsnummer (leer = aus)
     "netz_adressen": "",   # weitere Namen, unter denen das Programm im eigenen Netz aufgerufen wird (durch Komma getrennt)
@@ -3874,7 +3875,7 @@ def beleg_anlegen(con, aid, d):
 # Einstellungen, die Benutzer ohne volle Auftragsbearbeitung (Werkstatt, Mitarbeiter) erhalten: Listen und Schalter für
 # Werkstatt-Reiter, Leitstand, Kalender, Lager, Stempeluhr – keine Firmendaten, Texte, Kalkulations- oder Zahlungsvorgaben
 EINSTELLUNGEN_WERKSTATT = {
-    "firma", "programm_version", "app_fenster", "etikett_breite", "etikett_hoehe", "https", "_https", "auftragsstatus", "auftragsgruppen", "positionsstatus", "positionsgruppen",
+    "firma", "programm_version", "app_fenster", "start_arbeitsschutz", "etikett_breite", "etikett_hoehe", "https", "_https", "auftragsstatus", "auftragsgruppen", "positionsstatus", "positionsgruppen",
     "status_ende", "status_angebot", "status_automatik", "termin_typen", "einheiten", "lagerorte", "material_gruppen", "leitstand_schritte",
     "leitstand_status", "leitstand_status_map", "_leitstand_map", "taetigkeiten", "taetigkeit_listen", "taetigkeiten_katalog", "_taet_katalog_stand",
     "typ_kst", "ist_kategorien", "feiertage_wahl", "frei_wahl", "tage_eigene", "tagesstunden", "zeit_gemeinkosten",
@@ -5345,6 +5346,8 @@ def einstellungen_oeffentlich(con):
     e["_sicherung_erinnerung"] = sicherung_erinnerung(e.get("sicherung_ziel") or "")
     e["_autostart"] = autostart_status()
     e["_echtbetrieb"] = bool(protokoll.echtbetrieb(con))
+    if benutzer.ist_inhaber():
+        e["_mitarbeiter"] = mitarbeiter_zahl(con)   # für den Hinweis am Schalter „Erinnerungen des Arbeitsschutzes auf der Startseite“
     e["_leitstand_map"] = {x: leitstand_status_fuer(e, x, i) for i, x in enumerate([y for y in (e.get("leitstand_schritte") or []) if y])}
     e["_netz"] = {"aktiv": NETZ["aktiv"], "ip": lokale_ip() if NETZ["aktiv"] else "", "port": PORT}
     e["_https"] = {**HTTPS, "fingerabdruck": __import__("zert").fingerabdruck(DATEN) if HTTPS["aktiv"] else "",
@@ -7644,7 +7647,20 @@ def start_daten(con, jahr):
         "beschaffung": [x for x in reste.beschaffung(reste.laden(con)[0]) if x["zu_bestellen"] > 0],
         "geburtstage": geburtstage(con, int(e.get("geburtstag_tage") or 14)),
         "wiedervorlagen": wiedervorlage.liste(con, {"status": "offen", "bis": (heute_d + timedelta(7)).isoformat()}) if benutzer.darf("auftraege", 1) else [],
+        "arbeitsschutz": start_arbeitsschutz(con, e),
     }
+
+
+def mitarbeiter_zahl(con):
+    """Angelegte Mitarbeiter: aktiv und nicht ausgetreten, ohne den Inhaber."""
+    return len([m for m in arbeitsschutz.mitarbeiter_liste(con) if not m["inhaber"]])
+
+
+def start_arbeitsschutz(con, e):
+    """Erinnerungen des Arbeitsschutzes auf der Startseite: unter Einstellungen › Programm abschaltbar (nur diese, sonst kein
+    Hinweis der Startseite). Sind sie ausgeschaltet und Mitarbeiter angelegt, erfährt der Inhaber dort, dass er sie einschalten soll."""
+    an = e.get("start_arbeitsschutz") is not False
+    return {"anzeigen": an, "mitarbeiter": mitarbeiter_zahl(con) if not an and benutzer.ist_inhaber() else 0}
 
 
 def suche(con, q):
@@ -8218,6 +8234,8 @@ def api(methode, teile, q, daten):
                     threading.Thread(target=lambda: (time.sleep(1.5), update_pruefen()), daemon=True).start()
                 if isinstance(daten.get("sollplaene"), list):
                     daten["sollplaene"] = personal.plaene_pruefen(daten["sollplaene"])
+                if "start_arbeitsschutz" in daten:   # Schalter: nur ein ausdrückliches „aus“ schaltet die Erinnerungen ab
+                    daten["start_arbeitsschutz"] = daten["start_arbeitsschutz"] is not False
                 if "frist_rechnung_jahre" in daten:   # nur 8 bis 10 Jahre zulässig, als ganze Zahl abgelegt
                     daten["frist_rechnung_jahre"] = frist_jahre({"frist_rechnung_jahre": daten["frist_rechnung_jahre"]})
                 for k, v in daten.items():

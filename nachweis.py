@@ -80,7 +80,8 @@ EINST_MASKE = {"sepa_iban": "IBAN des Betriebs"}
 EINST_SCHALTER = {"netzwerk": "Netzwerkfreigabe", "zugferd": "E-Rechnung im PDF (ZUGFeRD)", "girocode": "GiroCode auf Rechnungen", "briefvorlage_aktiv": "Briefbogen",
                   "seitenzahlen": "Seitenzahlen", "unten_buendig": "Schluss unten bündig", "uebertrag": "Übertrag bei mehrseitigen Belegen",
                   "vorsorge_nur_inhaber": "Vorsorge und Exposition nur für den Inhaber", "hinweis_14b": "Hinweis nach § 14b UStG", "status_automatik": "Status-Automatik",
-                  "ordner_automatisch": "Projektordner automatisch anlegen", "app_fenster": "Programmfenster"}
+                  "ordner_automatisch": "Projektordner automatisch anlegen", "app_fenster": "Programmfenster",
+                  "start_arbeitsschutz": "Erinnerungen des Arbeitsschutzes auf der Startseite"}
 EINST_FAKT = {"firma_anschrift": "Firmenanschrift", "firma_telefon": "Telefon des Betriebs", "firma_email": "E-Mail des Betriebs", "firma_web": "Internetadresse",
               "firma_zusatz": "Zusatzzeile des Betriebs", "absenderzeile": "Absenderzeile", "mail": "E-Mail-Versand", "update": "Update-Einstellungen",
               "https": "https-Zugang", "projektsicherung": "Sicherung des Projektordners", "mahnwesen": "Mahnwesen (Stufen, Gebühren, Zinsen)", "datev": "DATEV-Export",

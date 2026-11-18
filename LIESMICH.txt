@@ -320,3 +320,10 @@ Dateipfade: Anhänge und Eingangsrechnungen sind mit vollem Pfad gespeichert. Li
 Sicherungskennwort: War im übernommenen Bestand ein Sicherungskennwort gesetzt, bleibt es verlangt. Aus einer verschlüsselten Sicherung gilt das eingegebene Kennwort weiter, sonst ist es neu zu setzen; bis dahin legt das Programm nichts unverschlüsselt auf dem externen Ziel ab.
 Setup: Die Schlussmeldung verweist für eine spätere Datenübernahme auf die neue Seite statt auf das Kopieren von Hand.
 Unterlagen: Handbuch (Umzug auf einen neuen PC und Wiederherstellung, Rücksicherung, häufige Frage), Installationsanleitung Abschnitt 7, Verfahrensdokumentation (Abschnitte 5.1a, 5.3 und 9), Datenschutz-Dokumentation und technische Dokumentation sind angepasst. In einer betriebseigenen Fassung der Verfahrens- oder Datenschutz-Dokumentation sind die Ergänzungen von Hand nachzutragen.
+
+2026.11.01-151
+Startseite: Die Erinnerungen des Arbeitsschutzes auf der Startseite lassen sich ausschalten (Einstellungen › Programm › Startseite, „Erinnerungen des Arbeitsschutzes auf der Startseite anzeigen“, danach „Speichern“). Nach dem Update sind sie wie bisher eingeschaltet. Der Schalter wirkt nur auf diese Erinnerungen, alle anderen Hinweise der Startseite bleiben. Unter Arbeitsschutz › Übersicht stehen weiterhin alle Punkte, dort mit einem Vermerk, solange die Erinnerungen ausgeschaltet sind.
+Mitarbeiter: Am Schalter steht, dass die Erinnerungen einzuschalten sind, sobald Mitarbeiter beschäftigt werden. Sind sie ausgeschaltet und Mitarbeiter angelegt (aktiv, nicht ausgetreten, ohne den Inhaber), warnt das Programm am Schalter und zeigt dem Inhaber auf der Startseite einen Hinweis mit dem Weg zur Einstellung.
+Protokoll: Das Aus- und Einschalten wird wie jede Änderung der Einstellungen festgehalten.
+Begrüßung: Die Startseite begrüßt den angemeldeten Benutzer mit seinem Namen. Bisher stand dort für jeden der Inhaber aus den Firmendaten.
+Unterlagen: Handbuch (Startseite, Arbeitsschutz › Übersicht, Einstellungen) und technische Dokumentation sind angepasst.

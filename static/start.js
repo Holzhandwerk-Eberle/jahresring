@@ -9,7 +9,7 @@ const tageText = n => n === 0 ? "heute" : n === 1 ? "seit 1 Tag" : `seit ${n} Ta
 
 function begruessung() {
   const h = new Date().getHours();
-  const name = (E.firma_inhaber || "").split(" ")[0];
+  const name = ((ICH && ICH.name) || E.firma_inhaber || "").split(" ")[0];   // der angemeldete Benutzer, nicht für jeden der Inhaber
   return (h < 11 ? "Guten Morgen" : h < 18 ? "Hallo" : "Guten Abend") + (name ? ", " + name : "");
 }
 
@@ -156,7 +156,7 @@ async function ansichtStart(wieder) {
   dgZeichnen();
   window.onresize = () => { clearTimeout(START._rs); START._rs = setTimeout(dgZeichnen, 150); };
   $("#stJahr").onchange = e => { START.jahr = +e.target.value; ansichtStart(); };
-  asStartHinweis($("#stAS"));
+  asStartHinweis($("#stAS"), d.arbeitsschutz);
   if (darf("auftraege", 2)) api("cad/neu").then(neu => {
     if (!neu.length || !$("#stJahr")) return;
     const k = document.createElement("div"); k.className = "kachel"; k.style.cssText = "border-left:4px solid var(--akzent);margin-bottom:12px";

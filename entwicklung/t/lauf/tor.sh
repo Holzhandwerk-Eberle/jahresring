@@ -32,6 +32,10 @@ done
 # Version 150: Datenbestand vom bisherigen PC übernehmen (eigene Instanzen auf den Ports 8796 bis 8798), danach dieselben Seiten im Browser
 schritt uebernahme150 bash -c "timeout 900 python3 $T/neu/uebernahme150.py > $O/tor_aus_uebernahme150.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_uebernahme150.txt"
 schritt uebernahme_ui bash -c "cd $T/v25 && cp $T/neu/uebernahme_ui.js s/uebernahme_ui.js && timeout 400 node s/uebernahme_ui.js > $O/tor_aus_uebernahme_ui.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_uebernahme_ui.txt"
+# Version 151: Erinnerungen des Arbeitsschutzes auf der Startseite abschaltbar (nur diese), an der Schnittstelle und im Browser
+bash $T/v25/neu.sh >/dev/null 2>&1
+schritt startas151 bash -c "python3 $T/neu/startas151.py > $O/tor_aus_startas151.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_startas151.txt"
+schritt startas_ui bash -c "cd $T/v25 && cp $T/neu/startas_ui.js s/startas_ui.js && timeout 400 node s/startas_ui.js > $O/tor_aus_startas_ui.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_startas_ui.txt"
 bash $T/v25/neu.sh >/dev/null 2>&1
 schritt durchlauf bash -c "cd $T/v25 && timeout 600 node s/t10.js > $O/tor_t10.txt 2>&1; tail -1 $O/tor_t10.txt | grep -q 'fehler \[\]'"
 schritt seiten bash -c "cd $T/v25 && timeout 600 node s/crawl.js > $O/tor_crawl.txt 2>&1; grep -q '^Fehler: 0' $O/tor_crawl.txt && grep -q '^Auffällige Texte: 0' $O/tor_crawl.txt"
