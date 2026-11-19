@@ -136,6 +136,23 @@ x = A("GET", "service/protokoll?voll=1"); bel = x.get("belege") or {}
 ok("Belegprüfung nach Festschreiben ohne Befund", x["_s"] == 200 and bel.get("ok") is True, bel)
 con.close()
 
+print("== Zeitzone: Ortszeit des Programms ist die in Windows eingestellte")
+PROBE = ("from datetime import datetime, timezone; "
+         "print(int(datetime(2026, 11, 2, 12, tzinfo=timezone.utc).astimezone().utcoffset().total_seconds() // 60), "
+         "int(datetime(2026, 6, 1, 12, tzinfo=timezone.utc).astimezone().utcoffset().total_seconds() // 60))")
+def zone(vorweg="", tz=None):
+    env = {k: v for k, v in os.environ.items() if k.upper() != "TZ"}
+    if tz: env["TZ"] = tz
+    r = subprocess.run([sys.executable, "-c", vorweg + PROBE], capture_output=True, timeout=120, env=env, cwd=I)
+    return (r.stdout or b"").decode("utf-8", "replace").strip() or (r.stderr or b"").decode("utf-8", "replace").strip()[-300:]
+z_win = zone()
+z_tz = zone(tz="Europe/Berlin")
+z_prog = zone("import kern; ", tz="Europe/Berlin")
+hinweis(f"Abstand zur Weltzeit in Minuten (Winter Sommer): Windows {z_win} · mit Umgebungsvariable TZ=Europe/Berlin ohne Vorsorge {z_tz} · im Programm {z_prog}")
+ok("mit einer Umgebungsvariable TZ rechnet das Programm trotzdem mit der Zeitzone von Windows", z_prog == z_win and bool(re.fullmatch(r"-?\d+ -?\d+", z_win)), (z_win, z_tz, z_prog))
+ok("ohne die Variable ändert die Vorsorge nichts", zone("import kern; ") == z_win, zone("import kern; "))
+if z_win != "60 120": hinweis("Der Prüfrechner steht nicht in der mitteleuropäischen Zeitzone; am Büro-PC wären es 60 und 120 Minuten.")
+
 print("== Symbol neben der Uhr (nur Aufbau, ohne Anzeige)")
 try:
     import tray

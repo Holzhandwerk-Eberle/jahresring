@@ -2,11 +2,31 @@
 Ohne Abhängigkeit vom übrigen Programm, damit jedes Modul sie nutzen kann."""
 import json
 import math
+import os
 import re
 import secrets
 import threading
 from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
+
+
+def zeitzone_des_rechners():
+    """Windows: Ortszeit ist die in Windows eingestellte Zeitzone. Eine Umgebungsvariable TZ in der Schreibweise von Unix
+    („Europe/Berlin“, gesetzt etwa von Entwicklerwerkzeugen) läse die Laufzeitbibliothek als Zone ohne Abstand zur Weltzeit mit
+    Sommerzeit nach US-Regel – im Winter lägen dann alle Zeitstempel eine Stunde daneben. Deshalb gilt sie für das Programm nicht.
+    Gibt wahr zurück, wenn eine solche Angabe entfernt wurde."""
+    if os.name != "nt" or not os.environ.get("TZ"):
+        return False
+    try:
+        del os.environ["TZ"]
+        import ctypes
+        ctypes.CDLL("ucrtbase")._tzset()
+    except Exception:  # noqa: BLE001 – dann bleibt es beim Verhalten ohne diese Vorsorge
+        pass
+    return True
+
+
+ZEITZONE_BEREINIGT = zeitzone_des_rechners()
 
 
 class ApiFehler(Exception):

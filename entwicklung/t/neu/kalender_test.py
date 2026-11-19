@@ -1,7 +1,9 @@
 """Externe Kalender (iCal): Serientermine."""
 import sys, os, time
-os.environ["TZ"] = "Europe/Berlin"
-if hasattr(time, "tzset"): time.tzset()   # unter Windows gibt es tzset nicht; die geprüften Termine tragen ihre Zeitzone selbst
+# Zeitzone Mitteleuropa. Unter Windows gibt es tzset nicht, und die Umgebungsvariable TZ darf dort gar nicht erst gesetzt werden:
+# Die Laufzeitbibliothek läse „Europe/Berlin“ als Zone ohne Abstand zur Weltzeit mit Sommerzeit. Dort gilt die Zone des Rechners.
+if hasattr(time, "tzset"):
+    os.environ["TZ"] = "Europe/Berlin"; time.tzset()
 sys.path.insert(0, "/home/claude/eberle-buero")
 import kalender as K
 from datetime import datetime
