@@ -92,18 +92,34 @@ function mahnungenBinden(z, ms, neu) {
 async function zahlungBuchen(o, danach) {
   let best = E.zahlbest_vorschlagen !== false;
   const mk = o.mahnkosten > 0.004 ? o.mahnkosten : 0;
+  // Skonto: vereinbarten Betrag anbieten, solange noch nichts gezahlt ist – oder den Rest einer Teilzahlung als Skonto ausbuchen
+  const satz = zahlDE(o.skonto || 0, (o.skonto || 0) % 1 ? 2 : 0);
+  const restIstSkonto = !(o.skonto_betrag > 0) && o.skonto_offen > 0 && o.offen > 0.004 && o.offen <= o.skonto_offen + 0.011;
+  const skontoHinweis = o.skonto_betrag > 0
+    ? `Vereinbart: ${satz} % Skonto bis ${datum(o.skonto_bis)} = ${eur(o.skonto_betrag)}. <span id="zbSkFrist"></span> <button type="button" class="btn" id="zbSkNimm">Skonto abziehen</button>`
+    : restIstSkonto ? `Der offene Rest von ${eur(o.offen)} entspricht dem vereinbarten Skonto (${satz} %). <button type="button" class="btn" id="zbSkRest">Rest als Skonto ausbuchen</button>` : "";
   const d = await modal(`Zahlungseingang ${o.nummer}`, `
     <div class="zeile"><label>Datum</label><div><input type="date" name="datum" value="${heute()}"></div></div>
     <div class="zeile"><label>Betrag</label><div><input name="betrag" class="zahl" value="${n2(o.offen + mk)}" style="width:120px"> €</div></div>
     ${mk ? `<div class="zeile"><label></label><div class="hinweis">offen ${eur(o.offen)} + Mahnkosten ${eur(mk)}. Was über den Rechnungsbetrag hinausgeht, wird auf die Mahnkosten gebucht.</div></div>` : ""}
     <div class="zeile"><label>Skontoabzug</label><div><input name="skonto" class="zahl" value="" placeholder="0,00" style="width:120px"> €</div></div>
+    ${skontoHinweis ? `<div class="zeile" id="zbSk"><label></label><div class="hinweis">${skontoHinweis}</div></div>` : ""}
     <div class="zeile"><label>Zahlart</label><div><select name="art">${opts(E.bezahlarten, "Überweisung")}</select></div></div>
     <div class="zeile" id="zbBar" style="display:none"><label></label><div class="hinweis" style="color:#8a5a00">Bareinnahmen gehören zusätzlich in ein Kassenbuch (täglich, lückenlos). Das Programm führt keines – es vermerkt nur, dass die Rechnung bar bezahlt wurde.</div></div>
     <div class="zeile"><label>Bemerkung</label><div><input name="bemerkung"></div></div>
     <div class="zeile"><label></label><div><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="zbBest" ${E.zahlbest_vorschlagen !== false ? "checked" : ""} style="flex:0 0 auto"> danach Zahlungsbestätigung per E-Mail an den Kunden</label></div></div>`, "Buchen",
     hg => { $("#zbBest", hg).onchange = e => { best = e.target.checked; };
       const art = $("[name=art]", hg), bar = () => { $("#zbBar", hg).style.display = /^bar|bargeld|kasse/i.test(art.value) ? "" : "none"; };
-      art.addEventListener("change", bar); bar(); });
+      art.addEventListener("change", bar); bar();
+      const fb = $("[name=betrag]", hg), fs = $("[name=skonto]", hg), fd = $("[name=datum]", hg);
+      if ($("#zbSkNimm", hg)) {
+        // drei Tage Nachlauf wie beim Kontoauszug: Die Überweisung kann unterwegs gewesen sein
+        const frist = () => { const ende = new Date(o.skonto_bis + "T00:00:00"); ende.setDate(ende.getDate() + 3);
+          $("#zbSkFrist", hg).textContent = fd.value && new Date(fd.value + "T00:00:00") > ende ? "Die Frist ist an diesem Zahlungsdatum abgelaufen." : ""; };
+        fd.addEventListener("change", frist); frist();
+        $("#zbSkNimm", hg).onclick = () => { fb.value = n2(kfm(o.offen - o.skonto_betrag + mk)); fs.value = n2(o.skonto_betrag); };
+      }
+      if ($("#zbSkRest", hg)) $("#zbSkRest", hg).onclick = () => { fb.value = n2(0); fs.value = n2(o.offen); }; });
   if (!d) return;
   try { await api(`offeneposten/${o.id}/zahlung`, {method: "POST", body: {...d, betrag: zahlEin(d.betrag), skonto: zahlEin(d.skonto)}}); toast("Zahlung gebucht"); danach(); }
   catch (e) { return toast(e.message, true); }

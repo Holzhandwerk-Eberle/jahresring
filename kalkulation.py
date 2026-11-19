@@ -246,8 +246,40 @@ def wk_index(kalk):
 
 
 def wk_kosten(w):
-    """Kosten je Einheit inkl. Verschnitt."""
-    return f(w.get("preis")) * (1 + f(w.get("v")) / 100) if w else 0.0
+    """Kosten je Einheit inkl. Verschnitt. Ein Verschnitt unter −100 % ergäbe negative Kosten: gerechnet wird dann mit 0."""
+    return f(w.get("preis")) * max(0.0, 1 + f(w.get("v")) / 100) if w else 0.0
+
+
+# Womit die Kalkulation rechnet: Kanten je laufendem Meter, Platten, Furnier und Oberflächen je m², Massivholz je m³.
+# Steht am Werkstoff eine dieser Schreibweisen (oder nichts), ist der Preis schon der Preis je Recheneinheit.
+EINHEIT_GLEICH = {"lfm": {"lfm", "lfm.", "m", "lm", "lfdm"}, "m²": {"m²", "m2", "qm"}, "m³": {"m³", "m3", "cbm"}}
+
+
+def preis_bezug(w, soll, warnungen=None, was="Werkstoff"):
+    """Kosten je Recheneinheit (lfm, m² oder m³) inkl. Verschnitt. Hat der Werkstoff eine andere Einheit (Rolle, Dose, Liter, kg,
+    Tafel …), wird über „um“ umgerechnet: 1 Einheit = um Recheneinheiten. Fehlt die Umrechnung, bleibt es beim bisherigen Rechenweg
+    (Preis × Recheneinheit) – dann aber mit Warnung, weil der Preis so fast immer falsch ist."""
+    if not w:
+        return 0.0
+    k = wk_kosten(w)
+    e = str(w.get("einheit") or "").strip()
+    if not e or e in EINHEIT_GLEICH[soll]:
+        return k
+    um = f(w.get("um"))
+    if um > 0:
+        return k / um
+    if warnungen is not None and k:
+        warnungen.add(f"{was} „{w.get('name') or w.get('k')}“ hat die Einheit „{e}“, gerechnet wird je {soll}. Bitte bei den Werkstoffen des Auftrags "
+                      f"die Umrechnung eintragen (1 {e} = … {soll}) oder den Preis je {soll} angeben.")
+    return k
+
+
+def ohne_preis(w, was, warnungen):
+    """Warnung, wenn ein verwendeter Werkstoff keinen Preis hat (z. B. nach einem Stücklistenimport neu angelegt)."""
+    if warnungen is not None and w and f(w.get("preis")) <= 0:
+        warnungen.add(f"{was} „{w.get('name') or w.get('k')}“ hat keinen Preis – gerechnet wird mit 0 €")
+    if warnungen is not None and w and f(w.get("v")) < -100:
+        warnungen.add(f"{was} „{w.get('name') or w.get('k')}“: Verschnitt unter −100 % – gerechnet wird mit 0 €")
 
 
 def bs_index(kalk):
@@ -270,10 +302,13 @@ def teil_rechnen(t, wks, warnungen=None):
     if warnungen is not None:
         if t.get("werkstoff") and not p:
             warnungen.add(f"Werkstoff „{t.get('werkstoff')}“ aus der Stückliste fehlt in den Werkstoffen des Auftrags – das Material kostet 0 €")
+        ohne_preis(p, "Werkstoff", warnungen)
         for wo, kz in [("Kante", k_) for k_ in (t.get("kanten") or {}).values()] + [("Furnier", k_) for k_ in (t.get("furnier") or {}).values()] + \
                 [("Oberfläche", k_) for k_ in (t.get("oberflaeche") or {}).values()]:
             if kz and isinstance(kz, str) and kz not in wks:
                 warnungen.add(f"{wo} „{kz}“ aus der Stückliste fehlt in den Werkstoffen des Auftrags – sie kostet 0 €")
+            elif kz and isinstance(kz, str):
+                ohne_preis(wks.get(kz), wo, warnungen)
     # Fertigdicke: aus dem Werkstoff (Massivholz), sonst die Dicke des Teils (z. B. aus dem Stücklistenimport), sonst die Werkstoffdicke
     fertig = fertigdicke(t, p)
     flaeche = l * b
@@ -284,7 +319,7 @@ def teil_rechnen(t, wks, warnungen=None):
         if p.get("typ") == "massiv" and einheit not in ("m²", "m2", "lfm", "lfm.", "Stk.", "St.", "Stk"):
             # Massivholz: Kubikmeter aus Länge × Breite × Rohdicke, Preis je m³ inkl. Verschnitt
             volumen = flaeche * dicke / 1000
-            kosten_platte = volumen * wk_kosten(p)
+            kosten_platte = volumen * preis_bezug(p, "m³", warnungen, "Massivholz")
             if warnungen is not None and not dicke and flaeche:
                 warnungen.add(f"Massivholz „{p.get('name') or p.get('k')}“: weder Rohdicke am Werkstoff noch Dicke am Teil – das Material kostet 0 €")
         elif einheit in ("lfm", "lfm."):
@@ -292,26 +327,26 @@ def teil_rechnen(t, wks, warnungen=None):
         elif einheit in ("Stk.", "St.", "Stk"):
             kosten_platte = wk_kosten(p)
         else:
-            kosten_platte = flaeche * wk_kosten(p)
+            kosten_platte = flaeche * preis_bezug(p, "m²", warnungen, "Werkstoff")
     kanten = t.get("kanten") or {}
     kante_lfm, kosten_kante = 0.0, 0.0
     for seite, laenge in (("oben", l), ("unten", l), ("links", b), ("rechts", b)):
         k = kanten.get(seite)
         if k:
             kante_lfm += laenge
-            kosten_kante += laenge * wk_kosten(wks.get(k))
+            kosten_kante += laenge * preis_bezug(wks.get(k), "lfm", warnungen, "Kante")
     furn = t.get("furnier") or {}
     furnier_m2 = sum(flaeche for s in ("oben", "unten") if furn.get(s))
-    kosten_furnier = sum(flaeche * wk_kosten(wks.get(furn[s])) for s in ("oben", "unten") if furn.get(s))
+    kosten_furnier = sum(flaeche * preis_bezug(wks.get(furn[s]), "m²", warnungen, "Furnier") for s in ("oben", "unten") if furn.get(s))
     ofl = t.get("oberflaeche") or {}
     ofl_seiten = [s for s in ("oben", "unten") if ofl.get(s)]
     # Schmalflächen: ist eine Seite behandelt, werden alle vier Schmalflächen mitbehandelt (Umfang × Fertigdicke),
     # unabhängig davon, ob sie bekantet sind (Massivholz, lackierte MDF-Kanten, Anleimer …)
     schmal_m2 = 2 * (l + b) * fertig / 1000 if ofl_seiten else 0.0
     ofl_m2 = flaeche * len(ofl_seiten) + schmal_m2
-    kosten_ofl = sum(flaeche * wk_kosten(wks.get(ofl[s])) for s in ofl_seiten)
+    kosten_ofl = sum(flaeche * preis_bezug(wks.get(ofl[s]), "m²", warnungen, "Oberfläche") for s in ofl_seiten)
     if ofl_seiten:
-        kosten_ofl += schmal_m2 * wk_kosten(wks.get(ofl[ofl_seiten[0]]))
+        kosten_ofl += schmal_m2 * preis_bezug(wks.get(ofl[ofl_seiten[0]]), "m²", warnungen, "Oberfläche")
     fr = t.get("fraesen") or {}
     fraesen_lfm = sum(laenge for s, laenge in (("oben", l), ("unten", l), ("links", b), ("rechts", b)) if fr.get(s))
     massiv = bool(p) and p.get("typ") == "massiv"
@@ -388,7 +423,13 @@ def _position_rechnen(pos, kalk, kinder=()):
     werkstoffe = oberflaeche = massiv_m3 = 0.0
     teile = []
     warnungen = set()
-    for t in stueck:
+    for i, t in enumerate(stueck, 1):
+        # Negative Stückzahlen und Maße gibt es nicht; sie würden den Preis still mindern. Das Teil zählt dann nicht und wird gemeldet.
+        negativ = [n for n, k in (("Stückzahl", "stueck"), ("Länge", "laenge"), ("Breite", "breite")) if f(t.get(k)) < 0]
+        if negativ:
+            warnungen.add(f"Stückliste Zeile {i}{' (' + str(t.get('verwendung')) + ')' if t.get('verwendung') else ''}: {' und '.join(negativ)} negativ – "
+                          "das Teil wird nicht gerechnet")
+            t = {**t, "stueck": 0, "laenge": max(0.0, f(t.get("laenge"))), "breite": max(0.0, f(t.get("breite")))}
         r = teil_rechnen(t, wks, warnungen)
         n = 1.0 if t.get("stueck") in (None, "") else f(t.get("stueck"))   # leere Stückzahl = 1 Stück
         werkstoffe += r["kosten_werkstoff"] * n
@@ -405,14 +446,22 @@ def _position_rechnen(pos, kalk, kinder=()):
             bezug["x_" + str(b["k"])] = f(pb.get(str(b["k"])))
     # Anzahl Beschläge: leere Zeilen (kein Beschlag gewählt und keine Bemerkung) zählen nicht – sonst rechnet eine versehentlich
     # angelegte oder noch nicht ausgefüllte Zeile Arbeitszeit. Eine Zeile nur mit Bemerkung zählt (z. B. bauseits gestellte Beschläge).
-    bezug["beschlaege"] = sum(f(b.get("menge")) for b in pos.get("beschlaege") or [] if b.get("k") or str(b.get("bemerkung") or "").strip())
+    bs_liste = []
+    for i, b in enumerate(pos.get("beschlaege") or [], 1):
+        if f(b.get("menge")) < 0:
+            warnungen.add(f"Beschläge Zeile {i}: Menge negativ – die Zeile wird nicht gerechnet")
+            b = {**b, "menge": 0}
+        bs_liste.append(b)
+    bezug["beschlaege"] = sum(f(b.get("menge")) for b in bs_liste if b.get("k") or str(b.get("bemerkung") or "").strip())
     beschlaege = 0.0
     bzeilen = []
-    for b in pos.get("beschlaege") or []:
+    for b in bs_liste:
         stamm = bss.get(b.get("k") or "")
         k = f(stamm.get("preis")) if stamm else 0.0   # Beschläge: Kosten je Stück/Einheit, kein Verschnitt
         if b.get("k") and not stamm and f(b.get("menge")):
             warnungen.add(f"Beschlag „{b.get('k')}“ fehlt in den Beschlägen des Auftrags – er kostet 0 €")
+        elif stamm and k <= 0 and f(b.get("menge")):
+            warnungen.add(f"Beschlag „{stamm.get('name') or b.get('k')}“ hat keinen Preis – gerechnet wird mit 0 €")
         beschlaege += k * f(b.get("menge"))
         bzeilen.append({"kosten_me": kfm(k), "gesamt": kfm(k * f(b.get("menge"))),
                         "einheit": stamm.get("einheit") if stamm else "", "name": stamm.get("name") if stamm else ""})
@@ -423,12 +472,15 @@ def _position_rechnen(pos, kalk, kinder=()):
         kl[z.get("art") if z.get("art") in kl else "werkstoffe"] += kl_betrag(z)
     werkstoffe += kl["werkstoffe"]
     klein_pz = f(ex.get("kleinmaterial")) if ex.get("kleinmaterial") not in (None, "") else f(kalk.get("kleinmaterial"))
+    if klein_pz < -100 or f(kalk.get("gk_material")) < -100:
+        warnungen.add("Zuschlag unter −100 % (Kleinmaterial oder Material-Gemeinkosten) – gerechnet wird mit −100 %")
+        klein_pz = max(-100.0, klein_pz)
     kleinmaterial = (werkstoffe + beschlaege + oberflaeche) * klein_pz / 100
     fremd = kl["fremdleistungen"]
     # Zukauf (Handelsware, z. B. fertig gekaufter Schrank): zählt zum Material, mit Material-GK
     zukauf = kl["zukauf"]
     material = werkstoffe + beschlaege + oberflaeche + kleinmaterial + fremd + zukauf
-    gk_mat = material * f(kalk.get("gk_material")) / 100   # Material-GK auch auf Fremdleistungen und Zukauf
+    gk_mat = material * max(-100.0, f(kalk.get("gk_material"))) / 100   # Material-GK auch auf Fremdleistungen und Zukauf
 
     # Zeiten
     lohn_kst, stunden_kst = {}, {}
@@ -437,12 +489,23 @@ def _position_rechnen(pos, kalk, kinder=()):
     sum_bearb = sum_ruest = sum_helfer = 0.0
 
     roh = {}  # (Kostenstelle, Lohngruppe) → Stunden
+    # Arbeit im Haushalt des Kunden (§ 35a EStG): Stunden der dafür gewählten Kostenstellen (Montage, Reparatur, Fahrzeit …).
+    # Helferstunden zählen nach der Kostenstelle der Zeile, bei der geholfen wird, auch wenn sie auf der Helfer-Kostenstelle stehen.
+    haus_kst = set(kalk.get("_haushalt_kst") or [])
+    roh_haus = {}
 
-    def buche(kst, gruppe, h):
+    def buche(kst, gruppe, h, zeile_kst=None):
         roh[(kst, gruppe)] = roh.get((kst, gruppe), 0) + h
+        if (kst if zeile_kst is None else zeile_kst) in haus_kst:
+            roh_haus[(kst, gruppe)] = roh_haus.get((kst, gruppe), 0) + h
 
     modus = pos.get("zeitmodus") or "taetigkeiten"
-    for z in pos.get("zeiten") or []:
+    for i, z in enumerate(pos.get("zeiten") or [], 1):
+        negativ = [k for k in ("stunden", "minuten", "ruest", "helfer") if f(z.get(k)) < 0]
+        if negativ:   # negative Zeiten würden den Preis still mindern
+            warnungen.add(f"Zeiten Zeile {i}{' (' + str(z.get('name') or z.get('kst')) + ')' if z.get('name') or z.get('kst') else ''}: negative Zeit – "
+                          "gerechnet wird mit 0")
+            z = {**z, **{k: 0 for k in negativ}}
         gruppe = z.get("gruppe") or kalk.get("lohnbasis", "Durchschnitt")
         if modus == "stunden":
             h = f(z.get("stunden"))
@@ -469,7 +532,7 @@ def _position_rechnen(pos, kalk, kinder=()):
             # auf die Kostenstelle der Zeile und die Lohnbasis (sonst würden sie mit 0 € gerechnet)
             hk = helfer_kst if any(k.get("kst") == helfer_kst for k in kalk.get("kostenstellen", [])) else z.get("kst")
             hg = helfer_gr if any(g.get("gruppe") == helfer_gr for g in kalk.get("loehne", [])) else kalk.get("lohnbasis", "Durchschnitt")
-            buche(hk, hg, helfer_anz / 60)
+            buche(hk, hg, helfer_anz / 60, z.get("kst"))
         sum_bearb += min_anz / 60
         sum_ruest += ruest / 60
         sum_helfer += helfer_anz / 60
@@ -486,7 +549,10 @@ def _position_rechnen(pos, kalk, kinder=()):
         stunden_kst[kst] = round(stunden_kst.get(kst, 0) + h, 6)
         lohn_kst[kst] = lohn_kst.get(kst, 0) + h * lohn_von(kalk, gruppe, warnungen)
     lohn = sum(lohn_kst.values())
-    gk_lohn = sum(v * gk_von(kalk, k) / 100 for k, v in lohn_kst.items())
+    if any(gk_von(kalk, k) < -100 for k in lohn_kst):
+        warnungen.add("Gemeinkostenzuschlag einer Kostenstelle unter −100 % – gerechnet wird mit −100 %")
+    gk_lohn = sum(v * max(-100.0, gk_von(kalk, k)) / 100 for k, v in lohn_kst.items())
+    lohn_gk_haushalt = sum(round(h, 6) * lohn_von(kalk, gruppe) * (1 + max(-100.0, gk_von(kalk, kst)) / 100) for (kst, gruppe), h in roh_haus.items())
     stunden = sum(stunden_kst.values())
     sonder_fert = kl["sonder_fertigung"]   # Sonderkosten aus der Kostenliste: Fertigung mit W+G, Vertrieb ohne
     sonder_vertr = kl["sonder_vertrieb"]
@@ -499,6 +565,9 @@ def _position_rechnen(pos, kalk, kinder=()):
         wg_pz = (wg / selbstkosten * 100) if selbstkosten else 0
     else:
         wg_pz = f(ex.get("wg")) if ex.get("wg") not in (None, "") else f(kalk.get("wg"))
+        if wg_pz < -100:
+            warnungen.add("Wagnis und Gewinn unter −100 % – gerechnet wird mit −100 %")
+            wg_pz = -100.0
         wg = selbstkosten * wg_pz / 100
         ep = kfm(selbstkosten + wg + sonder_vertr)
 
@@ -523,6 +592,7 @@ def _position_rechnen(pos, kalk, kinder=()):
         "material_gk": material + gk_mat,
         "stunden": stunden, "stunden_kst": stunden_kst, "lohn": lohn,
         "gk_lohn_pz": (gk_lohn / lohn * 100) if lohn else 0, "gk_lohn": gk_lohn, "lohn_gk": lohn + gk_lohn,
+        "lohn_gk_haushalt": lohn_gk_haushalt,
         "sonder_fertigung": sonder_fert, "selbstkosten": selbstkosten,
         "wg_pz": wg_pz, "wg": wg, "sonder_vertrieb": sonder_vertr, "einzelpreis": kfm(ep),
         "unter_ep": kfm(unter_ep), "unter_kosten": unter_kosten, "unter_kat": unter_kat,

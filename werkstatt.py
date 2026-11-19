@@ -4,7 +4,7 @@ Werkstatt:  Werkstattauftrag, Stückliste, Materialsummen, Zuschnittliste (CSV)
 Auswertung: Auftragsstunden, Auftragskosten, Soll/Ist-Vergleich, Lohn- und Materialkosten
 """
 import kern
-from kern import zahl_lesen
+from kern import zahl_lesen, de_menge
 import csv
 from kalkulation import fertigdicke, anzahl_verbinden, kostenliste
 import io
@@ -338,7 +338,7 @@ def werkstattauftrag(a, k, erg, opts, hilfe, nur=None):
             extern.append(f"{art}: {menge}{(z.get('text') or '').strip() or 'ohne Beschreibung'}")
         if extern:
             wi_html += '<div class="k">' + " · ".join(h(x) for x in extern) + '</div>'
-        zeilen.append(f'<tr><td class="nw">{h(e["nr"])}</td><td class="r nw">{de(p["menge"], 2 if f(p["menge"]) % 1 else 0)} {h(p["einheit"])}</td>'
+        zeilen.append(f'<tr><td class="nw">{h(e["nr"])}</td><td class="r nw">{de_menge(p["menge"])} {h(p["einheit"])}</td>'
                       f'<td class="postext">{text}{f"<div class=k>Maße: {mtxt} mm</div>" if mtxt else ""}{wi_html}'
                       f'{f"<div class=bilder>{bilder}</div>" if bilder else ""}</td></tr>')
     pos = f'<div class="sek">Positionen</div><table class="t"><tr><th style="width:14mm">Pos.</th><th class="r" style="width:20mm">Menge</th><th>Beschreibung</th></tr>{"".join(zeilen)}</table>'
@@ -447,7 +447,7 @@ def stueckliste(a, k, erg, opts, hilfe, nur=None):
                      + f'<td class="nw">{h(kanten)}</td><td class="nw">{fo}</td><td class="nw">{oo}</td></tr>')
         legende = " · ".join(f"{kz}={h(wks[kz].get('name') or '')}{(' ' + de(wks[kz].get('dicke'), 1)) if f(wks[kz].get('dicke')) else ''}"
                              for kz in sorted(benutzt) if kz in wks)
-        block = (f'<div style="page-break-inside:avoid"><h2>Position {h(e["nr"])} &nbsp; {de(p["menge"], 2 if f(p["menge"]) % 1 else 0)} {h(p["einheit"])} {h(kurztext(p["text"]))}</h2>')
+        block = (f'<div style="page-break-inside:avoid"><h2>Position {h(e["nr"])} &nbsp; {de_menge(p["menge"])} {h(p["einheit"])} {h(kurztext(p["text"]))}</h2>')
         if sl:
             block += ('<div class="sek">Hauptwerkstoffe</div><table class="t"><tr><th>Nr</th><th>Verwendung</th><th>Werkstoff</th><th class="r">Stück</th>'
                       '<th class="r">Länge</th><th class="r">Breite</th><th class="r">Dicke</th>' + ('<th class="r">Zuschnitt L × B</th>' if mit_zs else "")
@@ -545,7 +545,7 @@ def montageauftrag(a, k, erg, opts, hilfe, nur=None):
     linien = lambda n, spalten: "".join("<tr class='linie'>" + "<td></td>" * spalten + "</tr>" for _ in range(n))
     pos = ""
     if opts.get("bemerkungen", True):
-        z = "".join(f'<tr><td class="nw">{h(e["nr"])}</td><td class="r nw">{de(e["p"]["menge"], 2 if f(e["p"]["menge"]) % 1 else 0)} {h(e["p"]["einheit"])}</td>'
+        z = "".join(f'<tr><td class="nw">{h(e["nr"])}</td><td class="r nw">{de_menge(e["p"]["menge"])} {h(e["p"]["einheit"])}</td>'
                     f'<td>{h(kurztext(e["p"]["text"]))}</td></tr>' for e in alle_positionen(erg, nur) if e["ebene"] == 0)
         pos = f'<div class="sek">Positionen</div><table class="t">{z}</table>'
     if not opts.get("handfelder"):
@@ -601,7 +601,7 @@ def auswertung_stunden(a, k, erg, opts, hilfe):
 
     def zeile(e):
         s = std(e)
-        text = h(kurztext(e["p"]["text"])) + (f'<div class="k">{de(e["p"]["menge"], 2 if f(e["p"]["menge"]) % 1 else 0)} {h(e["p"]["einheit"])}</div>')
+        text = h(kurztext(e["p"]["text"])) + (f'<div class="k">{de_menge(e["p"]["menge"])} {h(e["p"]["einheit"])}</div>')
         return (f'<tr><td>{h(e["nr"])}</td><td>{text}</td>' + "".join(f'<td class="r nw">{de(s.get(x, 0)) if s.get(x) else ""}</td>' for x in benutzt)
                 + f'<td class="r nw"><b>{de(sum(s.values()))}</b></td></tr>')
 

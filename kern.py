@@ -173,6 +173,20 @@ def de(z, n=2):
     return ("-" if z < 0 else "") + s
 
 
+def de_menge(x):
+    """Menge für Druck und Listen: ganze Zahlen ohne, sonst mit zwei Nachkommastellen – mit drei, wenn zwei die Menge verfälschen würden
+    (0,393 m³ wurde als 0,39 gedruckt, gerechnet aber mit 0,393)."""
+    try:
+        v = float(x or 0)
+    except (TypeError, ValueError):
+        v = 0.0
+    if not math.isfinite(v):
+        v = 0.0
+    v = kfm(v, 3)
+    n = 0 if v == int(v) else 2 if abs(v * 100 - round(v * 100)) < 1e-7 else 3
+    return de(v, n)
+
+
 def de_datum(iso):
     return f"{iso[8:10]}.{iso[5:7]}.{iso[:4]}" if iso and len(iso) >= 10 else ""
 

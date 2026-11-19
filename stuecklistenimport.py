@@ -60,10 +60,44 @@ def tasche_lesen(feld):
     return erg
 
 
+def zahl_lesen(s, stil=None):
+    """Liest eine Zahl der Stückliste streng → (Wert, Zustand). Zustand: "" (Feld leer), "ok", "mehrdeutig" (1.250 ohne
+    weiteren Anhalt als 1250 gelesen) oder "unlesbar". stil: "komma" (die Datei schreibt Dezimalkommas, der Punkt trennt Tausender),
+    "punkt" (die Datei schreibt Dezimalpunkte) oder None (kein Anhalt)."""
+    s = (s or "").strip().replace(" ", "").replace(" ", "")
+    if not s:
+        return 0.0, ""
+    if re.fullmatch(r"-?\d+", s):
+        return float(s), "ok"
+    if re.fullmatch(r"-?(\d{1,3}(\.\d{3})+|\d+),\d+", s):
+        return float(s.replace(".", "").replace(",", ".")), "ok"
+    if re.fullmatch(r"-?\d{1,3}(\.\d{3})+", s):
+        if stil == "punkt":
+            return float(s), "ok"
+        return float(s.replace(".", "")), "ok" if stil == "komma" else "mehrdeutig"
+    if re.fullmatch(r"-?\d+\.\d+", s) and stil != "komma":
+        return float(s), "ok"
+    return 0.0, "unlesbar"
+
+
+def zahlen_stil(felder):
+    """Schreibweise der Zahlen in den Maß- und Mengenfeldern einer Datei: "komma", "punkt" oder None."""
+    komma = punkt = False
+    for f in felder:
+        for x in f[1:7]:
+            x = (x or "").strip()
+            if re.fullmatch(r"-?[\d.]+,\d+", x):
+                komma = True
+            elif re.fullmatch(r"-?\d+\.\d+", x) and not re.fullmatch(r"-?\d{1,3}(\.\d{3})+", x):
+                punkt = True
+    return "komma" if komma else ("punkt" if punkt else None)
+
+
 def zeilen_lesen(text, erweitert=None):
-    """→ (position, teile, beschlaege, erweitert). Zeilen mit weniger als 3 Feldern werden ignoriert."""
-    roh = [z for z in (text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n") if z.strip()]
-    felder = [[f.strip() for f in z.split(";")] for z in roh]
+    """→ (position, teile, beschlaege, erweitert, hinweise). Was sich nicht eindeutig lesen lässt, wird nicht umgedeutet, sondern
+    ausgelassen und in hinweise gemeldet: [{zeile, art: "fehler" (Zeile ausgelassen) | "hinweis" (gelesen, bitte prüfen), text}]."""
+    roh = [(nr, z) for nr, z in enumerate((text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n"), 1) if z.strip()]
+    felder = [[f.strip() for f in z.split(";")] for _, z in roh]
     if erweitert is None:
         # Standard: Feld 3 = Anzahl (Zahl). Erweitert: Feld 3 = Verwendung (Text), Feld 4 = Anzahl
         ist_zahl = lambda x: bool(re.fullmatch(r"-?[\d.]+(,\d+)?", (x or "").strip()))  # noqa: E731
@@ -76,29 +110,112 @@ def zeilen_lesen(text, erweitert=None):
             elif ist_zahl(f[3]):
                 erw += 1
         erweitert = erw > std
-    position, teile, beschlaege = None, [], []
+    stil = zahlen_stil(felder)
+    position, teile, beschlaege, hinweise = None, [], [], []
+
+    def melde(nr, text_, art="fehler"):
+        hinweise.append({"zeile": nr, "art": art, "text": text_})
+
     for i, f in enumerate(felder):
+        nr_zeile = roh[i][0]
+        n_felder = len(f)
         f = f + [""] * (26 - len(f))
         if not f[0]:
             if i == 0 and f[1]:
-                position = {"text": f[1], "menge": zahl(f[2]) or 1, "h": zahl(f[3]), "b": zahl(f[4]), "t": zahl(f[5])}
+                werte = {}
+                for name, feld, x in (("Anzahl", "menge", f[2]), ("Höhe", "h", f[3]), ("Breite", "b", f[4]), ("Tiefe", "t", f[5])):
+                    w, zustand = zahl_lesen(x, stil)
+                    if zustand == "unlesbar" or w < 0:
+                        melde(nr_zeile, f"{name} der Position „{x}“ ist keine brauchbare Zahl und wird nicht übernommen.", "hinweis")
+                        w = 0.0
+                    elif zustand == "mehrdeutig":
+                        melde(nr_zeile, f"{name} der Position „{x}“ wurde als {w:.0f} gelesen (Punkt als Tausenderzeichen).", "hinweis")
+                    werte[feld] = w
+                position = {"text": f[1], "menge": werte["menge"] or 1, "h": werte["h"], "b": werte["b"], "t": werte["t"]}
+            elif f[1] and any(x.strip() for x in f[2:6]):
+                melde(nr_zeile, f"weitere Positionszeile „{f[1][:40]}“: Alle Teile dieser Daten kommen in die eine, geöffnete Position.", "hinweis")
             continue
         nr = f[0]
         bez = f[1] if erweitert else ""
         g = f[2:] if erweitert else f[1:]   # g[0] = Verwendung, g[1] = Anzahl, g[2] = Länge …
-        laenge, breite = zahl(g[2]), zahl(g[3])
-        if not laenge or not breite:
-            beschlaege.append({"nr": nr, "bez": bez, "verwendung": g[0], "menge": zahl(g[1]) or 1})
+        was = f"„{nr}“" + (f" ({g[0][:30]})" if g[0] else "")
+        if n_felder < (4 if erweitert else 3):
+            melde(nr_zeile, f"{was}: zu wenige Felder, die Anzahl fehlt. Zeile nicht übernommen.")
+            continue
+        anzahl, z_a = zahl_lesen(g[1], stil)
+        laenge, z_l = zahl_lesen(g[2], stil)
+        breite, z_b = zahl_lesen(g[3], stil)
+        unlesbar = [f"{n} „{x}“" for n, x, z in (("Anzahl", g[1], z_a), ("Länge", g[2], z_l), ("Breite", g[3], z_b)) if z == "unlesbar"]
+        if unlesbar:
+            melde(nr_zeile, f"{was}: {' und '.join(unlesbar)} {'ist keine Zahl' if len(unlesbar) == 1 else 'sind keine Zahlen'}. Zeile nicht übernommen.")
+            continue
+        if anzahl < 0 or laenge < 0 or breite < 0:
+            melde(nr_zeile, f"{was}: negative Anzahl oder negatives Maß. Zeile nicht übernommen.")
+            continue
+        if z_a and not anzahl:
+            melde(nr_zeile, f"{was}: Anzahl 0. Zeile nicht übernommen.")
+            continue
+        if not z_a:
+            melde(nr_zeile, f"{was}: Anzahl fehlt, 1 angenommen.", "hinweis")
+            anzahl = 1.0
+        if bool(laenge) != bool(breite):
+            melde(nr_zeile, f"{was}: {'Breite' if laenge else 'Länge'} fehlt. Ein Teil braucht Länge und Breite, ein Beschlag keines von beiden. Zeile nicht übernommen.")
+            continue
+        for n, x, w, z in (("Anzahl", g[1], anzahl, z_a), ("Länge", g[2], laenge, z_l), ("Breite", g[3], breite, z_b)):
+            if z == "mehrdeutig":
+                melde(nr_zeile, f"{was}: {n} „{x}“ wurde als {w:.0f} gelesen (Punkt als Tausenderzeichen). Bitte prüfen.", "hinweis")
+        if not laenge:
+            beschlaege.append({"nr": nr, "bez": bez, "verwendung": g[0], "menge": anzahl})
+            continue
+        if anzahl != int(anzahl):
+            melde(nr_zeile, f"{was}: Stückzahl „{g[1]}“ ist keine ganze Zahl. Zeile nicht übernommen.")
             continue
         kanten = {"links": g[4], "rechts": g[5], "oben": g[6], "unten": g[7]}
-        teile.append({"nr": nr, "bez": bez, "verwendung": g[0][:40], "stueck": int(zahl(g[1]) or 1), "laenge": laenge, "breite": breite,
+        teile.append({"nr": nr, "bez": bez, "verwendung": g[0][:40], "stueck": int(anzahl), "laenge": laenge, "breite": breite,
                       "kanten": kanten, "verlauf": g[8].upper()[:1], "furnier": {"oben": g[9], "unten": g[10]},
                       "oberflaeche": {"oben": g[11], "unten": g[12]}, "bemerkung": g[13],
                       "fraesen": {s: 1 if g[14 + j] == "1" else 0 for j, s in enumerate(("links", "rechts", "oben", "unten"))},
                       "verbinden": {"oben": 1 if g[18] == "1" else 0, "unten": 1 if g[19] == "1" else 0},
                       "bohren": int(zahl(g[20])) if g[20].strip().isdigit() else 0,
                       **tasche_lesen(g[21])})
-    return position, teile, beschlaege, erweitert
+    return position, teile, beschlaege, erweitert, hinweise
+
+
+def schon_enthalten(con, kalk, pos, teile, beschlaege):
+    """Wie viele der gelesenen Teile und Beschläge stehen schon in der Position? Teile gelten als gleich bei gleicher Verwendung,
+    Stückzahl, Länge und Breite; Beschläge bei gleichem Material und gleicher Menge. → (teile_doppelt, beschlaege_doppelt)"""
+    def f(x):
+        try:
+            return round(float(x or 0), 1)
+        except (TypeError, ValueError):
+            return 0.0
+    vorh = {}
+    for t in (pos or {}).get("stueckliste") or []:
+        k = (str(t.get("verwendung") or "")[:40], f(t.get("stueck")), f(t.get("laenge")), f(t.get("breite")))
+        vorh[k] = vorh.get(k, 0) + 1
+    n_t = 0
+    for t in teile:
+        k = (t["verwendung"], f(t["stueck"]), f(t["laenge"]), f(t["breite"]))
+        if vorh.get(k, 0) > 0:
+            vorh[k] -= 1
+            n_t += 1
+    kuerzel = {}   # Materialnummer → Kürzel in den Auftragswerten
+    for b in (kalk or {}).get("beschlaege") or []:
+        for nr in (b.get("artnr"), b.get("matnr")):
+            if nr:
+                kuerzel[nr] = b.get("k")
+    vorh_b = {}
+    for b in (pos or {}).get("beschlaege") or []:
+        k = (b.get("k"), f(b.get("menge")))
+        vorh_b[k] = vorh_b.get(k, 0) + 1
+    n_b = 0
+    for b in beschlaege:
+        m = material_suchen(con, b["nr"], b["bez"], ROLLE_KATS["beschlag"])
+        k = (kuerzel.get(m["nummer"]) if m else None, f(b["menge"]))
+        if k[0] and vorh_b.get(k, 0) > 0:
+            vorh_b[k] -= 1
+            n_b += 1
+    return n_t, n_b
 
 
 def material_suchen(con, code, bez, kats):
@@ -144,11 +261,17 @@ def benoetigte_materialien(teile, beschlaege):
     return bedarf
 
 
-def vorschau(con, text, erweitert=None):
-    position, teile, beschlaege, erw = zeilen_lesen(text, erweitert)
+def hinweis_text(hinweise, hoechstens=3):
+    return " ".join(f"Zeile {h['zeile']}: {h['text']}" for h in hinweise[:hoechstens])
+
+
+def vorschau(con, text, erweitert=None, kalk=None, pos=None):
+    position, teile, beschlaege, erw, hinweise = zeilen_lesen(text, erweitert)
     if not teile and not beschlaege:
+        fehler = [h for h in hinweise if h["art"] == "fehler"]
         raise Fehler("In den Daten wurden keine Teile oder Beschläge gefunden. Erwartet wird das CSV-Stücklistenformat mit 22 Feldern "
-                     "(Semikolon getrennt, eine Zeile je Teil).")
+                     "(Semikolon getrennt, eine Zeile je Teil)." + (" " + hinweis_text(fehler) if fehler else ""))
+    doppelt_t, doppelt_b = schon_enthalten(con, kalk, pos, teile, beschlaege)
     mats = []
     naechste = {}
     for (rolle, code), e in sorted(benoetigte_materialien(teile, beschlaege).items(), key=lambda x: (list(ROLLEN).index(x[0][0]), x[0][1])):
@@ -162,6 +285,8 @@ def vorschau(con, text, erweitert=None):
                      "neu": {"kategorie": kat, "gruppe": gruppe, "bezeichnung": e["bez"] or code,
                              "dicke": dicke_raten(e["bez"], code) if rolle == "platte" else (dicke_raten(code) if rolle == "kante" else 0)}})
     return {"position": position, "teile": len(teile), "beschlaege": len(beschlaege), "erweitert": erw, "materialien": mats,
+            "hinweise": hinweise, "ausgelassen": sum(1 for h in hinweise if h["art"] == "fehler"),
+            "doppelt": {"teile": doppelt_t, "beschlaege": doppelt_b, "alles": doppelt_t == len(teile) and doppelt_b == len(beschlaege)},
             "beispiele": [{"nr": t["nr"], "verwendung": t["verwendung"], "stueck": t["stueck"], "laenge": t["laenge"], "breite": t["breite"]}
                           for t in teile[:6]],
             "naechste": naechste, "kategorien": material.KATEGORIEN, "gruppen": material.STANDARD_GRUPPEN}
@@ -197,7 +322,7 @@ def auftrags_werkstoff(kalk, m, rolle):
         wks.append(ziel)
     einheit = {"lfm.": "lfm", "Liter": "l"}.get(m["einheit"], m["einheit"]) or TYP_EINHEIT[typ]
     ziel.update({"name": (m["bezeichnung"] or "").split("\n")[0], "preis": (m.get("kalkpreis") if m.get("kalkpreis") is not None else m["ek_preis"]) or 0, "v": m.get("verschnitt") or 0,
-                 "stamm_preis": (m.get("kalkpreis") if m.get("kalkpreis") is not None else m["ek_preis"]) or 0, "stamm_v": m.get("verschnitt") or 0, "einheit": einheit, "matnr": m["nummer"], "lieferant": m.get("lieferant") or "", "bestellnr": m.get("bestellnr") or "",
+                 "stamm_preis": (m.get("kalkpreis") if m.get("kalkpreis") is not None else m["ek_preis"]) or 0, "stamm_v": m.get("verschnitt") or 0, "einheit": einheit, "um": m.get("umrechnung") or 0, "matnr": m["nummer"], "lieferant": m.get("lieferant") or "", "bestellnr": m.get("bestellnr") or "",
                  "preis_vom": m.get("preis_vom") or ""})
     if m.get("dicke"):
         ziel["dicke"] = m["dicke"]
@@ -207,7 +332,7 @@ def auftrags_werkstoff(kalk, m, rolle):
 def importieren(con, kalk, pos, text, zuordnung, erweitert=None, ersetzen=False):
     """zuordnung: {"rolle|code": {"material_id": n} | {"neu": {kategorie, gruppe, bezeichnung, dicke}} | {"weglassen": True}}
     → (stueckliste, beschlaege, position, angelegt[])"""
-    position, teile, beschlaege, _ = zeilen_lesen(text, erweitert)
+    position, teile, beschlaege, _, _hinweise = zeilen_lesen(text, erweitert)
     bedarf = benoetigte_materialien(teile, beschlaege)
     codes = {}   # (rolle, code) → Kürzel in den Auftragswerten
     angelegt = []

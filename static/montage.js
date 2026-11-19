@@ -92,7 +92,7 @@ async function ansichtMontage(id) {
         <h3>Verwendetes Material</h3>
         <div class="mb-mat">${b.material.map((m, i) => `<div class="mb-matz">
           <div class="mb-matname">${m.nummer ? `<b>${esc(m.nummer)}</b> ` : ""}${m.material_id ? esc(m.bezeichnung) : `<input data-m="${i}" data-k="bezeichnung" value="${esc(m.bezeichnung || "")}" placeholder="Bezeichnung (frei)" ${dis}>`}${m.lager ? ` <span class="hinweis">Lager</span>` : ""}</div>
-          <input class="zahl" inputmode="decimal" data-m="${i}" data-k="menge" value="${m.menge ? n2(m.menge, m.menge % 1 ? 2 : 0) : ""}" placeholder="Menge" style="width:90px" ${dis}>
+          <input class="zahl" inputmode="decimal" data-m="${i}" data-k="menge" value="${m.menge ? mengeDE(m.menge) : ""}" placeholder="Menge" style="width:90px" ${dis}>
           ${m.material_id ? `<span>${esc(m.einheit || "")}</span>` : `<input data-m="${i}" data-k="einheit" value="${esc(m.einheit || "Stk.")}" style="width:70px" ${dis}>`}
           ${offen ? `<button class="btn rot" data-mdel="${i}">✕</button>` : ""}</div>`).join("") || `<p class="hinweis">Noch kein Material.</p>`}</div>
         ${offen ? `<div class="mb-suche"><input id="mbSuch" placeholder="Material suchen (Nummer, Bezeichnung, EAN) …" autocomplete="off"><div id="mbTreffer"></div></div>

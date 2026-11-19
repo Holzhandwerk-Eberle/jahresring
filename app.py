@@ -54,7 +54,7 @@ from monatsbeleg import monatsbeleg_hash, monatsbeleg_hash_v1, monatsbeleg_signa
 from arbeitsschutz_web import zeichen_liste, arbeitsschutz_api, stempel_arbeitsschutz, as_druck_name, as_druck_html  # noqa: F401
 import kern
 import datenschutz
-from kern import ApiFehler, jetzt, zahl, jl, de, de_datum, h, plus_tage, kfm, zahl_lesen
+from kern import ApiFehler, jetzt, zahl, jl, de, de_datum, de_menge, h, plus_tage, kfm, zahl_lesen
 from sepa import iban_normal, iban_ok, ibanFormat_py, sepa_xml
 import liquiditaet
 import preise
@@ -361,6 +361,9 @@ NACHRUESTEN = [
     ("offene_posten", "mahnsperre", "INTEGER DEFAULT 0"),
     ("zahlungseingaenge", "auf_mahnkosten", "REAL DEFAULT 0"),
     ("mitarbeiter", "geburtsdatum", "TEXT DEFAULT ''"),
+    ("material", "umrechnung", "REAL DEFAULT 0"),   # 1 Einheit = so viele Recheneinheiten der Kalkulation (lfm, m², m³); 0 = keine Umrechnung
+    ("offene_posten", "skonto", "REAL DEFAULT 0"),       # vereinbartes Skonto in Prozent, wie es auf der Rechnung steht
+    ("offene_posten", "skonto_bis", "TEXT DEFAULT ''"),   # letzter Tag der Skontofrist
 ]
 
 STANDARD_EINSTELLUNGEN = {
@@ -410,6 +413,7 @@ STANDARD_EINSTELLUNGEN = {
     "sepa_name": "",
     "sepa_iban": "",
     "sepa_bic": "",
+    "sepa_einzelbuchung": False,   # SEPA-Datei: jede Zahlung einzeln abbuchen lassen (sonst Sammelbuchung über die Summe)
     "unterordner": [],
     "kalk_vorgaben": {},
     "taetigkeiten": TAETIGKEITEN_VORGABE,
@@ -467,11 +471,14 @@ STANDARD_EINSTELLUNGEN = {
     "text_14b": "",
     "lohnanteil": "privat",   # Arbeitskosten nach § 35a EStG ausweisen: "privat", "alle", "nie"
     "lohnanteil_wg": True,    # Wagnis und Gewinn anteilig zum Arbeitspreis rechnen (sonst nur Lohn mit Gemeinkosten)
+    # Kostenstellen, deren Arbeit im Haushalt des Kunden geleistet wird: Nur sie zählen zu den Arbeitskosten nach § 35a EStG
+    # (Arbeit in der Werkstatt ist nicht begünstigt, BFH 13.05.2020 – VI R 4/18)
+    "lohnanteil_kst": ["MONTAGE", "REPARAT", "FAHRZEIT"],
     "land_immer": False,      # Land auch bei Inlandsanschriften in die Briefanschrift
     "angebot_gueltig_tage": 7,   # Platzhalter {gueltig_bis} im Angebotstext = Belegdatum + Tage
-    "text_lohnanteil": ("Im Rechnungsbetrag sind Arbeitskosten (Lohn-, Maschinen- und Fahrtkosten) in Höhe von {lohn_netto} € netto "
-                        "zzgl. {lohn_ust} € Umsatzsteuer, zusammen {lohn_brutto} €, enthalten. Diese können Sie als Handwerkerleistung "
-                        "nach § 35a EStG in Ihrer Steuererklärung angeben."),
+    "text_lohnanteil": ("Im Rechnungsbetrag sind Arbeitskosten für Leistungen in Ihrem Haushalt (Lohn-, Maschinen- und Fahrtkosten) in Höhe "
+                        "von {lohn_netto} € netto zzgl. {lohn_ust} € Umsatzsteuer, zusammen {lohn_brutto} €, enthalten. Diese können Sie als "
+                        "Handwerkerleistung nach § 35a EStG in Ihrer Steuererklärung angeben."),
     "rechnung_zusatz": "",
     "pdf_ordner": {"angebot": "Angebot", "kv": "Angebot", "ab": "Angebot", "lieferschein": "Liefer", "abnahme": "Liefer",
                    "abschlag": "Rechnung", "rechnung": "Rechnung", "storno": "Rechnung", "gutschrift": "Rechnung", "korrektur": "Rechnung"},
@@ -747,7 +754,37 @@ def init_db():
                         "WHERE IFNULL(email,'')='' AND rolle<>'inhaber' AND mitarbeiter_id IS NOT NULL "
                         "AND IFNULL((SELECT TRIM(m.email) FROM mitarbeiter m WHERE m.id=benutzer.mitarbeiter_id),'') LIKE '%_@_%'")
             con.execute("INSERT INTO einstellungen VALUES ('_reset_adresse_konto', 'true')")
+        # Einmalig (Version 152): Skontosatz und Skontofrist stehen jetzt am offenen Posten. Für vorhandene Posten aus der Rechnung nachtragen.
+        if not con.execute("SELECT 1 FROM einstellungen WHERE schluessel='_op_skonto_152'").fetchone():
+            for r in con.execute("SELECT o.id, b.datum, b.daten, b.druck FROM offene_posten o JOIN belege b ON b.id=o.beleg_id "
+                                 "WHERE b.art<>'storno' AND IFNULL(o.skonto_bis,'')=''").fetchall():
+                satz, bis = skonto_der_rechnung(jl(r["daten"], {}), jl(r["druck"], {}), r["datum"])
+                if satz:
+                    con.execute("UPDATE offene_posten SET skonto=?, skonto_bis=? WHERE id=?", (satz, bis, r["id"]))
+            con.execute("INSERT INTO einstellungen VALUES ('_op_skonto_152', 'true')")
+        # Einmalig (Version 152): Der Satz zu den Arbeitskosten nach § 35a nennt jetzt die Leistungen im Haushalt. Wer die bisherige
+        # Vorgabe unverändert gespeichert hat, bekommt die neue; ein eigener Text bleibt.
+        if not con.execute("SELECT 1 FROM einstellungen WHERE schluessel='_lohntext_152'").fetchone():
+            r = con.execute("SELECT wert FROM einstellungen WHERE schluessel='text_lohnanteil'").fetchone()
+            if r and jl(r[0], None) == TEXT_LOHNANTEIL_ALT:
+                con.execute("DELETE FROM einstellungen WHERE schluessel='text_lohnanteil'")
+            con.execute("INSERT INTO einstellungen VALUES ('_lohntext_152', 'true')")
         indizes_anlegen(con)
+
+
+def skonto_der_rechnung(daten, druck, datum):
+    """(Satz in Prozent, letzter Tag der Frist) so, wie beides auf der Rechnung gedruckt wird – oder (0, '')."""
+    ku = (daten or {}).get("kunde") or {}
+    try:
+        satz, tage = float(ku.get("skonto") or 0), int(float(ku.get("skontotage") or 0))
+    except (TypeError, ValueError):
+        return 0.0, ""
+    if satz <= 0 or tage <= 0 or not datum or not (druck or {}).get("konditionen", True):
+        return 0.0, ""
+    try:
+        return satz, plus_tage(datum, tage)
+    except ValueError:
+        return 0.0, ""
 
 
 # Zusätzliche Suchfelder für große Datenbestände: jede Verweisspalte (…_id) bekommt einen Index, dazu Datum/Status in
@@ -2783,6 +2820,7 @@ def auftrag_rechnen(con, aid):
     """Rechnet alle Positionen eines Auftrags, nummeriert sie und bildet Summen."""
     kalk = dict(auftrag_kalk(con, aid))
     kalk["_bezug_eigen"] = kalk.get("bezug_eigen") or []   # Kopie im Auftrag (siehe auftrag_kalk)
+    kalk["_haushalt_kst"] = lohnanteil_kst(con)
     titel, titel_druck = auftrag_titel(con, aid)
     titel_reihe = {t["nr"]: i for i, t in enumerate(titel)}
     titel_gesperrt = {t["nr"] for t in titel if t.get("gesperrt")}
@@ -2878,6 +2916,8 @@ def pos_werte(daten):
                 v = json.dumps(v if v is not None else ({} if k in ("masse", "zeige", "extras") else []), ensure_ascii=False)
             elif k in ("menge", "einzelpreis", "sort"):
                 v = zahl(v, float)
+                if k == "menge":
+                    v = kfm(v, 3)
             elif k == "text":
                 v = bereinigen(v)
             elif k in ("titel", "gesperrt", "preis_manuell"):
@@ -3495,14 +3535,31 @@ def anrede_aufloesen(k, leer="Sehr geehrte Damen und Herren,"):
     return t
 
 
+TEXT_LOHNANTEIL_ALT = ("Im Rechnungsbetrag sind Arbeitskosten (Lohn-, Maschinen- und Fahrtkosten) in Höhe von {lohn_netto} € netto "
+                       "zzgl. {lohn_ust} € Umsatzsteuer, zusammen {lohn_brutto} €, enthalten. Diese können Sie als Handwerkerleistung "
+                       "nach § 35a EStG in Ihrer Steuererklärung angeben.")   # Vorgabe bis Version 151
+
+
+def lohnanteil_kst(con):
+    """Kostenstellen, deren Arbeit beim Kunden geleistet wird (Einstellungen › Belege, Arbeitskosten § 35a)."""
+    r = con.execute("SELECT wert FROM einstellungen WHERE schluessel='lohnanteil_kst'").fetchone()
+    v = jl(r[0], None) if r else None
+    return [str(x) for x in v] if isinstance(v, list) else list(STANDARD_EINSTELLUNGEN["lohnanteil_kst"])
+
+
 def lohnanteil_rechnen(erg, summen, ust_satz, mit_wg=True):
-    """Arbeitskosten der berechneten Positionen für § 35a EStG: der Teil des Preises, der auf die Arbeit entfällt
-    (Lohn mit Gemeinkosten, mit_wg: zuzüglich anteiligem Wagnis und Gewinn). Material bleibt außen vor."""
+    """Arbeitskosten der berechneten Positionen für § 35a EStG: der Teil des Preises, der auf die Arbeit im Haushalt des Kunden
+    entfällt (Lohn mit Gemeinkosten der dafür gewählten Kostenstellen, mit_wg: zuzüglich anteiligem Wagnis und Gewinn; oder der an der
+    Position von Hand eingetragene Anteil). Material und Arbeit in der Werkstatt bleiben außen vor."""
     titel_gesperrt = {t["nr"] for t in erg["titel"] if t.get("gesperrt")}
 
     def arbeit_je_einheit(p):
         c = p.get("_calc") or {}
-        eigen = fl(c.get("lohn_gk")) * ((1 + fl(c.get("wg_pz")) / 100) if mit_wg else 1)
+        von_hand = (p.get("extras") or {}).get("lohnanteil_pz")
+        if von_hand not in (None, ""):   # an der Position eingetragen: Anteil des Preises, der Arbeit beim Kunden ist (Preis ohne Zeiten)
+            eigen = fl(c.get("einzelpreis")) * min(100.0, max(0.0, fl(von_hand))) / 100
+        else:
+            eigen = fl(c.get("lohn_gk_haushalt")) * ((1 + fl(c.get("wg_pz")) / 100) if mit_wg else 1)
         return eigen + sum(fl(k["menge"]) * arbeit_je_einheit(k) for k in p.get("kinder") or [] if not k.get("gesperrt"))
     roh = 0.0
     for p in erg["positionen"]:
@@ -3610,7 +3667,7 @@ def beleg_snapshot(con, aid, art, opts=None):
         text = opts.get("text") or f"{nr}. Abschlagszahlung\nAuftrag {a['nummer']} „{a['bezeichnung']}“" + (f"\n{zusatz}" if zusatz else "")
         daten["zeilen"] = [{"typ": "pos", "posnr": "01", "menge": 1, "einheit": "Psch.", "text": text, "ep": betrag, "gp": betrag,
                             "zeige": {"posnr": 1, "anzahl": 1, "ep": 1, "gp": 1}, "zaehlt": True, "unter": [], "unterdruck": "verdeckt"}]
-        daten["abschlag"] = {"prozent": opts.get("prozent"), "betrag": opts.get("betrag"), "text": opts.get("text")}
+        daten["abschlag"] = {"prozent": opts.get("prozent"), "betrag": opts.get("betrag"), "text": opts.get("text"), "auftrag_netto": netto_auftrag}
         # Auftragspositionen zur Information anhängen (zählen nicht, gehen nicht in die E-Rechnung)
         if dr.get("ab_positionen") in ("ja", "ohne"):
             info = [dict(z, info=True, zaehlt=False, zeige={**z.get("zeige", {}), "ep": z.get("zeige", {}).get("ep", 1) if dr["ab_positionen"] == "ja" else 0,
@@ -3803,6 +3860,12 @@ def bezug_rechnung(con, aid, bid):
     return {"id": r["id"], "nummer": r["nummer"], "datum": r["datum"]}
 
 
+def abschlag_wert_pruefen(d):
+    """Ein Abschlag ist ein positiver Betrag oder ein Anteil über 0 %; ein negativer Abschlag wäre eine Gutschrift (eigene Belegart)."""
+    if fl(d.get("prozent")) < 0 or fl(d.get("betrag")) < 0 or (not fl(d.get("prozent")) and fl(d.get("betrag")) <= 0):
+        raise ApiFehler("Der Abschlag muss größer als 0 sein. Für eine Rückzahlung gibt es die Belegart Gutschrift.")
+
+
 def beleg_anlegen(con, aid, d):
     art = d.get("art")
     e = einstellungen(con)
@@ -3813,6 +3876,8 @@ def beleg_anlegen(con, aid, d):
         raise ApiFehler("Unbekannte Belegart.")
     if art == "abschlag" and not (fl(d.get("prozent")) or fl(d.get("betrag"))):
         raise ApiFehler("Bitte Betrag oder Prozent für die Abschlagsrechnung angeben.")
+    if art == "abschlag":
+        abschlag_wert_pruefen(d)
     if art not in ("abschlag",) + FREI_ARTEN and not con.execute("SELECT 1 FROM positionen WHERE auftrag_id=?", (aid,)).fetchone():
         raise ApiFehler("Der Auftrag hat noch keine Positionen.")
     d = {**d, "druck": druck_standard(art, e), "variante": v}
@@ -4133,6 +4198,16 @@ def zahlung_plausibel(con, op_id, d):
         g.append(f"Das Zahlungsdatum {de_datum(tag)} liegt in der Zukunft.")
     elif op["datum"] and tag < op["datum"][:10]:
         g.append(f"Das Zahlungsdatum {de_datum(tag)} liegt vor dem Rechnungsdatum ({de_datum(op['datum'])}).")
+    if skonto > 0.004:
+        o = dict(op)
+        satz, vereinbart = o.get("skonto") or 0, kfm((o.get("betrag") or 0) * (o.get("skonto") or 0) / 100)
+        if not satz or not o.get("skonto_bis"):
+            g.append(f"Skonto {de(skonto)} €: Für diese Rechnung ist kein Skonto vereinbart.")
+        else:
+            if skonto > vereinbart + 0.01:
+                g.append(f"Skonto {de(skonto)} € ist mehr als vereinbart ({de(satz, 2 if satz % 1 else 0)} % = {de(vereinbart)} €).")
+            if not bank.skonto_rechtzeitig(o, tag):
+                g.append(f"Die Skontofrist endete am {de_datum(o['skonto_bis'])}; das Zahlungsdatum ist der {de_datum(tag)}.")
     if g:
         kern.rueckfrage("zahlung", f"Zahlung zu {op['nummer']} bitte prüfen\n\n" + "\n".join(g), "Trotzdem buchen")
 
@@ -4143,18 +4218,22 @@ def op_zahlung_buchen(con, op_id, d):
     if not op:
         raise ApiFehler("Offener Posten nicht gefunden", 404)
     betrag = kfm(zahl(d.get("betrag"), float))
-    if not betrag:
-        raise ApiFehler("Bitte einen Betrag eingeben.")
     skonto = kfm(zahl(d.get("skonto"), float))
+    if skonto < 0:
+        raise ApiFehler("Der Skontoabzug kann nicht negativ sein.")
+    if not betrag and not skonto:
+        raise ApiFehler("Bitte einen Betrag eingeben.")
     datum_ = d.get("datum") or date.today().isoformat()
     date.fromisoformat(datum_)
     # Was über den offenen Rechnungsbetrag hinausgeht, deckt zuerst die Mahnkosten
     auf_mk = 0.0
     if (op["mahnkosten"] or 0) > 0 and op["offen"] >= 0 and betrag + skonto > op["offen"] + 0.004:
         auf_mk = kfm(min(betrag + skonto - op["offen"], op["mahnkosten"]))
-    ids = [con.execute("INSERT INTO zahlungseingaenge (op_id, datum, betrag, art, bemerkung, angelegt, auf_mahnkosten) VALUES (?,?,?,?,?,?,?)",
-                       (op_id, datum_, betrag, d.get("art") or "Überweisung",
-                        d.get("bemerkung") or ("davon Mahnkosten " + de(auf_mk) + " €" if auf_mk else ""), jetzt(), auf_mk)).lastrowid]
+    ids = []
+    if betrag:   # reiner Skontoabzug (Betrag 0): Der Rest einer schon gebuchten Zahlung wird als Skonto ausgebucht
+        ids.append(con.execute("INSERT INTO zahlungseingaenge (op_id, datum, betrag, art, bemerkung, angelegt, auf_mahnkosten) VALUES (?,?,?,?,?,?,?)",
+                               (op_id, datum_, betrag, d.get("art") or "Überweisung",
+                                d.get("bemerkung") or ("davon Mahnkosten " + de(auf_mk) + " €" if auf_mk else ""), jetzt(), auf_mk)).lastrowid)
     if skonto:
         ids.append(con.execute("INSERT INTO zahlungseingaenge (op_id, datum, betrag, art, bemerkung, angelegt) VALUES (?,?,?,?,?,?)",
                                (op_id, datum_, skonto, "Skonto", "Skontoabzug", jetzt())).lastrowid)
@@ -4343,6 +4422,36 @@ def rechnungsdatum_pruefen(con, datum):
                         "Nach dem Festschreiben lassen sich Datum und Nummer nicht mehr ändern (nur noch stornieren).", "Mit diesem Datum festschreiben")
 
 
+def rechnung_plausibel(con, b):
+    """Vor dem Festschreiben: Abschläge über der Auftragssumme, ein Zahlbetrag unter null und Positionen zu 0,00 € werden erst nach
+    Rückfrage angenommen; ein Abschlag von 0 € oder weniger gar nicht."""
+    if b["art"] == "abschlag":
+        if b["netto"] <= 0:
+            raise ApiFehler("Der Abschlag muss größer als 0 sein. Für eine Rückzahlung gibt es die Belegart Gutschrift.")
+        auftrag_netto = fl((b["daten"].get("abschlag") or {}).get("auftrag_netto"))
+        bisher = kfm(con.execute("SELECT IFNULL(SUM(netto),0) FROM belege WHERE auftrag_id=? AND art='abschlag' AND status='fest' AND id<>?",
+                                 (b["auftrag_id"], b["id"])).fetchone()[0])
+        if auftrag_netto > 0 and bisher + b["netto"] > auftrag_netto + 0.005:
+            kern.rueckfrage("abschlag_hoehe", f"Abschläge höher als der Auftrag\n\nAuftragssumme: {de(auftrag_netto)} € netto\n"
+                            + (f"bisherige Abschlagsrechnungen: {de(bisher)} € netto\n" if bisher else "")
+                            + f"dieser Abschlag: {de(b['netto'])} € netto\n\nZusammen sind das {de(kfm(bisher + b['netto']))} € netto, "
+                            f"{de(kfm(bisher + b['netto'] - auftrag_netto))} € mehr als der Auftrag wert ist.", "Trotzdem festschreiben")
+        return
+    if b["art"] != "rechnung":
+        return
+    if b["zahlbetrag"] < -0.005:
+        kern.rueckfrage("zahlbetrag_negativ", f"Die verrechneten Abschlagsrechnungen ({de(b['daten']['summen'].get('abzug_brutto', 0))} €) sind höher als der "
+                        f"Rechnungsbetrag ({de(b['brutto'])} €). Die Rechnung weist ein Guthaben des Kunden von {de(-b['zahlbetrag'])} € aus.",
+                        "Mit Guthaben festschreiben")
+    null = [z for z in b["daten"].get("zeilen", []) if z.get("typ") == "pos" and z.get("zaehlt") and not z.get("info") and not z.get("alternativ")
+            and abs(fl(z.get("gp"))) < 0.005]
+    if null:
+        namen = [f"{z.get('posnr') or '?'} „{' '.join(klartext(z.get('text') or '').split())[:50]}“" for z in null[:6]]
+        kern.rueckfrage("position_null", ("Diese Position steht" if len(null) == 1 else f"{len(null)} Positionen stehen") + " mit 0,00 € in der Rechnung:\n\n"
+                        + "\n".join(namen) + ("\n…" if len(null) > 6 else "") + "\n\nFehlt ein Preis (Material ohne Preis, Zeiten nicht eingetragen)? "
+                        "Nach dem Festschreiben lässt sich die Rechnung nur noch stornieren.", "Mit 0,00 € festschreiben")
+
+
 def beleg_festschreiben(con, bid):
     b = beleg_laden(con, bid)
     if not b["ist_rechnung"]:
@@ -4356,6 +4465,7 @@ def beleg_festschreiben(con, bid):
         raise ApiFehler("Der Rechnungsbetrag ist 0 €.")
     datum = b["datum"] or date.today().isoformat()
     rechnungsdatum_pruefen(con, datum)
+    rechnung_plausibel(con, b)
     # Rechnungsnummer: Jahr-laufende Nummer (4-stellig), gemeinsamer Nummernkreis für Rechnung, Abschlag und Storno
     info = rechnungsnummer_info(con, int(datum[:4]))
     lfd, nummer = info["naechste_lfd"], info["naechste"]
@@ -4371,8 +4481,9 @@ def beleg_festschreiben(con, bid):
                 (nummer, lfd, datum, faellig, jetzt(), bid))
     betrag = b["zahlbetrag"]
     if b["art"] != "storno" and not berichtigung:
-        con.execute("INSERT INTO offene_posten (nummer, art, kunde_id, auftrag_id, datum, betrag, faellig, offen, mahnstufe, beleg_id) "
-                    "VALUES (?,?,?,?,?,?,?,?,0,?)", (nummer, b["artname"], b["kunde_id"], b["auftrag_id"], datum, betrag, faellig, betrag, bid))
+        sk_satz, sk_bis = skonto_der_rechnung(b["daten"], roh, datum) if betrag > 0 else (0.0, "")
+        con.execute("INSERT INTO offene_posten (nummer, art, kunde_id, auftrag_id, datum, betrag, faellig, offen, mahnstufe, beleg_id, skonto, skonto_bis) "
+                    "VALUES (?,?,?,?,?,?,?,?,0,?,?,?)", (nummer, b["artname"], b["kunde_id"], b["auftrag_id"], datum, betrag, faellig, betrag, bid, sk_satz, sk_bis))
     fb = beleg_laden(con, bid)
     prot(con, "festschreiben", fb["nummer"], f"{fb['artname']} {fb['nummer']} vom {de_datum(fb['datum'])} · {fb['daten'].get('kunde', {}).get('kurzname', '')} · brutto {de(fb['brutto'])} €",
          {**beleg_kurz(fb), "inhalt": beleg_fingerabdruck(fb)})
@@ -5340,6 +5451,7 @@ def einstellungen_oeffentlich(con):
     e["_mail_texte_standard"] = MAIL_TEXTE
     e["_unterschrift"] = os.path.exists(os.path.join(DATEN, UNTERSCHRIFT))
     e["_text_14b_standard"] = HINWEIS_14B
+    e["_kostenstellen"] = [k.get("kst") for k in vorgaben_kopie(e).get("kostenstellen", []) if k.get("kst")]
     e["_pdf_ordner_standard"] = STANDARD_EINSTELLUNGEN["pdf_ordner"]
     e["_ort_warnung"] = " ".join(x for x in (NOTFALL["text"], ort_warnung(), SICHERUNG_PRUEFUNG["text"], SICHERUNG_EXTERN["text"], PROTOKOLL_PRUEFUNG["text"], BELEG_PRUEFUNG["text"],
                                                 projektsicherung.warnung(DATEN, projektsicherung.einstellung(e.get("projektsicherung")))) if x)
@@ -5702,9 +5814,18 @@ def papier_pdf(con, aid, art, q):
 ZUSCHNITT_DATEI = os.path.join(DATEN, "zuschnitt.html")
 
 
+KUNDE_FELD_NAMEN = {"kurzname": "Kurzname", "anrede": "Briefanrede", "anredeform": "Anrede", "titel": "Titel", "vorname": "Vorname", "nachname": "Nachname",
+                    "firma": "Firma", "zusatz": "Zusatz", "strasse": "Straße", "hausnr": "Hausnummer", "plz": "PLZ", "ort": "Ort", "land": "Land",
+                    "telefon": "Telefon", "email1": "E-Mail", "email2": "E-Mail 2", "website": "Website", "ustid": "USt-IdNr.",
+                    "bemerkungen": "Bemerkungen", "merkmale": "Merkmale"}
+
+
 def kunden_import(con, d):
+    """Kunden aus CSV, Excel oder vCard. Vorhandene Kunden werden nur überschrieben, wenn sie in „bestaetigt“ einzeln freigegeben sind,
+    und nur mit den Feldern, die in der Datei stehen. Jeder Import und jede Änderung an einem Kunden steht im Protokoll."""
     try:
-        tab = kundenimport.tabelle_lesen(base64.b64decode(d.get("daten") or ""), d.get("dateiname"))
+        roh = base64.b64decode(d.get("daten") or "")
+        tab = kundenimport.tabelle_lesen(roh, d.get("dateiname"))
     except kundenimport.ImportFehler as f:
         raise ApiFehler(str(f))
     kopf, daten_zeilen = tab[0], tab[1:]
@@ -5712,51 +5833,100 @@ def kunden_import(con, d):
     gruppen = e.get("kundengruppen") or []
     zuordnung = d.get("zuordnung") or kundenimport.vorschlag(kopf)
     gruppe_std = d.get("gruppe") or (gruppen[0] if gruppen else "")
+    auffuellen = bool(d.get("plz_auffuellen"))
+    index = kundenimport.Dubletten(con)
+
+    def aenderung(k, kid):
+        """Was die Zeile der Datei am vorhandenen Kunden ändern würde: nur Felder der Datei, abgeleitete Angaben wie beim Bearbeiten."""
+        alt = kunde_zeile(con, kid)
+        werte = kunde_daten({f: k[f] for f in k["_aus_datei"] if f in k})
+        for f in ("bemerkungen", "merkmale"):   # gepflegte Notizen bleiben: Der Text der Datei wird angehängt, nicht ersetzt
+            if werte.get(f) and (alt.get(f) or "").strip():
+                if werte[f].strip() in alt[f]:
+                    werte.pop(f)
+                else:
+                    werte[f] = alt[f].rstrip() + ("\n" if f == "bemerkungen" else ", ") + werte[f].strip()
+        werte = adressen.ableiten(alt, werte)
+        return alt, {f: v for f, v in werte.items() if not nachweis._gleich(alt.get(f), v)}
+
     if not d.get("ausfuehren"):
-        vorschau = []
-        for z in daten_zeilen[:6]:
-            k = kundenimport.datensatz(z, zuordnung, gruppen, gruppe_std)
-            if k:
-                k["_doppelt"] = bool(kundenimport.doppelt(con, k))
-                vorschau.append(k)
+        vorschau, dubletten, n_doppelt, plz_vier, tel_null = [], [], 0, [], []
+        for nr, z in enumerate(daten_zeilen, 2):
+            k = kundenimport.datensatz(z, zuordnung, gruppen, gruppe_std, auffuellen)
+            if not k:
+                continue
+            kid, grund, sicher = index.finden(k)
+            if k.get("_plz_vier"):
+                plz_vier.append(f"{k['kurzname']}: {k.get('plz', '')} {k.get('ort', '')}".strip())
+            if k.get("_tel_ohne_null"):
+                tel_null.append(f"{k['kurzname']}: {k.get('telefon', '')}")
+            if kid:
+                n_doppelt += 1
+                if len(dubletten) < 500:
+                    alt, neu_ = aenderung(k, kid)
+                    dubletten.append({"zeile": nr, "grund": grund, "sicher": sicher, "datei": {"kurzname": k["kurzname"], "plz": k.get("plz", ""), "ort": k.get("ort", "")},
+                                      "bestand": {"id": kid, "nummer": alt.get("nummer"), "kurzname": alt.get("kurzname"), "plz": alt.get("plz"), "ort": alt.get("ort")},
+                                      "aenderungen": [[nachweis.TABELLEN["kunden"]["werte"].get(f) or KUNDE_FELD_NAMEN.get(f, f), str(alt.get(f) or "")[:80], str(v or "")[:80]]
+                                                      for f, v in neu_.items() if f not in ("geaendert", "anschrift")]})
+            if len(vorschau) < 6:
+                vorschau.append({**{f: v for f, v in k.items() if not f.startswith("_")}, "_doppelt": bool(kid)})
         return {"kopf": kopf, "beispiele": daten_zeilen[:5], "anzahl": len(daten_zeilen), "zuordnung": zuordnung,
-                "felder": [[k, n] for k, n, _ in kundenimport.FELDER], "vorschau": vorschau,
-                "doppelte": sum(1 for z in daten_zeilen if (lambda k: k and kundenimport.doppelt(con, k))(
-                    kundenimport.datensatz(z, zuordnung, gruppen, gruppe_std)))}
+                "felder": [[k, n] for k, n, _ in kundenimport.FELDER], "vorschau": vorschau, "doppelte": n_doppelt, "dubletten": dubletten,
+                "plz_vier": {"anzahl": len(plz_vier), "beispiele": plz_vier[:3]}, "tel_ohne_null": {"anzahl": len(tel_null), "beispiele": tel_null[:3]}}
     modus = d.get("doppelte") or "ueberspringen"
-    neu = aktualisiert = uebersprungen = leer = 0
+    bestaetigt = {int(x) for x in d["bestaetigt"] if str(x).isdigit()} if isinstance(d.get("bestaetigt"), list) else None
+    altbestand = d.get("altbestand", True) is not False
+    bis = f"{date.today().year + frist_jahre(e)}-12-31"
+    neu = aktualisiert = uebersprungen = leer = unbestaetigt = 0
+    nr_neu, nr_akt = [], []
     maxnr = con.execute("SELECT MAX(nummer) FROM kunden").fetchone()[0]
     naechste = max(int(e.get("kundennr_start") or 100000), (maxnr or 0) + 1)
-    for z in daten_zeilen:
-        k = kundenimport.datensatz(z, zuordnung, gruppen, gruppe_std)
+    for znr, z in enumerate(daten_zeilen, 2):
+        k = kundenimport.datensatz(z, zuordnung, gruppen, gruppe_std, auffuellen)
         if not k:
             leer += 1
             continue
-        vorhanden = kundenimport.doppelt(con, k)
-        werte = kunde_daten(k)
+        vorhanden, _grund, sicher = index.finden(k)
+        if vorhanden:
+            if modus != "aktualisieren":
+                uebersprungen += 1
+            elif (znr in bestaetigt) if bestaetigt is not None else sicher:
+                alt, werte = aenderung(k, vorhanden)
+                if werte:
+                    werte["geaendert"] = jetzt()
+                    con.execute(f"UPDATE kunden SET {','.join(f'{x}=?' for x in werte)} WHERE id=?", list(werte.values()) + [vorhanden])
+                    nachweis.stammdaten(con, "kunden", alt, kunde_zeile(con, vorhanden))
+                    nr_akt.append(alt.get("nummer"))
+                aktualisiert += 1
+            else:
+                unbestaetigt += 1
+            continue
+        werte = kunde_daten({f: v for f, v in k.items() if not f.startswith("_")})
         if any(werte.get(f) for f in adressen.FELDER):
             werte = adressen.ableiten({}, werte)
             if k.get("anrede"):
                 werte["anrede"] = k["anrede"]
             if k.get("kurzname"):
                 werte["kurzname"] = k["kurzname"]
-        if vorhanden:
-            if modus == "aktualisieren":
-                werte.pop("nummer", None)
-                werte["geaendert"] = jetzt()
-                con.execute(f"UPDATE kunden SET {','.join(f'{x}=?' for x in werte)} WHERE id=?", list(werte.values()) + [vorhanden])
-                aktualisiert += 1
-            else:
-                uebersprungen += 1
-            continue
-        if not werte.get("nummer") or con.execute("SELECT 1 FROM kunden WHERE nummer=?", (werte["nummer"],)).fetchone():
+        if not werte.get("nummer") or int(werte["nummer"]) in index.nr:
             werte["nummer"] = naechste
         naechste = max(naechste, int(werte["nummer"]) + 1)
         werte.setdefault("zahlungskonto", (e.get("zahlungskonten") or [""])[0])
         werte["angelegt"] = werte["geaendert"] = jetzt()
-        con.execute(f"INSERT INTO kunden ({','.join(werte)}) VALUES ({','.join('?' * len(werte))})", list(werte.values()))
+        if altbestand:   # Kunden aus dem bisherigen Programm, zu denen es Belege gibt: Aufbewahrungsfrist setzen
+            werte["aufbewahren_bis"] = bis
+        cur = con.execute(f"INSERT INTO kunden ({','.join(werte)}) VALUES ({','.join('?' * len(werte))})", list(werte.values()))
+        index.merken(cur.lastrowid, werte)
+        nr_neu.append(werte["nummer"])
         neu += 1
-    return {"neu": neu, "aktualisiert": aktualisiert, "uebersprungen": uebersprungen, "leer": leer}
+    name = sauber(os.path.basename(str(d.get("dateiname") or ""))) or "Datei"
+    if neu or aktualisiert:
+        prot(con, "kundenimport", name[:80], f"Kundenimport aus „{name[:80]}“: {neu} neu angelegt, {aktualisiert} aktualisiert, "
+             f"{uebersprungen + unbestaetigt} vorhandene unverändert" + (f"; neue Kunden mit Aufbewahrungsfrist bis {de_datum(bis)} (Altbestand)" if altbestand and neu
+                                                                           else "; neue Kunden als Kontakte ohne Aufbewahrungsfrist" if neu else ""),
+             {"datei": name, "sha256": hashlib.sha256(roh).hexdigest(), "zeilen": len(daten_zeilen), "neu": nr_neu[:1000], "aktualisiert": nr_akt[:1000],
+              "altbestand": altbestand, "doppelte": modus})
+    return {"neu": neu, "aktualisiert": aktualisiert, "uebersprungen": uebersprungen, "leer": leer, "unbestaetigt": unbestaetigt}
 
 
 def kunde_zeile(con, kid):
@@ -6176,7 +6346,7 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False, ue=None):
         elif z["typ"] == "pos":
             zg = z.get("zeige", {})
             ist_text = not zg.get("anzahl") and not zg.get("ep") and not zg.get("gp")
-            menge = f'{de(z["menge"], 2 if z["menge"] % 1 else 0)} {h(z["einheit"])}' if zg.get("anzahl") else ""
+            menge = f'{de_menge(z["menge"])} {h(z["einheit"])}' if zg.get("anzahl") else ""
             ep = betrag(z["ep"]) if preise and zg.get("ep") else ""
             gp = ""
             if preise and zg.get("gp", 1):
@@ -6194,7 +6364,7 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False, ue=None):
             pos_bilder = bilder_html(z.get("bilder")) if dr.get("bilder", True) else ""
             if z.get("unter") and z.get("unterdruck") != "verdeckt":
                 for u in z["unter"]:
-                    um = f'{de(u["menge"], 2 if u["menge"] % 1 else 0)} {h(u["einheit"])}' if z["unterdruck"] != "text" else ""
+                    um = f'{de_menge(u["menge"])} {h(u["einheit"])}' if z["unterdruck"] != "text" else ""
                     mit_preis = z["unterdruck"] == "beleg" and preise
                     rows.append(f'<tr class="unter{" kurz" if text_zeilen(u["text"]) <= KURZ_ZEILEN else ""}"><td>{h(z["posnr"])}.{h(u["posnr"])}</td><td class="r nw">{um}</td><td>{text_html(u["text"])}</td>'
                                 f'<td class="r nw">{"<small>" + betrag(u["ep"]) + "</small>" if mit_preis else ""}</td>'
@@ -6242,7 +6412,7 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False, ue=None):
             sz.append(("<b>Gesamtbetrag</b>", f"<b>{de(s['brutto'])} €</b>"))
         for x in d.get("abzuege", []):
             sz.append((f"abzüglich Abschlagsrechnung {h(x['nummer'])} vom {de_datum(x['datum'])}<br><small>netto {de(x['netto'])} € + USt {de(x['ust'])} €</small>",
-                       f"-{de(x['brutto'])} €"))
+                       f"{de(-x['brutto'])} €"))
         if d.get("abzuege"):
             sz.append(("<b>Verbleibender Zahlbetrag</b>", f"<b>{de(s['zahlbetrag'])} €</b>"))
         summe_html = '<table class="summen">' + "".join(f'<tr><td>{l}</td><td class="r nw">{v}</td></tr>' for l, v in sz) + "</table>"
@@ -6535,6 +6705,9 @@ def mahn_ergaenzen(con, liste):
             lm["name"] = cfg["stufen"][min(lm["stufe"], len(cfg["stufen"]) - 1)]["name"]
         o["letzte_mahnung"] = lm
         o["mahnvorschlag"] = mahnwesen.vorschlag(o, lm, cfg["stufen"], heute_d) if o.get("art") != "Storno" else None
+        # Skonto für den Zahlungsdialog: vereinbarter Betrag (nur solange noch nichts gezahlt ist) und ob die Frist heute noch läuft
+        o["skonto_betrag"] = bank.skonto_betrag(o)
+        o["skonto_offen"] = kfm((o.get("betrag") or 0) * (o.get("skonto") or 0) / 100) if (o.get("skonto") and o.get("skonto_bis")) else 0
         o["ueberfaellig_tage"] = (heute_d - date.fromisoformat(o["faellig"][:10])).days if o.get("faellig") and o["offen"] >= 0.005 else 0
     return liste
 
@@ -8405,7 +8578,12 @@ def api(methode, teile, q, daten):
                 erw = d.get("erweitert") if d.get("erweitert") in (True, False) else None
                 try:
                     if not d.get("ausfuehren"):
-                        return stuecklistenimport.vorschau(con, d.get("text") or "", erw)
+                        return stuecklistenimport.vorschau(con, d.get("text") or "", erw, kalk, p)
+                    vs = stuecklistenimport.vorschau(con, d.get("text") or "", erw, kalk, p)
+                    if vs["doppelt"]["alles"] and not d.get("ersetzen"):
+                        kern.rueckfrage("stueckliste_doppelt", "Diese Teile und Beschläge stehen mit gleichen Maßen und Mengen schon in der Position. "
+                                   "Beim Anhängen stehen sie doppelt in der Stückliste. Zum Aktualisieren „Vorhandene Teile: ersetzen“ wählen.",
+                                   "Trotzdem anhängen")
                     stueck, bs, posz, angelegt, n_t, n_b = stuecklistenimport.importieren(
                         con, kalk, p, d.get("text") or "", d.get("zuordnung") or {}, erw, bool(d.get("ersetzen")))
                 except stuecklistenimport.Fehler as f:
@@ -8428,7 +8606,7 @@ def api(methode, teile, q, daten):
                 if d.get("cad_datei"):
                     cad_vermerken(con, p["auftrag_id"], d["cad_datei"], "importiert", rid)
                 erg = position_antwort(con, rid)
-                erg["import"] = {"teile": n_t, "beschlaege": n_b, "angelegt": angelegt}
+                erg["import"] = {"teile": n_t, "beschlaege": n_b, "angelegt": angelegt, "ausgelassen": vs["ausgelassen"]}
                 return erg
             if methode == "POST" and unter == "kopieren":
                 neu = position_kopieren(con, rid)
@@ -8792,6 +8970,7 @@ def api(methode, teile, q, daten):
                     con.execute("UPDATE belege SET daten=? WHERE id=?", (json.dumps(dd, ensure_ascii=False), rid))
                     beleg_aktualisieren(con, rid)
                 if b["art"] == "abschlag" and any(k in d for k in ("prozent", "betrag", "text")):
+                    abschlag_wert_pruefen(d)
                     dd = b["daten"]
                     dd["abschlag"] = {"prozent": d.get("prozent"), "betrag": d.get("betrag"), "text": d.get("text")}
                     con.execute("UPDATE belege SET daten=? WHERE id=?", (json.dumps(dd, ensure_ascii=False), rid))
@@ -8945,12 +9124,7 @@ def api(methode, teile, q, daten):
 
         # ---------- Kunden importieren ----------
         if res == "kunden" and len(teile) == 2 and teile[1] == "import" and methode == "POST":
-            vorher = con.execute("SELECT IFNULL(MAX(id),0) FROM kunden").fetchone()[0]
-            erg = kunden_import(con, daten or {})
-            # importierte Kunden stammen aus einem früheren Programm: Altbestand sperren
-            bis = f"{date.today().year + frist_jahre(einstellungen(con))}-12-31"
-            con.execute("UPDATE kunden SET aufbewahren_bis=? WHERE id>? AND IFNULL(aufbewahren_bis,'')<?", (bis, vorher, bis))
-            return erg
+            return kunden_import(con, daten or {})
 
         # ---------- Kunden ----------
         if res == "kunden":
@@ -9472,12 +9646,15 @@ def api(methode, teile, q, daten):
                                    l["unsere_kundennr"] and f"KdNr {l['unsere_kundennr']}",
                                    mit_skonto and ("abzgl. " + f"{z['skonto']:g}".replace(".", ",") + " Prozent Skonto"),
                                    not z["belegnr"] and z["bemerkung"]]
-                    posten.append({"nummer": z["nummer"], "zahlbetrag": zb, "empfaenger": z["empfaenger"] or z["lieferant"],
+                    posten.append({"id": z["id"], "nummer": z["nummer"], "zahlbetrag": zb, "empfaenger": z["empfaenger"] or z["lieferant"],
                                    "iban": iban_normal(z["iban"]), "bic": z["bic"],
                                    "verwendungszweck": " ".join(t for t in teile_zweck if t)})
                 if fehler:
                     raise ApiFehler("SEPA-Datei nicht erstellt: " + "; ".join(fehler))
                 xml = sepa_xml(einstellungen(con), posten, ausf)
+                # merken, was in der Datei steht: Der Kontoauszug zeigt eine Sammelüberweisung oft nur als eine Summe
+                kennung = re.search(r"<MsgId>([^<]+)</MsgId>", xml)
+                bank.sepa_merken(con, kennung.group(1) if kennung else "", ausf, posten)
                 return {"xml": xml, "dateiname": f"SEPA_{ausf}_{len(posten)}_Zahlungen.xml",
                         "summe": kfm(sum(p["zahlbetrag"] for p in posten)), "anzahl": len(posten)}
             if methode == "PUT" and rid:

@@ -89,7 +89,7 @@ async function ansichtAuftrag(id, reiter = "auftrag", sub) {
 async function auftragStamm(z, a) {
   const [kunden, pos, belege] = await Promise.all([api("kunden?status=alle"), api(`auftraege/${a.id}/positionen`), api(`auftraege/${a.id}/belege`)]);
   const kOpt = k => `${k.nummer} · ${k.kurzname}${k.ort ? " · " + k.ort : ""}`;
-  const vorschau = pos.positionen.slice(0, 8).map(p => `<div><a href="#/position/${p.id}">${p.posnr}</a> &nbsp;${p.zeige.anzahl ? n2(p.menge, p.menge % 1 ? 2 : 0) + " " + esc(p.einheit) + " " : ""}${esc(kurz(p.text, 90))}</div>`).join("")
+  const vorschau = pos.positionen.slice(0, 8).map(p => `<div><a href="#/position/${p.id}">${p.posnr}</a> &nbsp;${p.zeige.anzahl ? mengeDE(p.menge) + " " + esc(p.einheit) + " " : ""}${esc(kurz(p.text, 90))}</div>`).join("")
     + (pos.positionen.length > 8 ? `<div class="hinweis">… und ${pos.positionen.length - 8} weitere</div>` : "");
   z.innerHTML = `
     <div class="titel"><h2>Auftrag ${esc(a.nummer)}</h2><span class="speicher"></span>
@@ -207,7 +207,7 @@ async function positionsListe(z, a) {
       const mt = masseText(p.masse);
       return `<tr class="pl-pos pl-kalk${p.gesperrt ? " gesperrt" : ""}" data-id="${p.id}" data-titel="${p.titel}" draggable="true">
         ${nrZelle(p)}
-        <td class="r">${klammer(p.zeige.anzahl, n2(p.menge, p.menge % 1 ? 2 : 0))}</td>
+        <td class="r">${klammer(p.zeige.anzahl, mengeDE(p.menge))}</td>
         <td class="pl-text"><div class="pl-kurz">${p.zeige.anzahl ? esc(p.einheit) + " " : ""}${esc(kurz(p.text, 110)) || "<span class='hinweis'>(ohne Text)</span>"}</div>${mt ? `<div class="hinweis">${mt}</div>` : ""}${p.kinder.length ? `<div class="hinweis">+ ${p.kinder.length} Unterposition${p.kinder.length > 1 ? "en" : ""}</div>` : ""}</td>
         <td class="r nw">${zahl(w.werk * m)}${marken ? `<div>${marken}</div>` : ""}</td>
         <td class="r nw">${zahl(w.lohn * m)}${(p.zeiten || []).length ? `<div><span class="pl-marke" title="Tätigkeiten">T</span></div>` : ""}</td>
@@ -222,13 +222,13 @@ async function positionsListe(z, a) {
     const kl = v => p.unterdruck === "verdeckt" || p.unterdruck === "text" ? "{" + eur(v) + "}" : eur(v);
     const unter = p.kinder.length ? `<tr class="pl-unter" data-zu="${p.id}"><td></td><td></td><td></td>
         <td><div class="pl-uz"><a href="#/position/${p.id}/unterpositionen">▸ ${p.kinder.length} Unterposition${p.kinder.length > 1 ? "en" : ""}</a></div>
-        ${p.kinder.map(k => `<div class="pl-uz">${n2(k.menge, k.menge % 1 ? 2 : 0)} ${esc(k.einheit)} ${esc(kurz(k.text, 60))}</div>`).join("")}</td>
+        ${p.kinder.map(k => `<div class="pl-uz">${mengeDE(k.menge)} ${esc(k.einheit)} ${esc(kurz(k.text, 60))}</div>`).join("")}</td>
         <td class="r"><div class="pl-uz">&nbsp;</div>${p.kinder.map(k => `<div class="pl-uz">${kl(k.calc.ep_gesamt)}</div>`).join("")}</td>
         <td class="r"><div class="pl-uz">&nbsp;</div>${p.kinder.map(k => `<div class="pl-uz">${kl(k.calc.gesamtpreis)}</div>`).join("")}</td></tr>` : "";
     return `<tr class="pl-pos${p.gesperrt ? " gesperrt" : ""}" data-id="${p.id}" data-titel="${p.titel}" draggable="true">
       ${nrZelle(p)}
       <td class="hinweis">${esc(p.status || "")}</td>
-      <td class="r">${klammer(p.zeige.anzahl, n2(p.menge, p.menge % 1 ? 2 : 0))}</td>
+      <td class="r">${klammer(p.zeige.anzahl, mengeDE(p.menge))}</td>
       <td class="pl-text"><div>${p.zeige.anzahl ? esc(p.einheit) + " " : ""}${p.text ? textHtml(p.text) : "<span class='hinweis'>(ohne Text)</span>"}</div></td>
       <td class="r">${p.zeige.ep ? eur(c.ep_gesamt) : ""}${c.hat_kalk && !p.preis_manuell ? `<div class="hinweis" title="berechnet">kalk.</div>` : ""}</td>
       <td class="r">${gp}${akt}</td>
@@ -368,7 +368,7 @@ async function positionAusAuftrag(a, titel, danach) {
       <td><b>${esc(kurz(p.text, 90))}</b>${masseText(p.masse) ? ` <span class="hinweis">${masseText(p.masse)}</span>` : ""}${p.unter ? ` <span class="hinweis">· ${p.unter} Unterpos.</span>` : ""}
         <div class="hinweis">Auftrag ${esc(p.auftrag)} · ${esc(p.bezeichnung || "")} · ${esc(p.kunde)} · Pos. ${esc(p.posnr)}${p.datum ? " · " + datum(p.datum) : ""}</div>
         <details class="pa-text" style="margin-top:2px"><summary class="hinweis" style="cursor:pointer">ganzer Text</summary><div class="rt-vorschau" style="padding:6px 0">${textHtml(p.text)}</div></details></td>
-      <td class="r nw">${n2(p.menge, p.menge % 1 ? 2 : 0)} ${esc(p.einheit || "")}</td><td class="r nw">${eur(p.ep)}</td></tr>`).join("")}</table>`;
+      <td class="r nw">${mengeDE(p.menge)} ${esc(p.einheit || "")}</td><td class="r nw">${eur(p.ep)}</td></tr>`).join("")}</table>`;
     $$("[data-pa]", box).forEach(tr => tr.onclick = ev => {
       if (ev.target.closest("details")) return;
       const id = +tr.dataset.pa, cb = $("input", tr);
@@ -463,7 +463,7 @@ async function ansichtPosition(pid, reiter = "position", sub) {
   const z = $("#inhalt");
   // Bei Unterpositionen nur die Unterpositionen derselben Hauptposition zur Auswahl
   const wahlListe = el ? d.liste.filter(x => x.ebene && String(x.posnr).startsWith(el.posnr + ".")) : d.liste;
-  const posWahl = `<select id="posWahl" style="max-width:520px">${wahlListe.map(x => `<option value="${x.id}" ${x.id === pid ? "selected" : ""}>${el ? "Unterposition " + String(x.posnr).split(".").pop() : `${x.ebene ? "   └ " : ""}${x.titel ? "T" + String(x.titel).padStart(2, "0") + " " : ""}Pos. ${x.posnr}`} · ${n2(x.menge, x.menge % 1 ? 2 : 0)} ${esc(x.einheit)} ${esc(x.text)}</option>`).join("")}</select>`;
+  const posWahl = `<select id="posWahl" style="max-width:520px">${wahlListe.map(x => `<option value="${x.id}" ${x.id === pid ? "selected" : ""}>${el ? "Unterposition " + String(x.posnr).split(".").pop() : `${x.ebene ? "   └ " : ""}${x.titel ? "T" + String(x.titel).padStart(2, "0") + " " : ""}Pos. ${x.posnr}`} · ${mengeDE(x.menge)} ${esc(x.einheit)} ${esc(x.text)}</option>`).join("")}</select>`;
   const ctx = {d, p, a, pid, z, posWahl, neu: () => ansichtPosition(pid, reiter, sub)};
   if (reiter === "werte") return auftragsWerte(z, {auftrag: a, teil: sub || "werkstoffe"});
   ({position: posSeite, werkstoffe: stuecklisteSeite, beschlaege: beschlagSeite, zeiten: zeitenSeite, summen: summenSeite, unterpositionen: unterSeite}[reiter] || posSeite)(ctx);
@@ -474,7 +474,7 @@ function posKopfzeile(ctx, titel, extraKnoepfe = "", nurUnter = false) {
   const el = ctx.d.eltern, w = el ? "Unterposition" : "Position";
   // Bei Unterpositionen: Zeile mit der Hauptposition darüber
   const haupt = el ? `<a class="up-haupt" href="#/position/${el.id}/unterpositionen" title="Zur Hauptposition">
-      <span class="up-nr">${esc(el.posnr)}</span><span class="r">${n2(el.menge, el.menge % 1 ? 2 : 0)}</span><span>${esc(el.einheit)}</span>
+      <span class="up-nr">${esc(el.posnr)}</span><span class="r">${mengeDE(el.menge)}</span><span>${esc(el.einheit)}</span>
       <span class="up-text">${esc(kurz(el.text, 80))}</span><span class="hinweis">${masseText(el.masse) || ""}</span>
       <span class="hinweis">Hauptposition · ${el.kinder} Unterposition${el.kinder > 1 ? "en" : ""}</span></a>` : "";
   return `${haupt}<div class="titel"><h2>${titel}</h2>${ctx.posWahl}<span class="speicher"></span>
@@ -510,7 +510,7 @@ function posSeite(ctx) {
         ${d.eltern ? "" : `<label title="Wird im Beleg als Alternativposition gedruckt, der Preis steht in Klammern und zählt nicht zur Summe"><input type="checkbox" id="pAlt" ${p.alternativ ? "checked" : ""}> Alternative</label>`}</div>`)}
       ${zeile("Gruppe / Status", `<select data-p="gruppe">${opts(E.positionsgruppen, p.gruppe)}</select><select data-p="status">${opts(E.positionsstatus, p.status, "– noch kein Status –")}</select>`)}
       ${zeile("Drucken", `<div class="radio" style="flex-wrap:wrap">${chk("posnr", "Posnr")}${chk("anzahl", "Anzahl")}${chk("ep", "Einzelpreis")}${chk("gp", "Gesamtpreis (zählt zur Summe)")}</div>`, true)}
-      ${zeile("Anzahl / Einheit", `${numInp(p.menge, 'data-p="menge" style="width:90px;text-align:right"', p.menge % 1 ? 2 : 0)}<select data-p="einheit" style="flex:0 0 120px">${opts(E.einheiten, p.einheit)}</select>`)}
+      ${zeile("Anzahl / Einheit", `${numInp(p.menge, 'data-p="menge" style="width:90px;text-align:right"', mengeStellen(p.menge))}<select data-p="einheit" style="flex:0 0 120px">${opts(E.einheiten, p.einheit)}</select>`)}
       ${zeile("Maße (mm)", `<select id="mArt" style="flex:0 0 86px" title="Maßangabe">${Object.keys(MASS_ARTEN).map(x => `<option value="${x}" ${x === (p.masse.art || "HBT") ? "selected" : ""}>${x.split("").join("*")}</option>`).join("")}</select>
         ${[...(MASS_ARTEN[p.masse.art] || "hbt")].map(x => `<span class="hinweis" style="padding-top:5px">${x.toUpperCase()}</span>${numInp(p.masse[x] || "", `data-m="${x}" style="width:72px"`, 0)}`).join("")}`)}
       <div class="zeile voll"><label>Text<br><span class="hinweis" style="font-weight:400">1. Zeile = Kurztext</span></label><div>
@@ -531,6 +531,10 @@ function posSeite(ctx) {
         <span id="epArt" class="hinweis"></span>
         ${p.preis_manuell && c.hat_kalk ? `<button class="btn" id="neuBer">Preis wieder berechnen</button>` : ""}
       </div></div>
+      ${E.lohnanteil !== "nie" ? `<div class="zeile voll"><label for="p35">Arbeit beim Kunden<br><span class="hinweis" style="font-weight:400">Arbeitskosten § 35a</span></label><div style="align-items:center">
+        ${numInp((p.extras || {}).lohnanteil_pz ?? "", 'id="p35" style="width:80px;text-align:right" placeholder="berechnet"')} % des Einzelpreises
+        <span class="hinweis" id="p35Info">leer = aus den Zeiten der Kostenstellen ${esc((E.lohnanteil_kst || []).join(", ") || "(keine gewählt)")}; ausfüllen bei festem Preis ohne Zeiten, z. B. 100 bei einer Montagepauschale</span>
+      </div></div>` : ""}
       ${p.kinder.length ? zeile("Unterpositionen", `<div class="radio" style="flex-wrap:wrap">${[["beleg","Auf Beleg (mit Preisen)"],["anzahl_text","Anzahl + Text"],["text","Nur Text"],["verdeckt","Verdeckt"]].map(([v, l]) => `<label><input type="radio" name="ud" value="${v}" ${p.unterdruck === v ? "checked" : ""}> ${l}</label>`).join("")}</div>`, true) : ""}
     </div>
     <table class="liste" id="psum" style="margin-top:14px"></table>`;
@@ -539,7 +543,7 @@ function posSeite(ctx) {
     const wgEingabe = $("#wgE");
     const fokus = wgEingabe && wgEingabe.matches(":focus");
     if (!fokus) $("#psum").innerHTML = `
-      <tr><th>Übersicht</th><th class="r">je Anzahl</th><th class="r">Gesamt (× ${n2(p.menge, p.menge % 1 ? 2 : 0)})</th></tr>
+      <tr><th>Übersicht</th><th class="r">je Anzahl</th><th class="r">Gesamt (× ${mengeDE(p.menge)})</th></tr>
       ${c.unter_ep ? `<tr><td>Eigener Preis / Unterpositionen</td><td class="r" id="sEig"></td><td></td></tr>` : ""}
       <tr><td>Selbstkosten${c.unter_kosten ? " inkl. Unterpositionen" : ""}</td><td class="r" id="sSk"></td><td class="r" id="sSkG"></td></tr>
       <tr><td><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">Wagnis und Gewinn
@@ -612,6 +616,11 @@ function posSeite(ctx) {
   $$("[name=gesp]", z).forEach(el => el.onchange = () => sp.setze("gesperrt", +el.value, true));
   $("#pWi").addEventListener("input", e => { p.extras = {...(p.extras || {}), werkstattinfo: e.target.value}; sp.setze("extras", p.extras); });
   $("#pWi").addEventListener("keydown", e => e.stopPropagation());
+  if ($("#p35")) $("#p35").onchange = e => {
+    const v = e.target.value.trim(), ex = {...(p.extras || {})};
+    if (v === "") delete ex.lohnanteil_pz; else ex.lohnanteil_pz = Math.min(100, Math.max(0, zahlEin(v)));
+    p.extras = ex; sp.setze("extras", ex);
+  };
   const alt = $("#pAlt"); if (alt) alt.onchange = () => { p.alternativ = alt.checked ? 1 : 0; sp.setze("alternativ", p.alternativ, true); };
   // Maßart wechseln: die eingegebenen Werte bleiben an ihrer Stelle (1. Feld bleibt 1. Feld)
   $("#mArt").onchange = async e => {
@@ -1081,7 +1090,7 @@ function unterSeite(ctx) {
   z.innerHTML = posKopfzeile(ctx, "Unterpositionen zu", `<button class="btn prim pk" id="uNeu" title="Neue Unterposition zu dieser Position anlegen">${ic("neu")} Neue Unterposition</button>`, true) + `
     <table class="liste unterliste">
       <tr><th>Unterpos.</th><th class="r">Anzahl</th><th>Text</th><th class="r">Einzelpreis</th><th class="r">Gesamtpreis</th><th></th></tr>
-      ${p.kinder.map(k => `<tr class="klick" data-id="${k.id}" draggable="true" title="Ziehen zum Verschieben"><td><span class="hinweis" style="cursor:grab;margin-right:6px">⠿</span><a href="#/position/${k.id}">${k.posnr}</a></td><td class="r">${n2(k.menge, k.menge % 1 ? 2 : 0)}</td>
+      ${p.kinder.map(k => `<tr class="klick" data-id="${k.id}" draggable="true" title="Ziehen zum Verschieben"><td><span class="hinweis" style="cursor:grab;margin-right:6px">⠿</span><a href="#/position/${k.id}">${k.posnr}</a></td><td class="r">${mengeDE(k.menge)}</td>
         <td class="pl-text">${esc(k.einheit)} ${textHtml(k.text)}</td><td class="r">${eur(k.calc.ep_gesamt)}</td><td class="r">${eur(k.calc.gesamtpreis)}</td>
         <td class="r" style="white-space:nowrap"><button class="btn pk" data-a="kopie" title="Unterposition kopieren">${ic("uebernehmen")}</button><button class="btn" data-a="hoch" title="nach oben">▲</button><button class="btn" data-a="runter" title="nach unten">▼</button><button class="btn rot" data-a="del" title="Unterposition löschen">✕</button></td></tr>`).join("")}
       ${p.kinder.length ? `<tr><td colspan="4"><b>Summe Unterpositionen je Anzahl der Hauptposition</b></td><td class="r"><b>${eur(p.calc.unter_ep)}</b></td><td></td></tr>` : ""}
@@ -1158,6 +1167,15 @@ async function auftragsWerte(z, {auftrag = null, teil}) {
     }, sofort ? 30 : 600);
   };
   const kostenVon = w => (+w.preis || 0) * (1 + (+w.v || 0) / 100);
+  // Recheneinheit je Werkstoffart: Passt die Einheit des Werkstoffs nicht dazu (Rolle, Dose, Liter, kg, Tafel …), braucht es eine Umrechnung
+  const RECHENEINHEIT = {kante: "lfm", furnier: "m²", oberflaeche: "m²", platte: "m²", massiv: "m³"};
+  const EINHEIT_PASST = {lfm: ["lfm", "lfm.", "m", "lm", "lfdm"], "m²": ["m²", "m2", "qm"], "m³": ["m³", "m3", "cbm"]};
+  const umNoetig = w => { const soll = RECHENEINHEIT[w.typ], e = (w.einheit || "").trim();
+    if (!soll || !e || EINHEIT_PASST[soll].includes(e)) return "";
+    if ((w.typ === "platte" || w.typ === "massiv") && ["lfm", "lfm.", "Stk.", "St.", "Stk", "m²", "m2"].includes(e)) return "";
+    return soll; };
+  const umFeld = (w, i) => { const soll = umNoetig(w); if (!soll) return "";
+    return `<div class="hinweis nw um-zeile" style="margin-top:3px${+w.um > 0 ? "" : ";color:var(--rot)"}" title="Die Kalkulation rechnet hier je ${soll}. Ohne Umrechnung wird der Preis je ${esc(w.einheit)} wie ein Preis je ${soll} behandelt.">1 ${esc(w.einheit)} = ${numInp(w.um || "", `data-w="werkstoffe.${i}.um" data-num="1" style="width:56px" placeholder="?"`, 3)} ${soll}</div>`; };
   const bMengen = quelle.beschlag_mengen || {};
   const kstVorgabe = quelle.kostenstellen_vorgabe || [];
   // Im Auftrag wird nur mit einer Kopie gearbeitet: Änderungen gehen nie zurück in die Einstellungen oder den Materialstamm
@@ -1180,6 +1198,7 @@ async function auftragsWerte(z, {auftrag = null, teil}) {
       const skh = el.closest("tr")?.querySelector(".skh");
       if (skh) skh.textContent = eur(lohnBasis() * (1 + (+k.kostenstellen[+i].gk || 0) / 100));
       setze(i === "_" ? feld : liste, el.tagName === "SELECT");
+      if (liste === "werkstoffe" && f === "einheit") zeichnen();   // Umrechnungsfeld zeigen oder ausblenden
     }));
     $$("[data-weg]", z).forEach(b => b.onclick = () => { const [liste, i] = b.dataset.weg.split("."); k[liste].splice(+i, 1); setze(liste, true); zeichnen(); });
     const zr = $("#zurueck"); if (zr) zr.onclick = async () => {
@@ -1198,7 +1217,7 @@ async function auftragsWerte(z, {auftrag = null, teil}) {
         return `<h3 style="margin:14px 0 6px">${name}</h3><table class="liste">
           <tr><th style="width:50px">Kürzel</th><th style="min-width:220px">Bezeichnung</th><th style="width:76px">Einheit</th>${typ === "massiv" ? `<th class="r" style="width:72px" title="Rohdicke – damit wird das Volumen und der Preis gerechnet">Roh-<br>dicke</th><th class="r" style="width:72px" title="Fertigdicke – erscheint in Stückliste, Zuschnitt und Werkstattpapieren">Fertig-<br>dicke</th>` : typ === "oberflaeche" ? "" : `<th class="r" style="width:72px">Dicke mm</th>`}<th class="r" style="width:60px">V %</th><th class="r" style="width:96px">Preis/Einh.</th><th class="r" style="width:86px">Kosten</th><th style="width:40px"></th></tr>
           ${rows.map(([w, i]) => `<tr><td><b>${esc(w.k)}</b></td><td><div style="display:flex;gap:4px"><input data-w="werkstoffe.${i}.name" value="${esc(w.name)}" style="width:100%" placeholder="z. B. Egger H3303 / Span P3"><button class="btn" data-such="werkstoffe.${i}" title="Aus dem Materialstamm übernehmen">🔍</button></div>${w.matnr ? `<div class="hinweis">Material ${esc(w.matnr)}${w.lieferant ? " · " + esc(w.lieferant) : ""}${w.preis_vom ? " · Preis vom " + datum(w.preis_vom) : ""}${stammAbw(w)}</div>` : ""}</td>
-            <td><select data-w="werkstoffe.${i}.einheit" style="width:68px">${opts(["m²", "lfm", "m³", "Stk.", "kg", "l"], w.einheit)}</select></td>
+            <td><select data-w="werkstoffe.${i}.einheit" style="width:68px">${opts(["m²", "lfm", "m³", "Stk.", "kg", "l"], w.einheit)}</select>${umFeld(w, i)}</td>
             ${typ === "oberflaeche" ? "" : `<td class="r">${numInp(w.dicke, `data-w="werkstoffe.${i}.dicke" data-num="1" style="width:60px"`, 1)}</td>`}
             ${typ === "massiv" ? `<td class="r">${numInp(w.fdicke || "", `data-w="werkstoffe.${i}.fdicke" data-num="1" style="width:60px" placeholder="${n2(w.dicke, 1)}"`, 1)}</td>` : ""}
             <td class="r">${numInp(w.v, `data-w="werkstoffe.${i}.v" data-num="1" style="width:50px"`, 0)}</td>
@@ -1216,7 +1235,7 @@ async function auftragsWerte(z, {auftrag = null, teil}) {
           <td><select data-w="beschlaege.${i}.einheit">${opts(["Stk.", "Garnitur", "Paar", "Satz", "m", "Pkg."], b.einheit)}</select></td>
           <td><div style="display:flex;gap:4px"><input data-w="beschlaege.${i}.name" value="${esc(b.name)}" style="width:100%"><button class="btn" data-such="beschlaege.${i}" title="Aus dem Materialstamm übernehmen">🔍</button></div>${b.matnr || stammAbwPreis(b) ? `<div class="hinweis">${b.matnr ? "Material " + esc(b.matnr) + (b.lieferant ? " · " + esc(b.lieferant) : "") : ""}${stammAbwPreis(b)}</div>` : ""}</td>
           <td class="r">${numInp(b.preis, `data-w="beschlaege.${i}.preis" data-num="1" style="width:96px"`)}</td>
-          ${mitMenge ? `<td class="r">${n2(bMengen[b.k] || 0, (bMengen[b.k] || 0) % 1 ? 2 : 0)}</td><td class="r bges">${n2((+b.preis || 0) * (bMengen[b.k] || 0))}</td>` : ""}
+          ${mitMenge ? `<td class="r">${mengeDE(bMengen[b.k] || 0)}</td><td class="r bges">${n2((+b.preis || 0) * (bMengen[b.k] || 0))}</td>` : ""}
           <td><button class="btn rot" data-weg="beschlaege.${i}">✕</button></td></tr>`).join("")}
         ${mitMenge && k.beschlaege.length ? `<tr><td colspan="6" class="r"><b>Beschläge gesamt</b></td><td class="r"><b id="bGesamt">${eur(summe)}</b></td><td></td></tr>` : ""}
         </table>${k.beschlaege.length ? "" : `<div class="leer" style="margin-top:10px">Noch keine Beschläge. Mit „+ Beschlag“ aus dem Materialstamm hinzufügen.</div>`}<button class="btn prim" data-plus="beschlag" style="margin-top:10px">+ Beschlag</button> <button class="btn" data-plus="set" style="margin-top:10px">+ Beschlägeset</button>
@@ -1257,7 +1276,7 @@ async function auftragsWerte(z, {auftrag = null, teil}) {
       const einh = {"lfm.": "lfm", "Liter": "l"}[m.einheit] || m.einheit;
       Object.assign(zeile_, {name: m.bezeichnung.split("\n")[0], preis: m.kalkpreis ?? m.ek_preis, v: m.verschnitt, stamm_preis: (m.kalkpreis ?? m.ek_preis) || 0, stamm_v: m.verschnitt || 0, matnr: m.nummer, lieferant: m.lieferant || "", bestellnr: m.bestellnr || "", preis_vom: m.preis_vom || ""});
       if (liste === "beschlaege") Object.assign(zeile_, {artnr: m.nummer, einheit: einh, v: 0, stamm_v: 0});
-      else { zeile_.einheit = einh; if (m.dicke) zeile_.dicke = m.dicke; }
+      else { zeile_.einheit = einh; zeile_.um = +m.umrechnung || 0; if (m.dicke) zeile_.dicke = m.dicke; }
       setze(liste, true); zeichnen(); toast(`${m.nummer} übernommen`);
     });
     $$("[data-plus]", z).forEach(b => b.onclick = async () => {
@@ -2379,11 +2398,13 @@ function stuecklistenImport(ctx, {konstruktion = false, datei = ""} = {}) {
     ziel.innerHTML = eingabe + `
       <h4 style="margin:14px 0 4px">Gefunden: ${info.teile} Teile, ${info.beschlaege} Beschläge ${info.erweitert ? "· Format mit Werkstoffbezeichnung" : "· Standardformat (22 Felder)"}</h4>
       ${info.beispiele.length ? `<div class="hinweis">${info.beispiele.map(t => `${esc(t.verwendung || t.nr)} ${t.stueck}× ${n2(t.laenge, 0)}×${n2(t.breite, 0)}`).join(" · ")}${info.teile > info.beispiele.length ? " …" : ""}</div>` : ""}
+      ${siHinweise(info)}
       <table class="liste" style="margin-top:8px"><tr><th>Art</th><th>Kürzel aus der CAD</th><th class="r">Anz.</th><th>Materialstamm</th></tr>${zeilen}</table>
       <p class="hinweis">Gefundene Zuordnungen merkt sich das Programm im Material (Feld „CAD-Kürzel“) – beim nächsten Import ist alles schon richtig zugeordnet. Die Werkstoffe kommen mit Preis und Verschnitt aus dem Materialstamm in die Auftragswerte.</p>
       <div class="form" style="grid-template-columns:1fr">
         ${info.position ? zeile("Position", `<label><input type="checkbox" id="siPos" ${posUebernehmen ? "checked" : ""}> Anzahl und Maße aus der Positionszeile übernehmen (${esc(info.position.text)}, ${n2(info.position.menge, 0)} Stk., ${n2(info.position.h, 0)} × ${n2(info.position.b, 0)} × ${n2(info.position.t, 0)}); leerer Positionstext wird gefüllt</label>`) : ""}
-        ${zeile("Vorhandene Teile", `<select id="siErs">${optsPaare([["0", "behalten, neue Teile anhängen"], ["1", "ersetzen durch die importierten"]], ersetzen ? "1" : "0")}</select>`)}
+        ${zeile("Vorhandene Teile", `<select id="siErs">${optsPaare([["0", "behalten, neue Teile anhängen"], ["1", "ersetzen durch die importierten"]], ersetzen ? "1" : "0")}</select>
+          ${info.doppelt && (info.doppelt.teile || info.doppelt.beschlaege) ? `<span class="hinweis" id="siDoppelt" style="color:var(--rot)">${info.doppelt.alles ? "Diese Daten stehen schon in der Position" : `${info.doppelt.teile} Teile und ${info.doppelt.beschlaege} Beschläge stehen schon in der Position`} – beim Anhängen wären sie doppelt.</span>` : ""}`)}
       </div>`;
     $("#siOk", hg).disabled = false;
     $("#siOk", hg).textContent = anzNeu ? `Importieren und ${anzNeu} Material${anzNeu > 1 ? "ien" : ""} anlegen` : "Importieren";
@@ -2440,12 +2461,23 @@ function stuecklistenImport(ctx, {konstruktion = false, datei = ""} = {}) {
         position_uebernehmen: posUebernehmen, ersetzen}});
       zu();
       const im = r.import;
-      toast(`${im.teile} Teile und ${im.beschlaege} Beschläge übernommen` + (im.angelegt.length ? ` · neu im Materialstamm: ${im.angelegt.join(", ")}` : ""));
+      toast(`${im.teile} Teile und ${im.beschlaege} Beschläge übernommen` + (im.ausgelassen ? ` · ${im.ausgelassen} Zeile${im.ausgelassen > 1 ? "n" : ""} nicht lesbar und ausgelassen` : "")
+        + (im.angelegt.length ? ` · neu im Materialstamm: ${im.angelegt.join(", ")}` : ""));
       ansichtPosition(pid, "werkstoffe");
     } catch (e) { toast(e.message, true); b.disabled = false; b.textContent = "Importieren"; }
   };
   zeichnen();
   if (konstruktion) konstruktionLaden();
+}
+// Meldungen des Stücklistenlesers: was nicht gelesen werden konnte (rot, wird ausgelassen) und was zu prüfen ist
+function siHinweise(info) {
+  const h = info.hinweise || [];
+  if (!h.length) return "";
+  const fehler = h.filter(x => x.art === "fehler"), rest = h.filter(x => x.art !== "fehler");
+  const liste = (xs, max) => xs.slice(0, max).map(x => `<div>Zeile ${x.zeile}: ${esc(x.text)}</div>`).join("") + (xs.length > max ? `<div>… und ${xs.length - max} weitere</div>` : "");
+  return `<div id="siHinweise" style="margin-top:8px;padding:8px 10px;border:1px solid var(--linie);border-radius:4px;font-size:13px;max-height:170px;overflow:auto">
+    ${fehler.length ? `<div style="color:var(--rot)"><b>${fehler.length} Zeile${fehler.length > 1 ? "n" : ""} nicht lesbar – ${fehler.length > 1 ? "sie werden" : "sie wird"} nicht übernommen:</b>${liste(fehler, 30)}</div>` : ""}
+    ${rest.length ? `<div${fehler.length ? ' style="margin-top:6px"' : ""}><b>Bitte prüfen:</b>${liste(rest, 30)}</div>` : ""}</div>`;
 }
 const optsPaare = (paare, wert) => paare.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(wert) ? "selected" : ""}>${esc(l)}</option>`).join("");
 
@@ -2494,7 +2526,7 @@ function materialInKalk(k, m, rolle) {
   if (da) return {k: da.k, neu: false};
   const prae = {platte: "P", massiv: "M", kante: "K", furnier: "F", oberflaeche: "O", sonstig: "S"}[typ];
   const nrn = k.werkstoffe.filter(w => String(w.k).startsWith(prae)).map(w => +String(w.k).slice(1) || 0);
-  const neu = {k: prae + String(Math.max(0, ...nrn) + 1).padStart(2, "0"), typ, einheit: einh || {kante: "lfm", massiv: "m³", sonstig: "Stk."}[typ] || "m²", dicke: m.dicke || 0, ...daten};
+  const neu = {k: prae + String(Math.max(0, ...nrn) + 1).padStart(2, "0"), typ, einheit: einh || {kante: "lfm", massiv: "m³", sonstig: "Stk."}[typ] || "m²", dicke: m.dicke || 0, um: +m.umrechnung || 0, ...daten};
   k.werkstoffe.push(neu);
   return {k: neu.k, neu: true};
 }

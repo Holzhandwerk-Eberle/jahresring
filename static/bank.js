@@ -15,14 +15,15 @@ async function ansichtBank() {
   const ks = d.kontostand;
   const kann = darf("op", 2);
   const dateien = d.dateien || [];
-  const zielText = u => (u.ziel || []).map(t => `<div>${t.art === "op" ? "Zahlungseingang" : "Zahlungsauftrag"} <b>${esc(t.nummer || "")}</b> ${eur(Math.abs(t.betrag))}${t.art === "zahlung" && !t.gesetzt ? ` <span class="hinweis">(war schon bezahlt)</span>` : ""}</div>`).join("");
+  const zielText = u => (u.ziel || []).map(t => `<div>${t.art === "op" ? "Zahlungseingang" : "Zahlungsauftrag"} <b>${esc(t.nummer || "")}</b> ${eur(Math.abs(t.betrag))}${t.skonto ? ` und ${eur(t.skonto)} Skonto` : ""}${t.art === "zahlung" && !t.gesetzt ? ` <span class="hinweis">(war schon bezahlt)</span>` : ""}</div>`).join("");
   const vorschlagText = v => !v ? `<span class="hinweis">kein Vorschlag</span>`
-    : `<div class="bk-vs ${v.sicher ? "sicher" : "pruefen"}"><span class="tag">${v.sicher ? "sicher" : "prüfen"}</span> ${v.konto ? `Konto <b>${esc(v.konto_text)}</b>` : v.ziele.map(t => `${esc(t.text)}${v.ziele.length > 1 ? ` (${eur(t.betrag)})` : ""}`).join("<br>")}<div class="hinweis">${esc(v.grund)}</div></div>`;
+    : `<div class="bk-vs ${v.sicher ? "sicher" : "pruefen"}"><span class="tag">${v.sicher ? "sicher" : "prüfen"}</span> ${v.konto ? `Konto <b>${esc(v.konto_text)}</b>` : v.ziele.map(t => `${esc(t.text)}${v.ziele.length > 1 ? ` (${eur(t.betrag)})` : ""}${t.skonto ? ` <span class="nw">abzüglich ${eur(t.skonto)} Skonto</span>` : ""}`).join("<br>")}<div class="hinweis">${esc(v.grund)}</div></div>`;
+  const rueckText = u => u.hinweis ? `<div class="hinweis bk-rueck" style="color:#8a5a00">${esc(u.hinweis)}</div>` : "";
   const zeilen = d.umsaetze.map(u => `<tr data-u="${u.id}">
       <td class="nw">${datum(u.buchung)}</td>
       <td><b>${esc(u.name || "–")}</b><div class="hinweis bk-zweck">${esc(u.zweck)}</div></td>
       <td class="r nw"><b style="color:${u.betrag < 0 ? "var(--rot)" : "var(--gruen)"}">${eur(u.betrag)}</b></td>
-      <td>${u.status === "offen" ? vorschlagText(u.vorschlag) : u.status === "zugeordnet" ? zielText(u) : (u.konto ? `<div>Konto <b>${esc(u.konto_text)}</b></div>` : `<span class="hinweis">ohne Konto</span>`) + (u.notiz ? `<div class="hinweis">${esc(u.notiz)}</div>` : "")}</td>
+      <td>${u.status === "offen" ? (u.hinweis ? rueckText(u) : vorschlagText(u.vorschlag)) : u.status === "zugeordnet" ? zielText(u) : (u.konto ? `<div>Konto <b>${esc(u.konto_text)}</b></div>` : `<span class="hinweis">ohne Konto</span>`) + (u.notiz ? `<div class="hinweis">${esc(u.notiz)}</div>` : "")}</td>
       <td class="r">${!kann ? "" : u.status === "offen" ? `<span class="bk-kn">${u.vorschlag ? `<button class="btn${u.vorschlag.sicher ? " prim" : ""}" data-ok="${u.id}">Übernehmen</button>` : ""}<button class="btn" data-zu="${u.id}">Zuordnen …</button><button class="btn" data-ign="${u.id}" title="Umsatz ohne Rechnung (Miete, Kontoführung, Versicherung, Privatentnahme …) einem Sachkonto zuordnen">Konto …</button></span>`
         : `<span class="bk-kn">${u.status === "ignoriert" ? `<button class="btn" data-ign="${u.id}">Konto ändern</button>` : ""}<button class="btn" data-los="${u.id}">${u.status === "zugeordnet" ? "Zuordnung lösen" : "Zurückholen"}</button></span>`}</td></tr>`).join("");
   z.innerHTML = `<div class="titel"><h2>Kontoauszüge</h2><div class="rechts">
@@ -93,14 +94,17 @@ async function bankZuordnen(u, fertig) {
   const gutschrift = u.betrag > 0;
   const liste = gutschrift ? k.op : k.zahlung;
   const vorgabe = new Set(((u.vorschlag || {}).ziele || []).map(t => t.id));
+  const vorSkonto = new Set(((u.vorschlag || {}).ziele || []).filter(t => t.skonto).map(t => t.id));
+  const mehrere = gutschrift || vorgabe.size > 1;   // Abbuchung: ein Zahlungsauftrag – außer bei einer Sammelüberweisung
   let fenster = null;
   const r = await modal(gutschrift ? "Gutschrift zuordnen" : "Abbuchung zuordnen", `
     <p><b>${esc(u.name || "")}</b> · ${datum(u.buchung)} · <b>${eur(u.betrag)}</b><br><span class="hinweis">${esc(u.zweck)}</span></p>
     <input id="bzSuche" placeholder="${gutschrift ? "Rechnungsnummer, Kunde …" : "Zahlungsauftrag, Lieferant, Rechnungsnummer …"}" style="width:100%;margin-bottom:6px">
     <div class="bz-liste" style="max-height:46vh;overflow:auto;border:1px solid var(--linie);border-radius:6px">
       ${liste.map(x => `<label class="bz-z" data-t="${esc((x.text || "").toLowerCase())} ${String(x.offen).replace(".", ",")}" style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--zeile2);cursor:pointer">
-        <input type="${gutschrift ? "checkbox" : "radio"}" name="bzw" value="${x.id}" ${vorgabe.has(x.id) ? "checked" : ""}>
+        <input type="${mehrere ? "checkbox" : "radio"}" name="bzw" value="${x.id}" ${vorgabe.has(x.id) ? "checked" : ""}>
         <span style="flex:1">${esc(x.text)}<span class="hinweis"> · fällig ${datum(x.faellig)}</span></span><span class="nw">${eur(x.offen)}</span>
+        ${gutschrift && x.skonto > 0 ? `<span class="nw hinweis" title="Vereinbart: ${zahlDE(x.skonto_satz, x.skonto_satz % 1 ? 2 : 0)} % Skonto bis ${datum(x.skonto_bis)}"><input type="checkbox" data-sk="${x.id}" ${vorSkonto.has(x.id) ? "checked" : ""} style="vertical-align:-2px"> ${eur(x.skonto)} Skonto</span>` : ""}
         ${gutschrift ? `<input class="bz-b" data-b="${x.id}" style="width:90px;text-align:right" placeholder="Betrag">` : ""}</label>`).join("") || `<div class="leer">Nichts Offenes vorhanden.</div>`}
     </div>
     ${gutschrift ? `<p class="hinweis" id="bzSumme"></p>` : ""}`, "Zuordnen", hg => {
@@ -119,12 +123,22 @@ async function bankZuordnen(u, fertig) {
       sum();
     });
     $$(".bz-b", hg).forEach(i => i.oninput = () => { const c = $(`input[name=bzw][value="${i.dataset.b}"]`, hg); c.checked = !!i.value; sum(); });
+    // Skonto angehakt: Die Rechnung gilt mit Zahlung plus Skonto als ausgeglichen – als Betrag höchstens „offen abzüglich Skonto“ vorschlagen
+    $$("[data-sk]", hg).forEach(s => { s.onclick = e => e.stopPropagation(); s.onchange = () => {
+      const x = liste.find(y => y.id === +s.dataset.sk), c = $(`input[name=bzw][value="${s.dataset.sk}"]`, hg), b = $(`[data-b="${s.dataset.sk}"]`, hg);
+      if (s.checked) { c.checked = true; const andere = $$("input[name=bzw]:checked", hg).filter(o => o !== c).reduce((a, o) => a + betragLesen($(`[data-b="${o.value}"]`, hg).value), 0);
+        b.value = zahlDE(Math.max(0, Math.min(kfm(x.offen - x.skonto), kfm(u.betrag - andere)))); }
+      sum(); }; });
     $("#bzSuche", hg).oninput = e => { const q = e.target.value.toLowerCase().trim(); $$(".bz-z", hg).forEach(l => l.style.display = !q || l.dataset.t.includes(q) ? "" : "none"); };
     if (gutschrift) { $$("input[name=bzw]:checked", hg).forEach(c => { const v = (u.vorschlag.ziele.find(t => t.id === +c.value) || {}).betrag; $(`[data-b="${c.value}"]`, hg).value = zahlDE(v); }); sum(); }
   });
   if (!r || !fenster) return;
-  const ziele = $$("input[name=bzw]:checked", fenster).map(c => ({art: gutschrift ? "op" : "zahlung", id: +c.value,
-    betrag: gutschrift ? zahlEin($(`[data-b="${c.value}"]`, fenster).value) : -u.betrag}));
+  const gewaehlt = $$("input[name=bzw]:checked", fenster);
+  const ziele = gewaehlt.map(c => { const sk = $(`[data-sk="${c.value}"]`, fenster), x = liste.find(y => y.id === +c.value);
+    const vor = ((u.vorschlag || {}).ziele || []).find(t => t.id === +c.value);
+    return {art: gutschrift ? "op" : "zahlung", id: +c.value,
+      betrag: gutschrift ? zahlEin($(`[data-b="${c.value}"]`, fenster).value) : gewaehlt.length > 1 ? (vor ? vor.betrag : x.offen) : -u.betrag,
+      ...(gutschrift && sk && sk.checked ? {skonto: x.skonto} : {})}; });
   if (!ziele.length) return toast("Bitte etwas auswählen.", true);
   try { await api(`bank/${u.id}/zuordnen`, {method: "POST", body: {ziele}}); toast("Zugeordnet"); fertig(); } catch (x) { toast(x.message, true); }
 }

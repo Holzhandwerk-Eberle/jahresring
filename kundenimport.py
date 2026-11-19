@@ -415,7 +415,9 @@ def _briefanrede(r):
     return "Sehr geehrte Damen und Herren,"
 
 
-def datensatz(zeile, zuordnung, gruppen, gruppe_standard):
+def datensatz(zeile, zuordnung, gruppen, gruppe_standard, plz_auffuellen=False):
+    """Eine Zeile der Datei als Kundendatensatz. „_aus_datei“ nennt die Felder, die wirklich in der Datei standen (nur sie dürfen
+    einen vorhandenen Kunden überschreiben); abgeleitete Vorgaben wie Gruppe oder Briefanrede gehören nicht dazu."""
     r = {}
     for i, feld in zuordnung.items():
         if feld and int(i) < len(zeile):
@@ -442,12 +444,33 @@ def datensatz(zeile, zuordnung, gruppen, gruppe_standard):
     for f in ("plz", "ort", "land", "telefon", "email1", "email2", "website", "ustid", "bemerkungen", "merkmale"):
         if r.get(f):
             k[f] = r[f]
+    aus_datei = {f for f in ("plz", "ort", "land", "telefon", "email1", "email2", "website", "ustid", "bemerkungen", "merkmale") if r.get(f)}
+    aus_datei |= {f for f in ("vorname", "nachname", "firma", "zusatz") if r.get(f)}
+    aus_datei |= {"titel"} if r.get("akad") else set()
+    aus_datei |= {"anredeform"} if k["anredeform"] else set()
+    aus_datei |= {"strasse", "hausnr"} if (r.get("strasse") or r.get("hausnr")) else set()
+    aus_datei |= {"kurzname"} if r.get("kurzname") else set()
+    aus_datei |= {"anrede"} if r.get("anrede") else set()
+    aus_datei |= {"gruppe"} if r.get("gruppe") else set()
+    # Postleitzahl aus Excel: als Zahl gespeichert fehlt die führende Null (01067 Dresden → 1067). Vierstellige Postleitzahlen gibt es
+    # aber auch in Österreich und der Schweiz – ergänzt wird nur bei deutscher Landesangabe oder wenn es beim Import so gewählt ist.
+    land_ = (r.get("land") or "").strip().upper()
+    if re.fullmatch(r"\d{4}", (k.get("plz") or "").strip()):
+        if land_ in ("D", "DE", "DEU", "GERMANY", "DEUTSCHLAND") or (plz_auffuellen and not land_):
+            k["plz"] = "0" + k["plz"].strip()
+        elif not land_:
+            k["_plz_vier"] = True
+    if any(re.fullmatch(r"[1-9]\d{5,}", re.sub(r"[\s/-]", "", r.get(f) or "")) for f in ("telefon", "mobil")):
+        k["_tel_ohne_null"] = True   # 351123456 statt 0351 123456: in Excel als Zahl gespeichert
     if r.get("mobil"):
         k["telefon"] = (k["telefon"] + " · " + r["mobil"]) if k.get("telefon") else r["mobil"]
+        aus_datei.add("telefon")
     if r.get("land") and r["land"].upper() in ("D", "DE", "DEU", "GERMANY"):
         k["land"] = "Deutschland"
     if r.get("zahlungsziel") and r["zahlungsziel"].isdigit():
         k["zahlungsziel"] = int(r["zahlungsziel"])
+        aus_datei.add("zahlungsziel")
+    k["_aus_datei"] = aus_datei
     if r.get("nummer"):
         nr = re.sub(r"\D", "", r["nummer"])
         if nr:
@@ -461,6 +484,39 @@ def datensatz(zeile, zuordnung, gruppen, gruppe_standard):
         gewerbe = next((x for x in gruppen if any(w in x.lower() for w in ("gewerb", "geschäft", "geschaeft", "firm", "unternehm"))), None)
         k["gruppe"] = (gewerbe if r.get("firma") else privat) or gruppe_standard
     return k
+
+
+class Dubletten:
+    """Nachschlagetabellen über den Kundenbestand: einmal je Import aufgebaut, statt je Zeile der Datei dreimal die ganze Tabelle zu
+    durchsuchen. Gleich ist ein Kunde bei gleicher Kundennummer, gleicher E-Mail-Adresse oder gleichem Kurznamen mit gleicher PLZ."""
+
+    def __init__(self, con):
+        self.nr, self.mail, self.name, self.zeilen = {}, {}, {}, {}
+        for r in con.execute("SELECT id, nummer, kurzname, plz, ort, email1 FROM kunden ORDER BY id"):
+            self.merken(r["id"], dict(r))
+
+    def merken(self, kid, k):
+        self.zeilen[kid] = {f: k.get(f) for f in ("nummer", "kurzname", "plz", "ort", "email1")}
+        if k.get("nummer"):
+            self.nr.setdefault(int(k["nummer"]), kid)
+        if (k.get("email1") or "").strip():
+            self.mail.setdefault(k["email1"].strip().lower(), kid)
+        self.name.setdefault(((k.get("kurzname") or "").strip().lower(), (k.get("plz") or "").strip()), kid)
+
+    def finden(self, k):
+        """→ (Kunden-ID, Grund, sicher). sicher: Der Name stimmt überein – bei gleicher Nummer oder E-Mail-Adresse mit anderem Namen
+        (Familienmitglied, Sammeladresse, anderer Nummernkreis) ist es womöglich ein anderer Mensch."""
+        kid, grund = None, ""
+        if k.get("nummer") and int(k["nummer"]) in self.nr:
+            kid, grund = self.nr[int(k["nummer"])], "Kundennummer"
+        elif (k.get("email1") or "").strip().lower() in self.mail:
+            kid, grund = self.mail[k["email1"].strip().lower()], "E-Mail"
+        else:
+            kid = self.name.get(((k.get("kurzname") or "").strip().lower(), (k.get("plz") or "").strip()))
+            grund = "Name und PLZ" if kid else ""
+        if not kid:
+            return None, "", False
+        return kid, grund, (self.zeilen[kid].get("kurzname") or "").strip().lower() == (k.get("kurzname") or "").strip().lower()
 
 
 def doppelt(con, k):

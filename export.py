@@ -392,14 +392,19 @@ def liste():
 # ---------------------------------------------------------------- DATEV-Buchungsstapel (EXTF, Formatversion 13)
 DATEV_KONTEN = {
     "03": {"erloes_19": 8400, "erloes_7": 8300, "erloes_13b": 8337, "erloes_eu": 8336, "erloes_0": 8338,
-           "aufwand_19": 3400, "aufwand_7": 3300, "aufwand_0": 3200, "debitor": 10000, "kreditor": 70000, "bank": 1200},
+           "aufwand_19": 3400, "aufwand_7": 3300, "aufwand_0": 3200, "debitor": 10000, "kreditor": 70000, "bank": 1200,
+           "skonto_gew_19": 8736, "skonto_gew_7": 8731, "skonto_gew_0": 8730, "skonto_erh_19": 3736, "skonto_erh_7": 3731, "skonto_erh_0": 3730},
     "04": {"erloes_19": 4400, "erloes_7": 4300, "erloes_13b": 4337, "erloes_eu": 4336, "erloes_0": 4338,
-           "aufwand_19": 5400, "aufwand_7": 5300, "aufwand_0": 5200, "debitor": 10000, "kreditor": 70000, "bank": 1800},
+           "aufwand_19": 5400, "aufwand_7": 5300, "aufwand_0": 5200, "debitor": 10000, "kreditor": 70000, "bank": 1800,
+           "skonto_gew_19": 4736, "skonto_gew_7": 4731, "skonto_gew_0": 4730, "skonto_erh_19": 5736, "skonto_erh_7": 5731, "skonto_erh_0": 5730},
 }
 DATEV_KONTEN_TEXT = {"erloes_19": "Erlöse 19 % USt", "erloes_7": "Erlöse 7 % USt", "erloes_13b": "Erlöse § 13b UStG (Steuerschuld Leistungsempfänger)",
                      "erloes_eu": "Erlöse sonstige Leistungen EU (Reverse Charge)", "erloes_0": "Erlöse nicht steuerbar / steuerfrei",
                      "aufwand_19": "Wareneingang 19 % Vorsteuer", "aufwand_7": "Wareneingang 7 % Vorsteuer", "aufwand_0": "Wareneingang ohne Vorsteuer",
-                     "debitor": "Debitor (Sammelkonto Kunden)", "kreditor": "Kreditor (Sammelkonto Lieferanten)", "bank": "Bankkonto (für Bankumsätze)"}
+                     "debitor": "Debitor (Sammelkonto Kunden)", "kreditor": "Kreditor (Sammelkonto Lieferanten)", "bank": "Bankkonto (für Bankumsätze)",
+                     "skonto_gew_19": "Gewährte Skonti 19 % USt", "skonto_gew_7": "Gewährte Skonti 7 % USt", "skonto_gew_0": "Gewährte Skonti ohne USt",
+                     "skonto_erh_19": "Erhaltene Skonti 19 % Vorsteuer", "skonto_erh_7": "Erhaltene Skonti 7 % Vorsteuer",
+                     "skonto_erh_0": "Erhaltene Skonti ohne Vorsteuer"}
 DATEV_SPALTEN = (
     ["Umsatz (ohne Soll/Haben-Kz)", "Soll/Haben-Kennzeichen", "WKZ Umsatz", "Kurs", "Basis-Umsatz", "WKZ Basis-Umsatz", "Konto",
      "Gegenkonto (ohne BU-Schlüssel)", "BU-Schlüssel", "Belegdatum", "Belegfeld 1", "Belegfeld 2", "Skonto", "Buchungstext", "Postensperre",
@@ -429,7 +434,7 @@ def datev_cfg(e):
     return {"berater": str(d.get("berater") or "").strip(), "mandant": str(d.get("mandant") or "").strip(), "skr": skr,
             "wj_beginn": max(1, min(12, int(d.get("wj_beginn") or 1))), "sachkontenlaenge": max(4, min(8, int(d.get("sachkontenlaenge") or 4))),
             "konten": konten, "ausgang": d.get("ausgang", True) is not False, "eingang": d.get("eingang", True) is not False,
-            "bankumsaetze": bool(d.get("bankumsaetze"))}
+            "bankumsaetze": bool(d.get("bankumsaetze")), "skonto": d.get("skonto", True) is not False}
 
 
 def _dt_text(t, n):
@@ -512,6 +517,7 @@ def datev_buchungen(con, von, bis, cfg):
                             (von, bis)).fetchone()[0]
         if offen:
             warnungen.append(f"{offen} Bankumsätze im Zeitraum ohne Zuordnung bzw. ohne Konto – nicht im Stapel")
+        bank_gezahlt = {}   # Zahlungsauftrag → tatsächlich abgebuchter Betrag
         for u in con.execute("SELECT * FROM bank_umsaetze WHERE buchung BETWEEN ? AND ? AND (status='zugeordnet' OR (status='ignoriert' AND konto IS NOT NULL)) "
                              "ORDER BY buchung, id", (von, bis)):
             ziele = _jl(u["ziel"], [])
@@ -523,10 +529,59 @@ def datev_buchungen(con, von, bis, cfg):
                 gegen, beleg = k["debitor"], ziele[0].get("nummer") or ""
             else:
                 gegen, beleg = k["kreditor"], (ziele[0].get("nummer") if ziele else "") or ""
-            aus.append({"betrag": abs(u["betrag"]), "sh": "S" if u["betrag"] > 0 else "H", "konto": k["bank"], "gegen": gegen, "datum": u["buchung"], "bu": bu,
-                        "beleg1": _dt_beleg(beleg), "beleg2": "", "text": (u["name"] or u["notiz"] or u["zweck"] or "")[:60], "leistung": "", "faellig": "",
-                        "euid": "", "auftrag": ""})
+            text = (u["name"] or u["notiz"] or u["zweck"] or "")[:60]
+            # auf mehrere Rechnungen aufgeteilt: eine Zeile je Rechnung, wenn die Einzelbeträge den Umsatz ergeben
+            teile = [(t.get("nummer") or "", float(t.get("betrag") or 0)) for t in ziele] if u["status"] != "ignoriert" and len(ziele) > 1 else []
+            if not teile or any(b_ <= 0 for _, b_ in teile) or abs(kfm(sum(b_ for _, b_ in teile)) - abs(kfm(u["betrag"]))) > 0.009:
+                if len(ziele) > 1 and u["status"] != "ignoriert":
+                    warnungen.append(f"Bankumsatz vom {_de(u['buchung'])} über {_z(abs(u['betrag']))} EUR gehört zu {len(ziele)} Rechnungen "
+                                     f"({', '.join(str(t.get('nummer') or '') for t in ziele)[:80]}) – als eine Buchung im Stapel")
+                teile = [(beleg, abs(u["betrag"]))]
+            for beleg_, betrag_ in teile:
+                aus.append({"betrag": kfm(betrag_), "sh": "S" if u["betrag"] > 0 else "H", "konto": k["bank"], "gegen": gegen, "datum": u["buchung"], "bu": bu,
+                            "beleg1": _dt_beleg(beleg_), "beleg2": "", "text": text, "leistung": "", "faellig": "", "euid": "", "auftrag": ""})
+            for t in ziele if u["status"] != "ignoriert" else []:
+                if t.get("art") == "zahlung" and t.get("betrag") and t.get("rechnung"):
+                    bank_gezahlt[int(t["id"])] = float(t["betrag"])
+        if cfg["skonto"]:
+            aus += _skonto_buchungen(con, von, bis, k, bank_gezahlt)
     return aus, warnungen
+
+
+def _skonto_buchungen(con, von, bis, k, bank_gezahlt):
+    """Skonto als eigene Buchungen, damit auf dem Personenkonto kein Rest bleibt: gewährtes Skonto (Skontokonto an Debitor) aus den
+    Zahlungseingängen der Art Skonto; erhaltenes Skonto (Kreditor an Skontokonto) aus den im Zeitraum mit Skonto bezahlten
+    Zahlungsaufträgen – nach dem abgebuchten Betrag, sonst nach der Regel des Programms (bezahlt bis zum Skontodatum)."""
+    aus = []
+    stufe = lambda satz: "19" if satz >= 18.5 else "7" if satz >= 6.5 else "0"   # noqa: E731
+    for z in con.execute("SELECT z.datum, z.betrag, o.nummer, o.kunde_id, b.ust_satz, ku.kurzname FROM zahlungseingaenge z "
+                         "JOIN offene_posten o ON o.id=z.op_id LEFT JOIN belege b ON b.id=o.beleg_id LEFT JOIN kunden ku ON ku.id=o.kunde_id "
+                         "WHERE z.art='Skonto' AND z.datum BETWEEN ? AND ? ORDER BY z.datum, z.id", (von, bis)):
+        betrag = kfm(float(z["betrag"] or 0))
+        if abs(betrag) < 0.005:
+            continue
+        aus.append({"betrag": betrag, "sh": "S" if betrag > 0 else "H", "konto": k["skonto_gew_" + stufe(float(z["ust_satz"] if z["ust_satz"] is not None else 19))],
+                    "gegen": k["debitor"], "datum": z["datum"], "bu": "", "beleg1": _dt_beleg(z["nummer"]), "beleg2": "",
+                    "text": f"Skonto {z['kurzname'] or ''}".strip()[:60], "leistung": "", "faellig": "", "euid": "", "auftrag": ""})
+    for z in con.execute("SELECT z.*, l.kurzname AS lieferant, l.gruppe FROM zahlungen z LEFT JOIN lieferanten l ON l.id=z.lieferant_id "
+                         "WHERE substr(IFNULL(z.bezahlt,''),1,10) BETWEEN ? AND ? ORDER BY z.bezahlt, z.id", (von, bis)):
+        if (z["gruppe"] or "") in LOHN_GRUPPEN or not (z["skonto"] or 0):
+            continue
+        voll = kfm(float(z["betrag"] or 0))
+        if z["id"] in bank_gezahlt:
+            skonto = kfm(voll - bank_gezahlt[z["id"]])
+            if skonto > kfm(voll * float(z["skonto"]) / 100) + 0.02:   # mehr als das vereinbarte Skonto: keine Skontobuchung unterstellen
+                continue
+        elif z["skonto_bis"] and (z["bezahlt"] or "")[:10] <= z["skonto_bis"]:
+            skonto = kfm(voll - kfm(voll * (1 - float(z["skonto"]) / 100)))
+        else:
+            continue
+        if skonto < 0.005:
+            continue
+        aus.append({"betrag": skonto, "sh": "S", "konto": k["kreditor"], "gegen": k["skonto_erh_" + stufe(float(z["vorsteuer"] or 0))],
+                    "datum": (z["bezahlt"] or "")[:10], "bu": "", "beleg1": _dt_beleg(z["belegnr"] or z["nummer"]), "beleg2": _dt_beleg(z["nummer"])[:12],
+                    "text": f"Skonto {z['lieferant'] or ''}".strip()[:60], "leistung": "", "faellig": "", "euid": "", "auftrag": ""})
+    return aus
 
 
 def _konto_steuer(con, cfg, nummer):
@@ -580,6 +635,8 @@ def datev_export(con, von, bis, wer=""):
     summe_aus = kfm(sum(b["betrag"] for b in buchungen if b["konto"] == cfg["konten"]["debitor"]))
     summe_ein = kfm(sum(b["betrag"] for b in buchungen if b["gegen"] == cfg["konten"]["kreditor"] and b["konto"] != cfg["konten"]["bank"]))
     n_bank = sum(1 for b in buchungen if b["konto"] == cfg["konten"]["bank"])
+    skonto_konten = {v for k_, v in cfg["konten"].items() if k_.startswith("skonto_")}
+    n_skonto = sum(1 for b in buchungen if b["konto"] in skonto_konten or b["gegen"] in skonto_konten)
     info = [f"DATEV-Buchungsstapel {e.get('firma') or ''} – Zeitraum {_de(von)} bis {_de(bis)}",
             f"Erstellt am {jetzt_:%d.%m.%Y %H:%M} mit Jahresring {HILFE['version']} von {wer}", "",
             f"Datei: {csv_name} (DATEV-Format, Buchungsstapel Version 13, Zeichensatz Windows-1252)",
@@ -589,7 +646,9 @@ def datev_export(con, von, bis, wer=""):
             "Kontenzuordnung:"] + [f"  {DATEV_KONTEN_TEXT[k_]}: {v}" for k_, v in cfg["konten"].items()] + [
             "", "Ausgangsrechnungen: Debitor an Erlöskonto, Schlussrechnungen nur mit dem Rest nach Abzug der Abschlagsrechnungen.",
             "Eingangsrechnungen: Aufwandskonto (beim Lieferanten hinterlegt oder Wareneingang nach Vorsteuersatz) an Kreditor.",
-            "Löhne, Lohnsteuer und Sozialversicherung sind nicht enthalten." + (" Bankumsätze: Bankkonto an Debitor/Kreditor bzw. an das zugeordnete Sachkonto."
+            "Löhne, Lohnsteuer und Sozialversicherung sind nicht enthalten." + (" Bankumsätze: Bankkonto an Debitor/Kreditor bzw. an das zugeordnete Sachkonto, "
+            "bei mehreren Rechnungen eine Zeile je Rechnung." + (" Skonto: gewährtes Skonto als Skontokonto an Debitor, erhaltenes als Kreditor an Skontokonto "
+            f"({n_skonto} Buchungen); die Skontokonten sind Vorgaben und mit der Kanzlei abzustimmen." if cfg["skonto"] else " Skonto ist nicht als eigene Buchung enthalten.")
             if cfg["bankumsaetze"] else " Zahlungen (Bank) bucht die Kanzlei aus den Kontoumsätzen."),
             "Die Buchungen sind nicht festgeschrieben (Festschreibung 0)."] + (["", "Hinweise:"] + [f"  {w}" for w in warnungen] if warnungen else [])
     with zipfile.ZipFile(ziel + ".part", "w", zipfile.ZIP_DEFLATED) as z:

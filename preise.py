@@ -13,6 +13,7 @@ from datetime import date
 
 import zipfile
 
+import kern
 import kundenimport
 import material
 from kern import kfm
@@ -49,6 +50,7 @@ def _einheit(t):
 
 
 _WAEHRUNG = re.compile(r"(?i)^(eur|euro|€|chf)|(eur|euro|€|chf)$")
+_FREMD = re.compile(r"(?i)(?<![a-z])(chf|sfr|usd|gbp|pln|czk|dkk|sek|nok)(?![a-z])|[$£]")   # Preise in fremder Währung
 _PUNKT_3 = re.compile(r"-?[1-9]\d{0,2}\.\d{3}")   # „1.250“: Tausenderpunkt (deutsch) oder drei Nachkommastellen (englisch)?
 
 
@@ -92,6 +94,14 @@ def _zahl(t, punkt=None):
 
 def _nr(t):
     return re.sub(r"[\s.\-/]", "", str(t or "")).upper().lstrip("0")
+
+
+def waehrung_von(t):
+    """Fremde Währung in einer Preisangabe oder Spaltenüberschrift ("CHF 9,80", "Preis USD") → "CHF", sonst ""."""
+    m = _FREMD.search(str(t or ""))
+    if not m:
+        return ""
+    return {"$": "USD", "£": "GBP", "SFR": "CHF"}.get(m.group(0).upper(), m.group(0).upper())
 
 
 def gtin_ok(x):
@@ -239,6 +249,8 @@ def tabelle_artikel(zeilen, zuordnung):
     englisch = any(re.fullmatch(r"-?\d+\.(\d{1,2}|\d{4,})", x) or re.search(r",\d{3}\.", x) for x in spalte)
     punkt = "tausend" if deutsch and not englisch else None
     aus, ohne, unlesbar, negativ, zweifel = [], 0, [], [], []
+    waehrung_kopf = waehrung_von(kopf[zu["preis"]]) if zu["preis"] < len(kopf) else ""
+    fremd, je_nr = {}, {}
     for r in daten:
         def w(f):
             return r[zu[f]].strip() if f in zu and zu[f] < len(r) else ""
@@ -260,6 +272,12 @@ def tabelle_artikel(zeilen, zuordnung):
         pe = _zahl(w("pe")) or 1
         aus.append({"artnr": w("artnr"), "ean": re.sub(r"\D", "", w("ean")), "text": w("text")[:120], "preis": round(preis / (pe or 1), 4),
                     "einheit": _einheit(w("einheit")), "netto": True, "warengruppe": w("gruppe")[:40]})
+        wae = waehrung_von(w("preis")) or waehrung_kopf
+        if wae:
+            aus[-1]["waehrung"] = wae
+            fremd[wae] = fremd.get(wae, 0) + 1
+        if w("artnr"):
+            je_nr.setdefault(_nr(w("artnr")), []).append((w("artnr"), aus[-1]["preis"]))
     hinweise = []
     bsp = lambda liste: f"Artikel {liste[0][0][:30]}: „{liste[0][1][:20]}“"   # noqa: E731
     if unlesbar:
@@ -268,6 +286,15 @@ def tabelle_artikel(zeilen, zuordnung):
         hinweise.append(f"{len(negativ)} {'Zeile' if len(negativ) == 1 else 'Zeilen'} mit negativem Preis übersprungen (z. B. {bsp(negativ)}).")
     if ohne:
         hinweise.append(f"{ohne} {'Zeile' if ohne == 1 else 'Zeilen'} ohne Preis übersprungen.")
+    mehrfach = [v for v in je_nr.values() if len(v) > 1]
+    if mehrfach:
+        b = mehrfach[0]
+        preise_ = " und ".join(f"{p:.2f}".replace(".", ",") for _, p in b[:3])
+        hinweise.append(f"{len(mehrfach)} {'Artikelnummer steht' if len(mehrfach) == 1 else 'Artikelnummern stehen'} mehrfach in der Datei "
+                        f"(z. B. {b[0][0][:30]} mit {preise_} – Staffelpreise?). Es gilt jeweils die erste Zeile.")
+    for wae, anz in sorted(fremd.items()):
+        hinweise.append(f"{anz} {'Preis steht' if anz == 1 else 'Preise stehen'} in {wae}. Das Programm rechnet nicht um; diese Zeilen sind "
+                        "unten gekennzeichnet und nicht vorausgewählt.")
     if zweifel:
         n, v = zweifel[0][1], zweifel[0][2]
         gelesen = f"{v:,.2f}".replace(",", "#").replace(".", ",").replace("#", ".")
@@ -418,20 +445,25 @@ def abgleich(con, lieferant_id, artikel, rabatt=0.0, nur_lieferant=True, rabatte
                 neu, pe_hinweis = round(neu / teiler, 4), f"Preis je {teiler} angenommen"
         diff = ((neu - alt) / alt * 100) if alt else None
         einheit_ok = not a.get("einheit") or not m["einheit"] or a["einheit"] == m["einheit"]
-        auffaellig = (diff is not None and abs(diff) > 30) or not einheit_ok or neu <= 0
+        auffaellig = (diff is not None and abs(diff) > 30) or not einheit_ok or neu <= 0 or bool(a.get("waehrung"))
         treffer.append({"material_id": m["id"], "nummer": m["nummer"], "bezeichnung": (m["bezeichnung"] or "").split("\n")[0][:80],
                         "bestellnr": m["bestellnr"], "ueber": ueber, "alt": alt, "neu": neu, "diff": None if diff is None else round(diff, 1),
                         "einheit": m["einheit"], "einheit_datei": a.get("einheit") or "", "einheit_ok": einheit_ok, "preis_vom": m["preis_vom"],
                         "text_datei": a.get("text") or "", "brutto": not a.get("netto", True), "rabattgruppe": a.get("rabattgruppe") or "",
-                        "pe_hinweis": pe_hinweis, "gleich": abs(neu - alt) < 0.00005, "vorschlag": not auffaellig and abs(neu - alt) >= 0.00005})
+                        "pe_hinweis": pe_hinweis, "gleich": abs(neu - alt) < 0.00005, "vorschlag": not auffaellig and abs(neu - alt) >= 0.00005,
+                        "waehrung": a.get("waehrung") or ""})
     treffer.sort(key=lambda t: (t["gleich"], not t["vorschlag"], t["nummer"]))
     return {"treffer": treffer, "artikel": len(artikel), "materialien": len(mats),
-            "ohne_treffer": sum(1 for m in mats if not any(t["material_id"] == m["id"] for t in treffer))}
+            "ohne_treffer": len(mats) - len(treffer)}
 
 
 def uebernehmen(con, posten, datum):
     n = 0
     geaendert = []
+    fremd = sorted({str(p.get("waehrung")) for p in posten or [] if isinstance(p, dict) and p.get("waehrung")})
+    if fremd:
+        kern.rueckfrage("fremdwaehrung", f"Unter den angehakten Preisen sind welche in {', '.join(fremd)}. Das Programm rechnet nicht um: "
+                        "Die Zahl aus der Datei würde als Euro-Preis übernommen.", "Trotzdem übernehmen")
     for p in posten or []:
         try:
             mid, neu = int(p["material_id"]), round(float(p["neu"]), 4)
@@ -486,8 +518,15 @@ def _bekannt(con):
 def neue(con, artikel, suche="", gruppe="", grenze=200):
     """Artikel der Datei, die es im Materialstamm (bei keinem Lieferanten) noch nicht gibt; mit Suche und Warengruppe."""
     nr, ean = _bekannt(con)
-    frei = [a for a in artikel if not a.get("nur_preis") and not (a.get("artnr") and _nr(a["artnr"]) in nr)
-            and not (a.get("ean") and a["ean"].lstrip("0") in ean)]
+    frei, gesehen = [], set()
+    for a in artikel:
+        if a.get("nur_preis") or (a.get("artnr") and _nr(a["artnr"]) in nr) or (a.get("ean") and a["ean"].lstrip("0") in ean):
+            continue
+        schl = _nr(a["artnr"]) if a.get("artnr") else "ean:" + (a.get("ean") or "")
+        if schl in gesehen:   # dieselbe Artikelnummer mehrfach in der Datei (Staffelpreise): Es gilt die erste Zeile
+            continue
+        gesehen.add(schl)
+        frei.append(a)
     gruppen = {}
     for a in frei:
         g = a.get("warengruppe") or ""
@@ -503,12 +542,16 @@ def neue(con, artikel, suche="", gruppe="", grenze=200):
             if not all(w in heu for w in worte):
                 continue
         treffer.append(a)
-    return {"neu_gesamt": len(frei), "neu_treffer": len(treffer), "neu": treffer[:grenze],
-            "gruppen": sorted(gruppen.items(), key=lambda x: (-x[1], x[0]))[:80]}
+    bekannt = set(material.einheiten(con))
+    return {"neu_gesamt": len(frei), "neu_treffer": len(treffer),
+            "neu": [dict(a, einheit_unbekannt=(a.get("einheit") or "") not in bekannt) for a in treffer[:grenze]],
+            "gruppen": sorted(gruppen.items(), key=lambda x: (-x[1], x[0]))[:80], "einheiten": [x for x in material.einheiten(con) if x != "(keine)"]}
 
 
-def anlegen(con, artikel, auswahl, kategorie, lieferant_id, rabatt=0.0, rabatte=None):
-    """Ausgewählte Artikel (Artikelnummern bzw. EAN aus der Datei) als Material anlegen. Schon vorhandene werden übersprungen."""
+def anlegen(con, artikel, auswahl, kategorie, lieferant_id, rabatt=0.0, rabatte=None, einheiten=None):
+    """Ausgewählte Artikel (Artikelnummern bzw. EAN aus der Datei) als Material anlegen. Schon vorhandene werden übersprungen.
+    Einheiten, die das Programm nicht kennt (TAFEL, BL, KAN … oder gar keine), werden nicht stillschweigend ersetzt: Ohne Zuordnung
+    in einheiten ({Einheit der Datei: Einheit des Programms}) wird nichts angelegt und die Liste der offenen Einheiten zurückgegeben."""
     if kategorie not in material.KATEGORIEN:
         raise Fehler("Bitte eine Materialart wählen.")
     wahl = {str(x) for x in auswahl or []}
@@ -517,6 +560,23 @@ def anlegen(con, artikel, auswahl, kategorie, lieferant_id, rabatt=0.0, rabatte=
     if len(wahl) > 2000:
         raise Fehler("Höchstens 2000 Artikel auf einmal anlegen.")
     nr, ean = _bekannt(con)
+    bekannt = set(material.einheiten(con))
+    zu = {str(k): v for k, v in (einheiten or {}).items() if v in bekannt} if isinstance(einheiten, dict) else {}
+    gewaehlt = [a for a in artikel if (a.get("artnr") or a.get("ean") or "") in wahl and not a.get("nur_preis")
+                and not ((a.get("artnr") and _nr(a["artnr"]) in nr) or (a.get("ean") and a["ean"].lstrip("0") in ean))]
+    offen = {}
+    for a in gewaehlt:
+        e_ = a.get("einheit") or ""
+        if e_ not in bekannt and e_ not in zu:
+            x = offen.setdefault(e_, {"einheit": e_, "anzahl": 0, "beispiel": (a.get("text") or a.get("artnr") or "")[:60]})
+            x["anzahl"] += 1
+    if offen:
+        return {"angelegt": 0, "uebersprungen": 0, "liste": [], "einheiten_fehlen": sorted(offen.values(), key=lambda x: (-x["anzahl"], x["einheit"])),
+                "einheiten": [x for x in material.einheiten(con) if x != "(keine)"]}
+    fremd = sorted({a["waehrung"] for a in gewaehlt if a.get("waehrung")})
+    if fremd:
+        kern.rueckfrage("fremdwaehrung", f"Unter den angehakten Artikeln sind welche mit Preisen in {', '.join(fremd)}. Das Programm rechnet nicht um: "
+                        "Die Zahl aus der Datei würde als Euro-Preis angelegt.", "Trotzdem anlegen")
     angelegt, uebersprungen = [], 0
     for a in artikel:
         schl = a.get("artnr") or a.get("ean") or ""
@@ -526,7 +586,7 @@ def anlegen(con, artikel, auswahl, kategorie, lieferant_id, rabatt=0.0, rabatte=
             uebersprungen += 1
             continue
         preis = _netto(a, rabatt, rabatte)
-        einheit = a.get("einheit") if a.get("einheit") in material.EINHEITEN else material.STANDARD_EINHEIT.get(kategorie, "Stk.")
+        einheit = a.get("einheit") if a.get("einheit") in bekannt else zu[a.get("einheit") or ""]
         m = material.anlegen(con, {"kategorie": kategorie, "bezeichnung": (a.get("text") or a.get("artnr") or "Artikel")[:200],
                                    "bestellnr": (a.get("artnr") or "")[:60], "ean": (a.get("ean") or "")[:20], "einheit": einheit,
                                    "ek_preis": round(preis, 4), "preis_vom": date.today().isoformat(), "lieferant_id": lieferant_id or None,
@@ -568,7 +628,7 @@ def web_api(con, teile, d):
     if was == "anlegen":
         g = gemerkt(d.get("schluessel"))
         _, wirksam = rabatt_uebersicht(con, lid, g, d.get("rabatte"))
-        erg = anlegen(con, g["artikel"], d.get("auswahl"), d.get("kategorie"), lid, rab, wirksam)
+        erg = anlegen(con, g["artikel"], d.get("auswahl"), d.get("kategorie"), lid, rab, wirksam, d.get("einheiten"))
         if erg["angelegt"]:
             prot(con, "preisimport", lname()[:80], f"{erg['angelegt']} Materialien aus „{str(d.get('dateiname') or '')[:80]}“ angelegt"
                  + (f" (Lieferant {lname()})" if lid else ""), {"angelegt": erg["liste"][:500]})

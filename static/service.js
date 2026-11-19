@@ -200,7 +200,8 @@ async function serviceSeite(z, sub) {
           ${zeile("Kontenrahmen", `<select id="dvS"><option value="03" ${dv.skr === "03" ? "selected" : ""}>SKR 03</option><option value="04" ${dv.skr === "04" ? "selected" : ""}>SKR 04</option></select>
             Wirtschaftsjahr beginnt im Monat <input id="dvW" type="number" min="1" max="12" value="${dv.wj_beginn}" style="width:60px"> Sachkontenlänge <input id="dvL" type="number" min="4" max="8" value="${dv.sachkontenlaenge}" style="width:60px">`)}
           ${zeile("Enthalten", `<label><input type="checkbox" id="dvA" ${dv.ausgang ? "checked" : ""}> Ausgangsrechnungen</label> <label><input type="checkbox" id="dvE" ${dv.eingang ? "checked" : ""}> Eingangsrechnungen</label>
-            <label title="Zugeordnete Kontoumsätze: Bank an Debitor/Kreditor bzw. an das Sachkonto. Nur, wenn die Kanzlei die Bankumsätze nicht selbst abruft."><input type="checkbox" id="dvK" ${dv.bankumsaetze ? "checked" : ""}> Bankumsätze</label>`)}
+            <label title="Zugeordnete Kontoumsätze: Bank an Debitor/Kreditor bzw. an das Sachkonto. Nur, wenn die Kanzlei die Bankumsätze nicht selbst abruft."><input type="checkbox" id="dvK" ${dv.bankumsaetze ? "checked" : ""}> Bankumsätze</label>
+            <label title="Nur zusammen mit den Bankumsätzen: gewährtes Skonto als Skontokonto an Debitor, erhaltenes als Kreditor an Skontokonto. Ohne diese Zeilen bleibt auf dem Personenkonto der Skontobetrag offen."><input type="checkbox" id="dvSk" ${dv.skonto ? "checked" : ""}> Skonto als eigene Buchung</label>`)}
         </div>
         <table class="liste" style="margin-top:8px"><tr><th>Konto für</th><th>Kontonummer</th><th class="hinweis">Vorgabe SKR ${esc(dv.skr)}</th></tr>
           ${Object.keys(dv.texte).map(k => `<tr><td>${esc(dv.texte[k])}</td><td><input data-dvk="${k}" value="${dv.konten[k]}" inputmode="numeric" style="width:110px"></td><td class="hinweis">${dv.standard[k]}</td></tr>`).join("")}</table>
@@ -277,7 +278,7 @@ async function serviceSeite(z, sub) {
       $$("[data-dvk]").forEach(i => { konten[i.dataset.dvk] = i.value.trim(); });
       const skrNeu = $("#dvS").value !== dv.skr;
       await api("einstellungen", {method: "PUT", body: {datev: {berater: $("#dvB").value.trim(), mandant: $("#dvM").value.trim(), skr: $("#dvS").value,
-        wj_beginn: +$("#dvW").value || 1, sachkontenlaenge: +$("#dvL").value || 4, ausgang: $("#dvA").checked, eingang: $("#dvE").checked, bankumsaetze: $("#dvK").checked,
+        wj_beginn: +$("#dvW").value || 1, sachkontenlaenge: +$("#dvL").value || 4, ausgang: $("#dvA").checked, eingang: $("#dvE").checked, bankumsaetze: $("#dvK").checked, skonto: $("#dvSk").checked,
         konten: skrNeu ? {} : Object.fromEntries(Object.entries(konten).filter(([k, v]) => String(v) !== String(dv.standard[k])))}}});
       toast(skrNeu ? "Gespeichert – Konten auf die Vorgaben des neuen Kontenrahmens gesetzt" : "DATEV-Einstellungen gespeichert"); serviceSeite(z, sub);
     };

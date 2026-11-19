@@ -92,9 +92,9 @@ CREATE INDEX IF NOT EXISTS ix_ak_auftrag ON auftragskosten(auftrag_id);
 
 FELDER = ["nummer", "bezeichnung", "gruppe", "dicke", "ek_preis", "einheit", "preis_vom", "vk_preis", "aufschlag", "vk_preis2",
           "aufschlag2", "vk_preis3", "aufschlag3", "verschnitt", "lieferant_id", "bestellnr", "ean", "cad", "bemerkungen", "lager", "lagerort",
-          "mindestbestand", "aktiv", "kategorie", "plattenlaenge", "plattenbreite"]
+          "mindestbestand", "aktiv", "kategorie", "plattenlaenge", "plattenbreite", "umrechnung"]
 ZAHLEN = {"plattenlaenge", "plattenbreite", "dicke", "ek_preis", "vk_preis", "aufschlag", "vk_preis2", "aufschlag2", "vk_preis3", "aufschlag3", "verschnitt",
-          "mindestbestand"}
+          "mindestbestand", "umrechnung"}
 
 
 class Fehler(Exception):
@@ -521,6 +521,17 @@ def kalk_typ(m):
 
 
 # ---------------------------------------------------------------- API
+def einheiten(con):
+    """Die Mengeneinheiten des Betriebs (Einstellungen), sonst die mitgelieferte Liste."""
+    r = con.execute("SELECT wert FROM einstellungen WHERE schluessel='einheiten'").fetchone()
+    try:
+        eigene = json.loads(r["wert"]) if r else []
+    except ValueError:
+        eigene = []
+    eigene = [x for x in eigene if isinstance(x, str)] if isinstance(eigene, list) else []
+    return ["(keine)"] + [x for x in eigene if x != "(keine)"] if eigene else EINHEITEN
+
+
 def api(con, methode, teile, q, daten):
     res = teile[0]
     rid = int(teile[1]) if len(teile) > 1 and teile[1].isdigit() else None
@@ -530,9 +541,7 @@ def api(con, methode, teile, q, daten):
         if len(teile) > 1 and teile[1] == "statistik":
             return statistik(con)
         if len(teile) > 1 and teile[1] == "meta":
-            r = con.execute("SELECT wert FROM einstellungen WHERE schluessel='einheiten'").fetchone()
-            eigene = json.loads(r["wert"]) if r else []
-            return {"kategorien": KATEGORIEN, "einheiten": ["(keine)"] + [x for x in eigene if x != "(keine)"] if eigene else EINHEITEN, "kostenarten": KOSTENARTEN, "standard_gruppen": STANDARD_GRUPPEN,
+            return {"kategorien": KATEGORIEN, "einheiten": einheiten(con), "kostenarten": KOSTENARTEN, "standard_gruppen": STANDARD_GRUPPEN,
                     "kat_kostenart": KAT_KOSTENART}
         if rid is None:
             if methode == "GET":

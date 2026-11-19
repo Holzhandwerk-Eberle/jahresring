@@ -71,6 +71,7 @@ ARTEN = {
     "bank_zuordnung": "Kontoumsatz zugeordnet",
     "bank_loesung": "Zuordnung eines Kontoumsatzes gelöst",
     "preisimport": "Lieferantenpreise übernommen",
+    "kundenimport": "Kunden importiert",
     "anmeldung": "Anmeldung",
     "passwort": "Passwort und Notfallschlüssel",
     "benutzer": "Benutzer und Rechte",

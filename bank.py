@@ -14,6 +14,9 @@ import zipfile
 import xml.etree.ElementTree as ET
 from datetime import date, datetime
 import base64
+import functools
+import sqlite3
+from datetime import timedelta
 
 import benutzer
 from kern import ApiFehler, de, de_datum, jl, kfm, zahl
@@ -38,6 +41,14 @@ CREATE TABLE IF NOT EXISTS bank_regeln (
     suchtext TEXT NOT NULL, feld TEXT DEFAULT 'beide', richtung TEXT DEFAULT '', konto INTEGER NOT NULL,
     notiz TEXT DEFAULT '', angelegt TEXT, von TEXT DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS bank_kundenkonten (
+    iban TEXT NOT NULL, kunde_id INTEGER NOT NULL, zuletzt TEXT DEFAULT '', PRIMARY KEY (iban, kunde_id)
+);
+CREATE TABLE IF NOT EXISTS sepa_dateien (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    msg TEXT DEFAULT '', erstellt TEXT, ausfuehrung TEXT DEFAULT '', summe REAL DEFAULT 0, anzahl INTEGER DEFAULT 0,
+    posten TEXT DEFAULT '[]', benutzer TEXT DEFAULT ''
+);
 CREATE INDEX IF NOT EXISTS ix_bank_umsaetze_buchung ON bank_umsaetze(buchung);
 CREATE INDEX IF NOT EXISTS ix_bank_umsaetze_status ON bank_umsaetze(status);
 """
@@ -61,6 +72,29 @@ def schema(con):
         con.execute("ALTER TABLE bank_umsaetze ADD COLUMN konto INTEGER")
     if "hinweise" not in {r[1] for r in con.execute("PRAGMA table_info(bank_auszuege)")}:
         con.execute("ALTER TABLE bank_auszuege ADD COLUMN hinweise TEXT DEFAULT ''")
+    if "rueck" not in spalten:
+        con.execute("ALTER TABLE bank_umsaetze ADD COLUMN rueck INTEGER DEFAULT 0")
+    konten_nachtragen(con)
+
+
+def konten_nachtragen(con):
+    """Einmalig beim ersten Start mit dieser Tabelle: Aus den schon zugeordneten Gutschriften lernen, von welchem Konto
+    welcher Kunde bezahlt hat. Danach pflegt zuordnen() die Tabelle."""
+    try:
+        if con.execute("SELECT 1 FROM bank_kundenkonten LIMIT 1").fetchone():
+            return
+        ops = {}
+        for r in con.execute("SELECT gegen_iban, ziel, buchung FROM bank_umsaetze WHERE status='zugeordnet' AND betrag>0 AND IFNULL(gegen_iban,'')<>'' "
+                             "AND ziel LIKE '%\"op\"%'").fetchall():
+            for t in jl(r["ziel"], []):
+                if isinstance(t, dict) and t.get("art") == "op" and str(t.get("id") or "").isdigit():
+                    if not ops:
+                        ops = {o["id"]: o["kunde_id"] for o in con.execute("SELECT id, kunde_id FROM offene_posten WHERE kunde_id IS NOT NULL")}
+                    kid = ops.get(int(t["id"]))
+                    if kid:
+                        con.execute("INSERT OR REPLACE INTO bank_kundenkonten (iban, kunde_id, zuletzt) VALUES (?,?,?)", (_iban(r["gegen_iban"]), kid, r["buchung"] or ""))
+    except sqlite3.Error:
+        pass   # Tabellen des Hauptprogramms fehlen noch (allererster Start): dann gibt es auch nichts nachzutragen
 
 
 def jetzt():
@@ -157,7 +191,10 @@ def _umsaetze_aus(stmt, iban, fmt):
         ref = _text(nt, "AcctSvcrRef") or _text(nt, "NtryRef")
         platzhalter = ref.strip().upper() in REF_PLATZHALTER
         zusatz = _text(nt, "AddtlNtryInf")
+        rueck = 1 if _text(nt, "RvslInd").lower() in ("true", "1") else 0
         txs = [t for d in _kinder(nt, "NtryDtls") for t in _kinder(d, "TxDtls")]
+        # Sammelauftrag: Die Bank nennt die Kennung der eingereichten Datei (MsgId/PmtInfId) – daran erkennt das Programm die eigene SEPA-Datei
+        sammel_ref = " ".join(x for d in _kinder(nt, "NtryDtls") for x in (_text(d, "Btch", "PmtInfId"), _text(d, "Btch", "MsgId")) if x)
         teile = []
         for t in txs:
             tb = None
@@ -177,8 +214,10 @@ def _umsaetze_aus(stmt, iban, fmt):
             teile.append((t, tb))
         # Sammelbuchung mit Einzelbeträgen: jede Einzelzahlung als eigener Umsatz (z. B. ausgeführte SEPA-Sammelüberweisung)
         einzeln = len(teile) > 1 and all(tb is not None for _, tb in teile) and abs(sum(tb for _, tb in teile) - abs(betrag)) < 0.005
+        ohne_betraege = len(teile) > 1 and not einzeln   # Sammelbuchung, deren Einzelposten keine Beträge tragen
+        anzahl_posten = len(teile)
         if not einzeln:
-            teile = [(teile[0][0] if teile else None, abs(betrag))]
+            teile = [(None if ohne_betraege else (teile[0][0] if teile else None), abs(betrag))]
         for nr, (t, tb) in enumerate(teile):
             vz = -1 if betrag < 0 else 1
             if t is not None and _text(t, "CdtDbtInd") in ("CRDT", "DBIT") and einzeln:
@@ -202,7 +241,23 @@ def _umsaetze_aus(stmt, iban, fmt):
                 e2e = ""
             if not zweck and zusatz:
                 zweck.append(zusatz)
-            aus.append({"iban": iban, "buchung": buchung, "valuta": valuta, "betrag": kfm(vz * tb),
+            name_alt, zweck_alt, e2e_alt = name[:140], " ".join(zweck)[:500], e2e[:35]
+            if ohne_betraege:   # nicht Name und Zweck des ersten Postens zeigen – das wäre irreführend
+                erster = txs[0]
+                rp1 = _kind(erster, "RltdPties")
+                name_alt = (_name(rp1, "Dbtr" if gutschrift else "Cdtr") if rp1 is not None else "")[:140]
+                z1 = [(x.text or "").strip() for x in _kinder(_kind(erster, "RmtInf"), "Ustrd") if x.text]
+                z1 += [r_ for r_ in (_text(s_, "CdtrRefInf", "Ref") for s_ in _kinder(_kind(erster, "RmtInf"), "Strd")) if r_]
+                if _text(erster, "AddtlTxInf"):
+                    z1.append(_text(erster, "AddtlTxInf"))
+                zweck_alt = " ".join(z1 or ([zusatz] if zusatz else []))[:500]
+                e2e_alt = _text(erster, "Refs", "EndToEndId")
+                e2e_alt = "" if e2e_alt.upper() in ("NOTPROVIDED", "NOT PROVIDED") else e2e_alt[:35]
+                name = f"Sammelbuchung ({anzahl_posten} Posten)"
+            if sammel_ref and not einzeln and sammel_ref not in " ".join(zweck):
+                zweck.append(sammel_ref)
+            aus.append({"iban": iban, "buchung": buchung, "valuta": valuta, "betrag": kfm(vz * tb), "rueck": rueck,
+                        "_name_alt": name_alt, "_zweck_alt": zweck_alt, "_e2e_alt": e2e_alt,
                         "name": name[:140], "gegen_iban": konto, "zweck": " ".join(zweck)[:500], "e2e": e2e[:35],
                         "referenz": (ref + (f"/{nr + 1}" if einzeln else ""))[:60], "_ref_bank": bool(ref) and not platzhalter,
                         "_ref_platzhalter": bool(ref) and platzhalter, "_waehrung": _waehrung(nt)})
@@ -267,7 +322,8 @@ def schluessel_setzen(umsaetze):
     for u in umsaetze:
         ref_bank, platzhalter = u.pop("_ref_bank", False), u.pop("_ref_platzhalter", False)
         u.pop("_waehrung", None)
-        inhalt = f"{u['iban']}|{u['buchung']}|{u['betrag']:.2f}|{u['name']}|{u['zweck']}|{u['e2e']}"
+        # Name und Zweck so, wie sie das Programm bis Version 151 gelesen hat – der Schlüssel bleibt damit gleich
+        inhalt = f"{u['iban']}|{u['buchung']}|{u['betrag']:.2f}|{u.pop('_name_alt', u['name'])}|{u.pop('_zweck_alt', u['zweck'])}|{u.pop('_e2e_alt', u['e2e'])}"
         basis = f"{u['iban']}|ref|{u['referenz']}|{u['buchung']}|{u['betrag']:.2f}" if ref_bank else inhalt
         zaehler[basis] = zaehler.get(basis, 0) + 1
         u["schluessel"] = hashlib.sha256(f"{basis}#{zaehler[basis]}".encode("utf-8")).hexdigest()
@@ -353,9 +409,9 @@ def einlesen(con, roh, dateiname, ablage_ordner, wer="", eigene_iban=""):
                 doppelt += 1
                 continue
             try:
-                c = con.execute("INSERT INTO bank_umsaetze (auszug_id, iban, buchung, valuta, betrag, name, gegen_iban, zweck, e2e, referenz, schluessel, angelegt) "
-                                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (aid, u["iban"], u["buchung"], u["valuta"], u["betrag"], u["name"], u["gegen_iban"],
-                                                                     u["zweck"], u["e2e"], u["referenz"], u["schluessel"], jetzt()))
+                c = con.execute("INSERT INTO bank_umsaetze (auszug_id, iban, buchung, valuta, betrag, name, gegen_iban, zweck, e2e, referenz, schluessel, angelegt, rueck) "
+                                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (aid, u["iban"], u["buchung"], u["valuta"], u["betrag"], u["name"], u["gegen_iban"],
+                                                                       u["zweck"], u["e2e"], u["referenz"], u["schluessel"], jetzt(), u.get("rueck", 0)))
                 erg["ids"].append(c.lastrowid)
                 neu += 1
             except Exception as f:   # noqa: BLE001 – UNIQUE: schon aus einem früheren Auszug vorhanden
@@ -376,25 +432,98 @@ def _norm(t):
     return re.sub(r"\s+", " ", str(t or "").upper())
 
 
-def _kommt_vor(nummer, text):
-    """Rechnungs-/Belegnummer im Verwendungszweck (auch ohne Bindestrich oder mit Leerzeichen statt Bindestrich)."""
+@functools.lru_cache(maxsize=16384)
+def _muster(n):
+    """Suchmuster für eine Nummer (mit Bindestrich, ohne, mit Leerzeichen oder Schrägstrich) – je Nummer nur einmal gebildet.
+    Bis Version 151 entstanden je Umsatz und offenem Posten vier Muster; ab etwa 130 offenen Posten brach die Seite ein."""
+    varianten = sorted({n, n.replace("-", ""), n.replace("-", " "), n.replace("-", "/")}, key=len, reverse=True)
+    return re.compile(r"(?<![0-9A-Z])(?:" + "|".join(re.escape(v) for v in varianten) + r")(?![0-9])")
+
+
+def _ziffern(t):
+    return re.sub(r"\D", "", str(t or ""))
+
+
+def _kommt_vor(nummer, text, ziffern=None):
+    """Rechnungs-/Belegnummer im Verwendungszweck (auch ohne Bindestrich oder mit Leerzeichen statt Bindestrich).
+    ziffern: die Ziffernfolge des Textes als schnelle Vorprüfung – fehlen die Ziffern der Nummer, kann sie nicht vorkommen."""
     n = _norm(nummer).strip()
     if len(n) < 4:
         return False
-    for v in {n, n.replace("-", ""), n.replace("-", " "), n.replace("-", "/")}:
-        if re.search(r"(?<![0-9A-Z])" + re.escape(v) + r"(?![0-9])", text):
-            return True
-    return False
+    if ziffern is not None:
+        z = _ziffern(n)
+        if z and z not in ziffern:
+            return False
+    return bool(_muster(n).search(text))
+
+
+KEINE_NAMEN = {"GMBH", "HERR", "FRAU", "FIRMA", "UND", "SEPA", "GUTSCHRIFT", "UEBERWEISUNG", "FAMILIE", "EHELEUTE", "DOKTOR"}
 
 
 def _woerter(t):
-    return {w for w in re.findall(r"[A-ZÄÖÜß]{4,}", _norm(t)) if w not in ("GMBH", "HERR", "FRAU", "FIRMA", "UND", "SEPA", "GUTSCHRIFT", "UEBERWEISUNG", "ÜBERWEISUNG")}
+    """Wörter ab vier Buchstaben, Umlaute wie im Zahlungsverkehr umschrieben (MÜLLER = MUELLER)."""
+    t = _norm(t).replace("Ä", "AE").replace("Ö", "OE").replace("Ü", "UE").replace("ß", "SS").replace("ẞ", "SS")
+    return {w for w in re.findall(r"[A-Z]{4,}", t) if w not in KEINE_NAMEN}
+
+
+def _namen_kunde(o):
+    """Woran der Kunde im Namen des Zahlers erkannt wird: Nachname und Firma, nie der Vorname (gleiche Vornamen sind häufig)."""
+    worte = _woerter(f"{o.get('name') or ''} {o.get('firma') or ''}")
+    if not worte:   # Kunden ohne getrennte Namensfelder: Kurzname „Nachname, Vorname“ → der Teil vor dem Komma
+        worte = _woerter(str(o.get("kurzname") or "").split(",")[0])
+    ohne_vorname = worte - _woerter(o.get("vorname") or "")
+    return ohne_vorname or worte
+
+
+SKONTO_KARENZ = 3   # Tage: Buchung bis drei Tage nach Fristende gilt noch als rechtzeitig (die Überweisung war dann rechtzeitig unterwegs)
+
+
+def skonto_betrag(o):
+    """Vereinbarter Skontobetrag eines offenen Postens (Prozent vom Rechnungsbetrag). 0, wenn keiner vereinbart ist
+    oder schon etwas darauf gezahlt wurde – Skonto gibt es nur auf die vollständige Zahlung."""
+    satz = o.get("skonto") or 0
+    if satz <= 0 or not o.get("skonto_bis") or abs((o.get("betrag") or 0) - (o.get("offen") or 0)) > 0.005 or (o.get("offen") or 0) <= 0:
+        return 0.0
+    return kfm((o.get("betrag") or 0) * satz / 100)
+
+
+def skonto_rechtzeitig(o, tag):
+    try:
+        return bool(tag) and tag[:10] <= (date.fromisoformat(o["skonto_bis"][:10]) + timedelta(days=SKONTO_KARENZ)).isoformat()
+    except (ValueError, TypeError):
+        return False
+
+
+def _prozent(v):
+    return f"{v:g}".replace(".", ",")
 
 
 def offene_posten(con):
     return zeilen(con.execute(
-        "SELECT o.id, o.nummer, o.art, o.offen, o.betrag, o.faellig, IFNULL(o.mahnkosten,0) AS mahnkosten, o.kunde_id, o.beleg_id, "
+        "SELECT o.id, o.nummer, o.art, o.offen, o.betrag, o.datum, o.faellig, IFNULL(o.mahnkosten,0) AS mahnkosten, o.kunde_id, o.beleg_id, "
+        "IFNULL(o.skonto,0) AS skonto, IFNULL(o.skonto_bis,'') AS skonto_bis, "
         "k.kurzname, k.nachname AS name, k.firma, k.vorname FROM offene_posten o LEFT JOIN kunden k ON k.id=o.kunde_id WHERE o.offen > 0.004 ORDER BY o.faellig, o.id"))
+
+
+def kundenkonten(con):
+    """Von welchem Konto welcher Kunde schon bezahlt hat: {(IBAN, Kunde)} – gelernt aus bestätigten Zuordnungen."""
+    return {(r["iban"], r["kunde_id"]) for r in con.execute("SELECT iban, kunde_id FROM bank_kundenkonten")}
+
+
+def sepa_dateien(con, tage=120):
+    """Vom Programm erzeugte SEPA-Dateien der letzten Monate (für die Erkennung einer Sammelüberweisung auf dem Kontoauszug)."""
+    ab = (date.today() - timedelta(days=tage)).isoformat()
+    aus = zeilen(con.execute("SELECT id, msg, erstellt, ausfuehrung, summe, anzahl, posten FROM sepa_dateien WHERE erstellt>=? ORDER BY id DESC", (ab,)))
+    for s in aus:
+        s["posten"] = jl(s["posten"], [])
+    return aus
+
+
+def sepa_merken(con, msg, ausfuehrung, posten):
+    """Beim Erzeugen einer SEPA-Datei festhalten, welche Zahlungsaufträge mit welchem Betrag darin stehen."""
+    liste_ = [{"id": p["id"], "nummer": p["nummer"], "betrag": kfm(p["zahlbetrag"])} for p in posten]
+    con.execute("INSERT INTO sepa_dateien (msg, erstellt, ausfuehrung, summe, anzahl, posten, benutzer) VALUES (?,?,?,?,?,?,?)",
+                (msg, jetzt(), ausfuehrung, kfm(sum(p["betrag"] for p in liste_)), len(liste_), json.dumps(liste_, ensure_ascii=False), HILFE["ich_login"]()))
 
 
 def zahlungsauftraege(con, offen_nur=True):
@@ -403,18 +532,28 @@ def zahlungsauftraege(con, offen_nur=True):
         "FROM zahlungen z LEFT JOIN lieferanten l ON l.id=z.lieferant_id " + ("WHERE IFNULL(z.bezahlt,'')='' " if offen_nur else "") + "ORDER BY z.faellig, z.id"))
 
 
-def vorschlag(u, ops, zas, alle_zas=None):
-    """Vorschlag für einen Umsatz: {"sicher": bool, "grund": text, "ziele": [{"art", "id", "betrag", "text"}]} oder None."""
+def vorschlag(u, ops, zas, alle_zas=None, konten=None, sepa=None):
+    """Vorschlag für einen Umsatz: {"sicher": bool, "grund": text, "ziele": [{"art", "id", "betrag", "text"}]} oder None.
+    konten: bekannte Zahlerkonten {(IBAN, Kunde)}; sepa: eigene SEPA-Dateien (für Sammelüberweisungen)."""
     text = _norm(f"{u['zweck']} {u['e2e']}")
+    ziffern = _ziffern(text)
     b = kfm(u["betrag"])
+    if u.get("rueck"):
+        return None   # Rückbuchung: kein Vorschlag, liste() nennt die betroffene Zahlung
     if b > 0:
-        treffer = [o for o in ops if _kommt_vor(o["nummer"], text)]
+        treffer = [o for o in ops if _kommt_vor(o["nummer"], text, ziffern)]
         if treffer:
             summe = kfm(sum(o["offen"] + o["mahnkosten"] for o in treffer))
             summe_ohne_mk = kfm(sum(o["offen"] for o in treffer))
             if len(treffer) == 1:
                 o = treffer[0]
                 genau = abs(b - o["offen"]) < 0.01 or abs(b - (o["offen"] + o["mahnkosten"])) < 0.01
+                sk = skonto_betrag(o)
+                if not genau and sk and abs(b - (o["offen"] - sk)) < 0.01:
+                    in_frist = skonto_rechtzeitig(o, u.get("buchung") or "")
+                    return {"sicher": in_frist, "grund": f"Rechnungsnummer im Verwendungszweck, Betrag passt mit {_prozent(o['skonto'])} % Skonto"
+                            + ("" if in_frist else f" – die Skontofrist endete am {de_datum(o['skonto_bis'])}, bitte prüfen"),
+                            "ziele": [{"art": "op", "id": o["id"], "betrag": b, "skonto": sk, "text": f"{o['art']} {o['nummer']} · {o['kurzname'] or ''}"}]}
                 return {"sicher": genau, "grund": "Rechnungsnummer im Verwendungszweck" + ("" if genau else f", Betrag weicht ab (offen {o['offen']:.2f})"),
                         "ziele": [{"art": "op", "id": o["id"], "betrag": b, "text": f"{o['art']} {o['nummer']} · {o['kurzname'] or ''}"}]}
             if abs(b - summe) < 0.01 or abs(b - summe_ohne_mk) < 0.01:
@@ -429,13 +568,29 @@ def vorschlag(u, ops, zas, alle_zas=None):
                     ziele.append({"art": "op", "id": o["id"], "betrag": teil, "text": f"{o['art']} {o['nummer']} · {o['kurzname'] or ''}"})
                 rest = kfm(rest - teil)
             return {"sicher": False, "grund": "Mehrere Rechnungsnummern, Summe weicht ab – bitte prüfen", "ziele": ziele}
+        zahler = _woerter(u["name"])
+        gi = _iban(u.get("gegen_iban") or "")
+
+        def kennt(o):
+            """(Name passt, Konto bekannt): Nachname oder Firma im Namen des Zahlers; Konto, von dem dieser Kunde schon bezahlt hat."""
+            return bool(_namen_kunde(o) & zahler), bool(konten) and bool(gi) and (gi, o.get("kunde_id")) in konten
         gleich = [o for o in ops if abs(o["offen"] - b) < 0.01]
         if len(gleich) == 1:
             o = gleich[0]
-            kunde = _woerter(" ".join(str(o.get(k) or "") for k in ("kurzname", "name", "firma", "vorname")))
-            name_passt = bool(kunde & _woerter(u["name"]))
-            return {"sicher": name_passt, "grund": "Betrag und Name passen" if name_passt else "nur der Betrag passt – bitte prüfen",
+            name_passt, konto_passt = kennt(o)
+            grund = ("Betrag und Name passen" if name_passt else "Betrag passt, von diesem Konto hat der Kunde schon bezahlt" if konto_passt
+                     else "nur der Betrag passt – bitte prüfen")
+            return {"sicher": name_passt or konto_passt, "grund": grund,
                     "ziele": [{"art": "op", "id": o["id"], "betrag": b, "text": f"{o['art']} {o['nummer']} · {o['kurzname'] or ''}"}]}
+        if not gleich:   # ohne Rechnungsnummer, aber der Betrag ist genau eine Rechnung abzüglich des vereinbarten Skontos
+            mit_skonto = [o for o in ops if skonto_betrag(o) and abs(b - (o["offen"] - skonto_betrag(o))) < 0.01]
+            if len(mit_skonto) == 1:
+                o = mit_skonto[0]
+                name_passt, konto_passt = kennt(o)
+                zusatz = " und der Name passt" if name_passt else " und das Konto ist von diesem Kunden bekannt" if konto_passt else ""
+                frist = "" if skonto_rechtzeitig(o, u.get("buchung") or "") else f"; die Skontofrist endete am {de_datum(o['skonto_bis'])}"
+                return {"sicher": False, "grund": f"Betrag passt mit {_prozent(o['skonto'])} % Skonto{zusatz}{frist} – bitte prüfen",
+                        "ziele": [{"art": "op", "id": o["id"], "betrag": b, "skonto": skonto_betrag(o), "text": f"{o['art']} {o['nummer']} · {o['kurzname'] or ''}"}]}
         return None
     # Lastschrift / Überweisung: Zahlungsaufträge
     aus_betrag = -b
@@ -446,11 +601,33 @@ def vorschlag(u, ops, zas, alle_zas=None):
                     "ziele": [{"art": "zahlung", "id": z["id"], "betrag": aus_betrag, "text": f"{z['nummer']} · {z['lieferant'] or ''} · {z['belegnr'] or ''}",
                                "schon_bezahlt": bool(z["bezahlt"])}]}
 
+    # Sammelüberweisung aus einer eigenen SEPA-Datei: ein Umsatz über die Summe aller Zahlungsaufträge der Datei
+    offen_ids = {z["id"] for z in zas}
+    tag = u.get("buchung") or ""
+    for s in (sepa or []):
+        if len(s["posten"]) < 2 or abs(aus_betrag - (s["summe"] or 0)) >= 0.01 or not all(p.get("id") in offen_ids for p in s["posten"]):
+            continue
+        try:
+            abstand = (date.fromisoformat(tag[:10]) - date.fromisoformat((s["ausfuehrung"] or s["erstellt"])[:10])).days
+        except (ValueError, TypeError):
+            abstand = 0
+        if not -3 <= abstand <= 21:
+            continue
+        nach = {z["id"]: z for z in zas}
+        mit_kennung = bool(s["msg"]) and _norm(s["msg"]) in text
+        return {"sicher": mit_kennung, "grund": f"Sammelüberweisung aus der SEPA-Datei vom {de_datum((s['erstellt'] or '')[:10])}: {len(s['posten'])} Zahlungsaufträge, Summe passt"
+                + (" (Kennung der Datei im Umsatz)" if mit_kennung else " – bitte prüfen"),
+                "ziele": [{"art": "zahlung", "id": p["id"], "betrag": kfm(p["betrag"]),
+                           "text": f"{nach[p['id']]['nummer']} · {nach[p['id']]['lieferant'] or ''} · {nach[p['id']]['belegnr'] or ''}"} for p in s["posten"]]}
+
     def passt(z):
-        return abs(aus_betrag - z["betrag"]) < 0.01 or (z["skonto"] and abs(aus_betrag - (z["betrag"] - z["skonto"])) < 0.01)
+        """Voller Betrag oder Betrag abzüglich Skonto. Skonto ist beim Zahlungsauftrag ein Prozentsatz (bis Version 151 wurde er
+        hier als Eurobetrag abgezogen – 1.000 € mit 2 % wurden mit 998 € statt mit 980 € verglichen)."""
+        voll = kfm(z["betrag"] or 0)
+        return abs(aus_betrag - voll) < 0.01 or (bool(z["skonto"]) and abs(aus_betrag - kfm(voll * (1 - z["skonto"] / 100))) < 0.01)
     kand = [z for z in zas if passt(z)]
     for z in kand:
-        if (z["nummer"] and _kommt_vor(z["nummer"], text)) or (z["belegnr"] and _kommt_vor(z["belegnr"], text)):
+        if (z["nummer"] and _kommt_vor(z["nummer"], text, ziffern)) or (z["belegnr"] and _kommt_vor(z["belegnr"], text, ziffern)):
             return {"sicher": True, "grund": "Betrag und Beleg-/Auftragsnummer passen",
                     "ziele": [{"art": "zahlung", "id": z["id"], "betrag": aus_betrag, "text": f"{z['nummer']} · {z['lieferant'] or ''} · {z['belegnr'] or ''}"}]}
     gi = _iban(u["gegen_iban"])
@@ -501,9 +678,9 @@ def _nachtragen(con, ordner):
             for u in schluessel_setzen(a["umsaetze"]):
                 if _schon_vorhanden(con, u):
                     continue
-                c = con.execute("INSERT OR IGNORE INTO bank_umsaetze (auszug_id, iban, buchung, valuta, betrag, name, gegen_iban, zweck, e2e, referenz, schluessel, angelegt) "
-                                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (aid, u["iban"], u["buchung"], u["valuta"], u["betrag"], u["name"], u["gegen_iban"],
-                                                                     u["zweck"], u["e2e"], u["referenz"], u["schluessel"], jetzt()))
+                c = con.execute("INSERT OR IGNORE INTO bank_umsaetze (auszug_id, iban, buchung, valuta, betrag, name, gegen_iban, zweck, e2e, referenz, schluessel, angelegt, rueck) "
+                                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (aid, u["iban"], u["buchung"], u["valuta"], u["betrag"], u["name"], u["gegen_iban"],
+                                                                       u["zweck"], u["e2e"], u["referenz"], u["schluessel"], jetzt(), u.get("rueck", 0)))
                 dazu += c.rowcount
             if dazu:
                 con.execute("UPDATE bank_auszuege SET neu=neu+?, doppelt=MAX(0, doppelt-?) WHERE id=?", (dazu, dazu, aid))
@@ -609,6 +786,7 @@ def liste(con, q):
     alle_zas = None
     regeln = regeln_liste(con)
     namen = kontonamen(con)
+    konten, sepa = kundenkonten(con), sepa_dateien(con)
     for u in us:
         u["ziel"] = json.loads(u["ziel"] or "[]")
         if u["konto"]:
@@ -616,7 +794,9 @@ def liste(con, q):
         if u["status"] == "offen":
             if alle_zas is None and any(x["betrag"] < 0 for x in us):
                 alle_zas = zahlungsauftraege(con, offen_nur=False)
-            u["vorschlag"] = vorschlag(u, ops, zas, alle_zas)
+            if u.get("rueck"):
+                u["hinweis"] = rueckbuchung_hinweis(con, u)
+            u["vorschlag"] = vorschlag(u, ops, zas, alle_zas, konten, sepa)
             if not u["vorschlag"]:
                 r = regel_fuer(u, regeln)
                 if r:
@@ -628,6 +808,22 @@ def liste(con, q):
     return {"umsaetze": us, "kontostand": kontostand, "anzahl": zaehler, "dateien": dateien(con),
             "auszuege": zeilen(con.execute("SELECT id, datei, format, iban, von, bis, saldo_ende, saldo_datum, neu, doppelt, importiert, benutzer "
                                            "FROM bank_auszuege ORDER BY id DESC LIMIT 30"))}
+
+
+def rueckbuchung_hinweis(con, u):
+    """Rückbuchung (zurückgegebene Lastschrift, zurückgekommene Überweisung): die ursprüngliche Buchung suchen und sagen, was sie
+    betrifft. Gebucht wird nichts von selbst – ob die Rechnung wieder offen ist, entscheidet der Benutzer."""
+    alt = con.execute("SELECT id, buchung, name, status, ziel FROM bank_umsaetze WHERE id<>? AND ABS(betrag + ?) < 0.005 AND buchung<=? "
+                      "AND ((IFNULL(e2e,'')<>'' AND e2e=?) OR (IFNULL(gegen_iban,'')<>'' AND gegen_iban=?)) ORDER BY buchung DESC, id DESC LIMIT 1",
+                      (u["id"], u["betrag"], u["buchung"] or "9999", u["e2e"] or "", u["gegen_iban"] or "")).fetchone()
+    if not alt:
+        return "Rückbuchung: Die Bank hat eine frühere Buchung zurückgenommen. Die ursprüngliche Buchung wurde nicht gefunden – bitte von Hand prüfen."
+    ziele = [t for t in jl(alt["ziel"], []) if isinstance(t, dict)]
+    was = ", ".join(str(t.get("nummer") or "") for t in ziele if t.get("nummer"))
+    if alt["status"] == "zugeordnet" and was:
+        return (f"Rückbuchung zur Buchung vom {de_datum(alt['buchung'])} ({alt['name'] or 'ohne Namen'}), zugeordnet zu {was}. "
+                "Soll der Posten wieder offen sein, dort „Zuordnung lösen“ wählen; beide Umsätze danach als erledigt ablegen.")
+    return f"Rückbuchung zur Buchung vom {de_datum(alt['buchung'])} ({alt['name'] or 'ohne Namen'}); diese ist nicht zugeordnet."
 
 
 def _rang(u):
@@ -664,7 +860,8 @@ def sichere_uebernehmen(con):
         if not frisch:
             continue
         frisch = dict(frisch)
-        v = vorschlag(frisch, offene_posten(con), zahlungsauftraege(con), zahlungsauftraege(con, offen_nur=False) if frisch["betrag"] < 0 else None)
+        v = vorschlag(frisch, offene_posten(con), zahlungsauftraege(con), zahlungsauftraege(con, offen_nur=False) if frisch["betrag"] < 0 else None,
+                      kundenkonten(con), sepa_dateien(con))
         try:
             if v:
                 if v["sicher"]:
@@ -715,7 +912,8 @@ def kontostand_lesen(con):
 
 def kandidaten(con):
     """Für die Zuordnung von Hand: alle offenen Posten und offenen Zahlungsaufträge."""
-    return {"op": [{"id": o["id"], "text": f"{o['art']} {o['nummer']} · {o['kurzname'] or ''}", "offen": o["offen"], "faellig": o["faellig"]} for o in offene_posten(con)],
+    return {"op": [{"id": o["id"], "text": f"{o['art']} {o['nummer']} · {o['kurzname'] or ''}", "offen": o["offen"], "faellig": o["faellig"],
+                    "skonto": skonto_betrag(o), "skonto_satz": o["skonto"], "skonto_bis": o["skonto_bis"]} for o in offene_posten(con)],
             "zahlung": [{"id": z["id"], "text": f"{z['nummer']} · {z['lieferant'] or ''} · {z['belegnr'] or ''}", "offen": z["betrag"], "faellig": z["faellig"]}
                         for z in zahlungsauftraege(con)]}
 
@@ -758,28 +956,37 @@ def zuordnen(con, uid, ziele):
             raise ApiFehler(f"Die aufgeteilten Beträge ({de(summe)} €) ergeben nicht den Umsatz ({de(u['betrag'])} €).")
         for t in ziele:
             b = kfm(zahl(t.get("betrag"), float))
+            sk = kfm(zahl(t.get("skonto"), float))
             if b <= 0:
                 continue
-            op = con.execute("SELECT nummer FROM offene_posten WHERE id=?", (int(t["id"]),)).fetchone()
-            ids = HILFE["op_zahlung_buchen"](con, int(t["id"]), {"betrag": b, "datum": u["buchung"] or date.today().isoformat(), "art": "Überweisung",
+            op = con.execute("SELECT nummer, offen, kunde_id, IFNULL(mahnkosten,0) AS mahnkosten FROM offene_posten WHERE id=?", (int(t["id"]),)).fetchone()
+            if sk < 0 or (sk and op and b + sk > (op["offen"] or 0) + 0.009):
+                raise ApiFehler(f"Skonto {de(sk)} € ist mehr als nach der Zahlung von {de(b)} € bei {op['nummer'] if op else 'dem Posten'} noch offen wäre.")
+            ids = HILFE["op_zahlung_buchen"](con, int(t["id"]), {"betrag": b, "skonto": sk, "datum": u["buchung"] or date.today().isoformat(), "art": "Überweisung",
                                                         "bemerkung": f"Kontoauszug {de_datum(u['buchung'])}: {u['name']}"[:200]})
-            erg.append({"art": "op", "id": int(t["id"]), "betrag": b, "eingaenge": ids, "nummer": op["nummer"] if op else ""})
-            texte.append(f"{op['nummer'] if op else t['id']} {de(b)} €")
+            erg.append({"art": "op", "id": int(t["id"]), "betrag": b, "eingaenge": ids, "nummer": op["nummer"] if op else "", **({"skonto": sk} if sk else {})})
+            texte.append(f"{op['nummer'] if op else t['id']} {de(b)} €" + (f" und {de(sk)} € Skonto" if sk else ""))
+            if op and op["kunde_id"] and _iban(u["gegen_iban"]):   # merken: Von diesem Konto zahlt dieser Kunde
+                con.execute("INSERT OR REPLACE INTO bank_kundenkonten (iban, kunde_id, zuletzt) VALUES (?,?,?)", (_iban(u["gegen_iban"]), op["kunde_id"], u["buchung"] or ""))
     else:
-        if len(ziele) != 1:
-            raise ApiFehler("Eine Abbuchung gehört zu genau einem Zahlungsauftrag.")
-        t = ziele[0]
-        z = con.execute("SELECT id, nummer, bezahlt, betrag FROM zahlungen WHERE id=?", (int(t["id"]),)).fetchone()
-        if not z:
-            raise ApiFehler("Zahlungsauftrag nicht gefunden.", 404)
-        gesetzt = not z["bezahlt"]
-        if gesetzt:
-            tag = u["buchung"] or date.today().isoformat()
-            con.execute("UPDATE zahlungen SET bezahlt=?, geaendert=? WHERE id=?", (tag, jetzt(), z["id"]))
-            HILFE["prot"](con, "zahlungsauftrag_bezahlt", z["nummer"], f"Als bezahlt am {de_datum(tag)} markiert (Kontoauszug, damit gesperrt): {z['nummer']}",
-                 {"nummern": [z["nummer"]], "bezahlt": tag, "bank_umsatz": uid})
-        erg.append({"art": "zahlung", "id": z["id"], "betrag": -u["betrag"], "gesetzt": gesetzt, "nummer": z["nummer"]})
-        texte.append(z["nummer"])
+        # eine Abbuchung gehört zu einem Zahlungsauftrag – oder zu mehreren, wenn sie die Summe einer Sammelüberweisung ist
+        if len(ziele) > 1:
+            summe = kfm(sum(zahl(t.get("betrag"), float) for t in ziele))
+            if abs(summe + kfm(u["betrag"])) > 0.009:
+                raise ApiFehler(f"Die Beträge der Zahlungsaufträge ({de(summe)} €) ergeben nicht die Abbuchung ({de(-u['betrag'])} €).")
+        for t in ziele:
+            z = con.execute("SELECT id, nummer, bezahlt, betrag FROM zahlungen WHERE id=?", (int(t["id"]),)).fetchone()
+            if not z:
+                raise ApiFehler("Zahlungsauftrag nicht gefunden.", 404)
+            gesetzt = not z["bezahlt"]
+            if gesetzt:
+                tag = u["buchung"] or date.today().isoformat()
+                con.execute("UPDATE zahlungen SET bezahlt=?, geaendert=? WHERE id=?", (tag, jetzt(), z["id"]))
+                HILFE["prot"](con, "zahlungsauftrag_bezahlt", z["nummer"], f"Als bezahlt am {de_datum(tag)} markiert (Kontoauszug, damit gesperrt): {z['nummer']}",
+                     {"nummern": [z["nummer"]], "bezahlt": tag, "bank_umsatz": uid})
+            gezahlt = -u["betrag"] if len(ziele) == 1 else kfm(zahl(t.get("betrag"), float))
+            erg.append({"art": "zahlung", "id": z["id"], "betrag": gezahlt, "gesetzt": gesetzt, "nummer": z["nummer"], "rechnung": z["betrag"]})
+            texte.append(z["nummer"])
     con.execute("UPDATE bank_umsaetze SET status='zugeordnet', ziel=?, zugeordnet=?, von=? WHERE id=?",
                 (json.dumps(erg, ensure_ascii=False), jetzt(), HILFE["ich_login"](), uid))
     HILFE["prot"](con, "bank_zuordnung", ", ".join(texte)[:80], f"Kontoumsatz {de_datum(u['buchung'])} {de(u['betrag'])} € ({u['name']}) zugeordnet: {', '.join(texte)}",
@@ -798,6 +1005,10 @@ def loesen(con, uid):
         if t.get("art") == "op":
             for zid in t.get("eingaenge") or []:
                 HILFE["zahlungseingang_loeschen"](con, zid, aus_bank=True)
+            if _iban(u["gegen_iban"]):   # die Zuordnung war ein Irrtum: Das Konto gilt für diesen Kunden nicht mehr als bekannt
+                op = con.execute("SELECT kunde_id FROM offene_posten WHERE id=?", (t.get("id"),)).fetchone()
+                if op and op["kunde_id"]:
+                    con.execute("DELETE FROM bank_kundenkonten WHERE iban=? AND kunde_id=?", (_iban(u["gegen_iban"]), op["kunde_id"]))
         elif t.get("art") == "zahlung" and t.get("gesetzt"):
             z = con.execute("SELECT nummer, bezahlt, betrag FROM zahlungen WHERE id=?", (t["id"],)).fetchone()
             if z and z["bezahlt"]:

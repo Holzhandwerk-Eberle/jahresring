@@ -728,6 +728,9 @@ function kfm(x, n = 2) {
   return x < 0 && v ? -v : v;
 }
 const zahlDE = (z, n = 2) => kfm(z || 0, n).toLocaleString("de-DE", {minimumFractionDigits: n, maximumFractionDigits: n});
+// Mengen: ganze Zahlen ohne, sonst mit zwei Nachkommastellen; mit drei, wenn zwei die Menge verfälschen würden (0,393 m³ ist nicht 0,39)
+const mengeStellen = x => { const v = kfm(Math.abs(+x || 0), 3); return v === Math.round(v) ? 0 : Math.abs(v * 100 - Math.round(v * 100)) < 1e-7 ? 2 : 3; };
+const mengeDE = x => zahlDE(x, mengeStellen(x));
 function kw(d) {
   const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const tag = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - tag);
@@ -2199,6 +2202,7 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
       ${zeile("Kontoinhaber", `<input name="sepa_name" value="${esc(E.sepa_name)}" placeholder="wie auf dem Konto, z. B. Max Mustermann Schreinerei">`, true)}
       ${zeile("IBAN", `<input name="sepa_iban" value="${esc(ibanFormat(E.sepa_iban))}" style="font-family:monospace"><span id="eIban" style="padding-top:5px;flex:0 0 auto"></span>`)}
       ${zeile("BIC", `<input name="sepa_bic" value="${esc(E.sepa_bic)}" style="font-family:monospace" placeholder="optional">`)}
+      ${zeile("SEPA-Datei", `<label class="pchk"><input type="checkbox" name="sepa_einzelbuchung" ${E.sepa_einzelbuchung ? "checked" : ""}> Jede Zahlung einzeln abbuchen lassen. Ohne Haken bucht die Bank eine Datei mit mehreren Zahlungen als eine Summe ab; das Programm erkennt diese Summe auf dem Kontoauszug.</label>`, true)}
     </div>
     <div class="form einst-pane" data-pane="belege">
       <div class="sektion">Rechnungen</div>
@@ -2210,8 +2214,10 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
       ${zeile("Text § 14b", `<div class="spalte"><textarea name="text_14b" data-text="1" rows="2" placeholder="${esc(E._text_14b_standard || "")}">${esc(E.text_14b || "")}</textarea><span class="hinweis">leer = gesetzlicher Standardtext (siehe grau)</span></div>`, true)}
       ${zeile("Arbeitskosten § 35a", `<div class="spalte"><div class="radio" style="flex-wrap:wrap">${[["privat", "nur bei Privatkunden"], ["alle", "bei allen Kunden"], ["nie", "nie"]].map(([v, l]) => `<label><input type="radio" name="lohnanteil" value="${v}" ${(E.lohnanteil || "privat") === v ? "checked" : ""}> ${l}</label>`).join("")}</div>
         <label><input type="checkbox" name="lohnanteil_wg" ${E.lohnanteil_wg !== false ? "checked" : ""}> Wagnis und Gewinn anteilig einrechnen (Arbeitspreis wie berechnet); ohne Haken nur Lohn mit Gemeinkosten</label>
+        <div id="laKst"><span>Arbeit beim Kunden leisten die Kostenstellen:</span> ${(E._kostenstellen || []).map(k => `<label style="margin-left:8px"><input type="checkbox" data-lakst value="${esc(k)}" ${(E.lohnanteil_kst || []).includes(k) ? "checked" : ""}> ${esc(k)}</label>`).join("")}
+          <div class="hinweis">Nur die Arbeit im Haushalt des Kunden ist nach § 35a EStG begünstigt, Arbeit in der Werkstatt nicht. Die Zeiten der angehakten Kostenstellen ergeben den ausgewiesenen Betrag; Helferstunden zählen mit, wenn sie zu einer dieser Tätigkeiten gehören. Bei Positionen mit festem Preis ohne Zeiten lässt sich der Anteil an der Position eintragen.</div></div>
         <textarea name="text_lohnanteil" data-text="1" rows="3">${esc(E.text_lohnanteil || "")}</textarea>
-        <span class="hinweis">Satz unter dem Schlusstext von Rechnung und Schlussrechnung. Platzhalter: {lohn_netto}, {lohn_ust}, {lohn_brutto}. Grundlage ist der Teil des Positionspreises, der auf die Arbeit entfällt (kalkulierter Lohn mit Gemeinkosten, auf Wunsch mit anteiligem Wagnis und Gewinn), anteilig gekürzt um einen Rabatt; Material zählt nicht. Gilt für neu erstellte oder aktualisierte Rechnungen. Im Beleg unter Druckeinstellungen einzeln abschaltbar.</span></div>`, true)}
+        <span class="hinweis">Satz unter dem Schlusstext von Rechnung und Schlussrechnung. Platzhalter: {lohn_netto}, {lohn_ust}, {lohn_brutto}. Grundlage ist der Teil des Positionspreises, der auf die Arbeit beim Kunden entfällt (kalkulierter Lohn mit Gemeinkosten der oben angehakten Kostenstellen, auf Wunsch mit anteiligem Wagnis und Gewinn), anteilig gekürzt um einen Rabatt; Material und Arbeit in der Werkstatt zählen nicht. Gilt für neu erstellte oder aktualisierte Rechnungen. Im Beleg unter Druckeinstellungen einzeln abschaltbar.</span></div>`, true)}
       <div class="sektion">Ablage im Projektordner <span class="hinweis" style="font-weight:400">· „PDF in Projektordner“ legt den Beleg im ersten Unterordner ab, dessen Name dieses Stichwort enthält (z. B. „Rechnung“ → 05_Rechnung); leer oder nicht gefunden = Projektordner selbst</span></div>
       ${zeile("Ablageordner", `<div class="feldraster">${[["angebot", "Angebot"], ["kv", "Kostenvoranschlag"], ["ab", "Auftragsbestätigung"], ["lieferschein", "Lieferschein"], ["abnahme", "Abnahmeprotokoll"], ["abschlag", "Abschlagsrechnung"], ["rechnung", "Rechnung"], ["storno", "Stornorechnung"], ["gutschrift", "Gutschrift"], ["korrektur", "Rechnungskorrektur"], ["mahnung", "Mahnung"], ["werkstatt", "Werkstattpapiere"], ["montage", "Montagebericht"]].map(([k, l]) =>
         `<label><span class="hinweis">${l}</span><input data-po="${k}" value="${esc(((E.pdf_ordner || {})[k] ?? (E._pdf_ordner_standard || {})[k]) || "")}"></label>`).join("")}</div>`, true)}
@@ -2377,6 +2383,7 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
     if ($$("[data-po]").length) { d.pdf_ordner = {...(E.pdf_ordner || {})}; $$("[data-po]").forEach(x => { d.pdf_ordner[x.dataset.po] = x.value.trim(); }); }
     if ($$("[data-lsmap]").length) { d.leitstand_status_map = {...(E.leitstand_status_map || {})}; $$("[data-lsmap]").forEach(x => { d.leitstand_status_map[x.dataset.lsmap] = x.value; }); }
     d.agb_verbraucher_gruppen = $("#agbGruppen").value.split(",").map(x => x.trim()).filter(Boolean);
+    if ($("#laKst")) d.lohnanteil_kst = $$("[data-lakst]").filter(x => x.checked).map(x => x.value);
     if ($$("[data-wv]").length) { d.wiedervorlage_regeln = (E.wiedervorlage_regeln || []).map((r, i) => { const x = {...r}; $$(`[data-wv="${i}"]`).forEach(el => { x[el.dataset.wk] = el.type === "checkbox" ? el.checked : el.type === "number" ? Math.max(1, +el.value || 1) : el.value.trim(); }); return x; }); }
     d.status_automatik = {auftrag: {}, position: {}}; $$("[data-sa]").forEach(x => { d.status_automatik[x.dataset.sa][x.dataset.art] = x.value; });
     if ($$("[data-zs]").length) { d.zuschnitt_zugabe = {}; $$("[data-zs]").forEach(x => { d.zuschnitt_zugabe[x.dataset.zs] = x.type === "checkbox" ? x.checked : +x.value || 0; }); }

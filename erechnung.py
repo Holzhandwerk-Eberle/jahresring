@@ -305,9 +305,10 @@ def cii_xml(b, xrechnung=False, kunde_db=None):
     notizen = []
     if b.get("betreff"):
         notizen.append(b["betreff"])
+    eur_ = lambda v: f"{abs(v):.2f}".replace(".", ",")   # noqa: E731 – nur die Beträge mit Komma, das Datum behält seine Punkte
     for x in d.get("abzuege", []):
         notizen.append(f"Abzüglich Abschlagsrechnung {x['nummer']} vom {x['datum'][8:10]}.{x['datum'][5:7]}.{x['datum'][:4]}: "
-                       f"netto {abs(x['netto']):.2f} EUR, USt {abs(x['ust']):.2f} EUR, brutto {abs(x['brutto']):.2f} EUR".replace(".", ","))
+                       f"netto {eur_(x['netto'])} EUR, USt {eur_(x['ust'])} EUR, brutto {eur_(x['brutto'])} EUR")
     notiz_xml = "".join(f"<ram:IncludedNote><ram:Content>{t(n)}</ram:Content></ram:IncludedNote>" for n in notizen)
     leistung = b.get("leistungsdatum") or b.get("datum")
 

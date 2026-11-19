@@ -125,6 +125,7 @@ async function ansichtMaterialDetail(id, teil = "stamm") {
       ${holz ? zeile("Dicke", `${zahl("dicke", 1, 'style="width:90px;text-align:right"')} <span style="padding-top:5px">mm</span>`) : ""}
       ${kat === "holzwerkstoffe" ? zeile("Plattenformat", `${zahl("plattenlaenge", 0, 'style="width:90px;text-align:right" placeholder="Länge"')} <span style="padding-top:5px">×</span> ${zahl("plattenbreite", 0, 'style="width:90px;text-align:right" placeholder="Breite"')} <span style="padding-top:5px">mm</span><span class="hinweis" style="padding-top:5px">Länge × Breite der ganzen Platte, z. B. 2800 × 2070 – damit das Zuschnittprogramm die richtige Platte aus dem Lager zieht</span>`) : ""}
       ${zeile("EK-Preis", `${zahl("ek_preis")} <span style="padding-top:5px">€ je</span><select data-f="einheit" style="flex:0 0 120px">${opts(meta.einheiten, m.einheit)}</select>`)}
+      ${artikel || beschlag ? "" : zeile("Umrechnung", `<span style="padding-top:5px">1 Einheit =</span> ${zahl("umrechnung", 3, 'style="width:90px;text-align:right" placeholder="0"')} <span class="hinweis" style="padding-top:5px">nur nötig, wenn die Einheit nicht die Recheneinheit der Kalkulation ist: bei Kanten laufende Meter (1 Rolle = 50 lfm), bei Platten, Furnier und Oberflächen m² (1 Dose = 12 m², 1 Tafel = 5,796 m²), bei Massivholz m³. Leer oder 0 = der Preis gilt je Recheneinheit.</span>`, true)}
       ${zeile("Preis vom", `<input type="date" data-f="preis_vom" value="${esc(m.preis_vom || "")}" style="flex:0 0 170px">`)}
       ${artikel || beschlag ? "" : zeile("Verschnitt", `${zahl("verschnitt", 0, 'style="width:80px;text-align:right"')} <span style="padding-top:5px">%</span>`)}
       ${artikel ? "" : zeile(beschlag ? "Kosten je Einheit" : "Kalkulationspreis", `<span style="padding-top:5px" id="kpreis"></span>`)}
@@ -593,7 +594,7 @@ async function preisImport() {
             <td class="r nw">${eur(t.alt)}<div class="hinweis">${datum(t.preis_vom)}</div></td><td class="r nw"><b>${eur(t.neu)}</b></td>
             <td class="r nw" style="color:${t.diff > 0 ? "var(--rot)" : t.diff < 0 ? "var(--gruen)" : "inherit"}">${t.gleich ? "gleich" : pzt(t.diff)}</td>
             <td class="nw">${esc(t.einheit)}${t.einheit_ok ? "" : ` <span style="color:var(--rot)">≠ ${esc(t.einheit_datei)}</span>`}</td>
-            <td class="hinweis">${[t.pe_hinweis, t.brutto ? `Listenpreis${t.rabattgruppe ? " " + esc(t.rabattgruppe) : ""} abzgl. Rabatt` : "", !t.gleich && !t.vorschlag ? (t.einheit_ok ? "große Änderung – bitte prüfen" : "Einheit weicht ab – Preis bezieht sich evtl. auf eine andere Menge") : ""].filter(Boolean).join(" · ")}</td></tr>`).join("")}</table>
+            <td class="hinweis">${[t.waehrung ? `<span style="color:var(--rot)">Preis in ${esc(t.waehrung)} – nicht umgerechnet</span>` : "", t.pe_hinweis, t.brutto ? `Listenpreis${t.rabattgruppe ? " " + esc(t.rabattgruppe) : ""} abzgl. Rabatt` : "", !t.gleich && !t.vorschlag ? (t.einheit_ok ? "große Änderung – bitte prüfen" : "Einheit weicht ab – Preis bezieht sich evtl. auf eine andere Menge") : ""].filter(Boolean).join(" · ")}</td></tr>`).join("")}</table>
           ${kann ? `<button class="btn prim" id="piOk" style="margin-top:10px">Angehakte Preise übernehmen</button>` : ""}` : `<div class="leer">Keine Treffer im Materialstamm. Neue Artikel lassen sich unten aus der Datei anlegen.</div>`}
         <div id="piNeuBox"></div>`}
       </div>`;
@@ -610,7 +611,7 @@ async function preisImport() {
     });
     $("#piA").onchange = e => { P.alle = e.target.checked; if (P.datei) lesen(); };
     $("#piR").onchange = e => { P.rabatt = e.target.value; if (P.datei) lesen(); };
-    $("#piD").onchange = e => { P.datei = e.target.files[0]; P.zuordnung = null; P.schluessel = ""; P.wahl = new Set(); P.suche = P.gruppe = ""; lesen(); };
+    $("#piD").onchange = e => { P.datei = e.target.files[0]; P.zuordnung = null; P.schluessel = ""; P.wahl = new Set(); P.suche = P.gruppe = ""; P.einheiten = {}; lesen(); };
     if ($("#piZu")) $("#piZu").onclick = () => { Object.assign(P, {datei: null, erg: null, schluessel: "", zuordnung: null, wahl: new Set(), suche: "", gruppe: "", rabatte: {}}); zeigen(); };
     if ($("#piNeu")) $("#piNeu").onclick = () => { P.zuordnung = Object.fromEntries($$("[data-pz]").map(s => [s.dataset.pz, +s.value])); P.schluessel = ""; lesen(); };
     if (r && $("#piNeuBox")) neueZeigen(r);
@@ -649,7 +650,9 @@ async function preisImport() {
         ${liste.map((a, i) => { const rg = (r.rabattgruppen || []).find(g => g.gruppe === (a.rabattgruppe || "")), pz = rg && rg.rabatt != null ? rg.rabatt : rabattZahl();
           const ek = a.netto === false ? a.preis * (1 - pz / 100) : a.preis;
           return `<tr><td><input type="checkbox" data-pn="${i}" ${P.wahl.has(schl(a)) ? "checked" : ""}></td><td class="nw">${esc(a.artnr || "")}${a.ean ? `<div class="hinweis">${esc(a.ean)}</div>` : ""}</td>
-          <td>${esc(a.text)}</td><td class="hinweis">${esc(a.warengruppe || "")}</td><td>${esc(a.einheit || "")}</td><td class="r nw">${eur(ek)}</td></tr>`; }).join("")}</table>
+          <td>${esc(a.text)}</td><td class="hinweis">${esc(a.warengruppe || "")}</td>
+          <td class="nw">${esc(a.einheit || "")}${a.einheit_unbekannt ? ` <span style="color:var(--rot)" title="Diese Einheit kennt das Programm nicht. Beim Anlegen wird gefragt, als welche Einheit der Artikel geführt wird.">${a.einheit ? "?" : "fehlt"}</span>` : ""}</td>
+          <td class="r nw">${eur(ek)}${a.waehrung ? `<div class="hinweis" style="color:var(--rot)">Preis in ${esc(a.waehrung)}</div>` : ""}</td></tr>`; }).join("")}</table>
         ${r.neu_treffer > liste.length ? `<p class="hinweis">${r.neu_treffer} passende Artikel, die ersten ${liste.length} werden gezeigt – Suche eingrenzen.</p>` : ""}`
         : `<div class="leer">Keine passenden Artikel.</div>`}
       ${kann ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
@@ -674,8 +677,24 @@ async function preisImport() {
       if (!P.wahl.size) return toast("Bitte Artikel anhaken.", true);
       if (!await frage(`${P.wahl.size} Artikel als „${MAT_KATEGORIEN_NAMEN[P.kat]}“ anlegen?`, {ok: "Anlegen"})) return;
       try {
-        const x = await api("preisimport/anlegen", {method: "POST", body: {schluessel: P.schluessel, auswahl: [...P.wahl], kategorie: P.kat,
-          lieferant_id: P.lieferant_id, rabatt: P.rabatt, rabatte: P.rabatte, dateiname: P.datei ? P.datei.name : ""}});
+        const anfrage = einheiten => api("preisimport/anlegen", {method: "POST", body: {schluessel: P.schluessel, auswahl: [...P.wahl], kategorie: P.kat,
+          lieferant_id: P.lieferant_id, rabatt: P.rabatt, rabatte: P.rabatte, dateiname: P.datei ? P.datei.name : "", einheiten}});
+        let x = await anfrage(P.einheiten || {});
+        if (x.einheiten_fehlen) {
+          // Einheiten, die das Programm nicht kennt: nachfragen statt eine Einheit zu unterstellen
+          const zu = await modal("Einheiten zuordnen", `<p class="hinweis" style="margin-top:0">Diese Einheiten der Preisdatei kennt das Programm nicht. Der Preis der Datei gilt je dieser Einheit.
+            Wird zum Beispiel eine Tafel, ein Blatt oder ein Kanister als „Stk.“ oder „Packung“ geführt, lässt sich im Material anschließend die <b>Umrechnung</b> eintragen (1 Einheit = … m², lfm oder m³), damit die Kalkulation richtig rechnet.</p>
+            <div class="form" style="grid-template-columns:1fr">${x.einheiten_fehlen.map((u, i) => zeile(u.einheit ? `„${u.einheit}“` : "ohne Einheit",
+              `<select name="e${i}"><option value="">– bitte wählen –</option>${x.einheiten.map(e => `<option>${esc(e)}</option>`).join("")}</select>
+               <span class="hinweis">${u.anzahl} Artikel, z. B. ${esc(u.beispiel)}</span>`)).join("")}</div>`, "Anlegen");
+          if (!zu) return;
+          const wahl = {...(P.einheiten || {})};
+          x.einheiten_fehlen.forEach((u, i) => { if (zu["e" + i]) wahl[u.einheit] = zu["e" + i]; });
+          if (x.einheiten_fehlen.some(u => !wahl[u.einheit])) return toast("Bitte für jede Einheit eine Zuordnung wählen.", true);
+          P.einheiten = wahl;
+          x = await anfrage(wahl);
+          if (x.einheiten_fehlen) return toast("Die Einheiten konnten nicht zugeordnet werden.", true);
+        }
         toast(`${x.angelegt} Materialien angelegt${x.uebersprungen ? `, ${x.uebersprungen} gab es schon` : ""}`);
         P.wahl = new Set(); lesen();
       } catch (x) { toast(x.message, true); if (x.status === 410) { P.schluessel = ""; lesen(); } }

@@ -10,6 +10,7 @@ from datetime import date, datetime
 
 import material
 import personal
+from kern import de_menge
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS montageberichte (
@@ -288,7 +289,7 @@ def html_inhalt(con, b, hilfe):
     zeiten = "".join(f'<tr><td>{h(z.get("name"))}</td><td class="nw">{h(z.get("beginn"))}–{h(z.get("ende"))}</td>'
                      f'<td class="r nw">{int(float(z.get("pause") or 0))} min</td><td class="r nw">{de(zeile_stunden(z))} h</td><td>{h(z.get("taetigkeit"))}</td></tr>'
                      for z in b["zeiten"] if zeile_stunden(z) > 0)
-    mat = "".join(f'<tr><td class="r nw">{de(x.get("menge"), 2 if float(x.get("menge") or 0) % 1 else 0)} {h(x.get("einheit"))}</td>'
+    mat = "".join(f'<tr><td class="r nw">{de_menge(x.get("menge"))} {h(x.get("einheit"))}</td>'
                   f'<td>{h(x.get("nummer") or "")}</td><td>{h(x.get("bezeichnung"))}</td></tr>' for x in b["material"] if float(x.get("menge") or 0) > 0)
     uk, um = bild_b64(b["unterschrift_kunde"]), bild_b64(b["unterschrift_monteur"])
     unterschrift = (f'<table class="t" style="margin-top:4mm"><tr>'

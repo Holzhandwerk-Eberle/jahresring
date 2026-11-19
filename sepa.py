@@ -42,6 +42,8 @@ def sepa_xml(e, posten, ausfuehrung):
     if not name or not iban_ok(iban):
         raise ApiFehler("Für die SEPA-Datei fehlen in den Einstellungen Kontoinhaber oder eine gültige eigene IBAN.")
     summe = sum(kfm(p["zahlbetrag"]) for p in posten)
+    # Sammelbuchung (eine Abbuchung über die Summe) oder Einzelbuchung (je Zahlung eine Abbuchung) – Einstellung „sepa_einzelbuchung“
+    einzeln = bool(e.get("sepa_einzelbuchung"))
     msg = "JR" + datetime.now().strftime("%Y%m%d%H%M%S%f")   # eindeutig auch bei zwei Dateien in derselben Sekunde
     tx = []
     for p in posten:
@@ -61,7 +63,7 @@ def sepa_xml(e, posten, ausfuehrung):
         '<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.09">'
         f"<CstmrCdtTrfInitn><GrpHdr><MsgId>{msg}</MsgId><CreDtTm>{datetime.now().isoformat(timespec='seconds')}</CreDtTm>"
         f"<NbOfTxs>{len(posten)}</NbOfTxs><CtrlSum>{summe:.2f}</CtrlSum><InitgPty><Nm>{x(name)}</Nm></InitgPty></GrpHdr>"
-        f"<PmtInf><PmtInfId>{msg}-1</PmtInfId><PmtMtd>TRF</PmtMtd><BtchBookg>true</BtchBookg>"
+        f"<PmtInf><PmtInfId>{msg}-1</PmtInfId><PmtMtd>TRF</PmtMtd><BtchBookg>{'false' if einzeln else 'true'}</BtchBookg>"
         f"<NbOfTxs>{len(posten)}</NbOfTxs><CtrlSum>{summe:.2f}</CtrlSum>"
         "<PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl></PmtTpInf>"
         f"<ReqdExctnDt><Dt>{ausfuehrung}</Dt></ReqdExctnDt>"
