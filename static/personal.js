@@ -78,7 +78,7 @@ function anmeldeSeite(status) {
     }).catch(() => {});
   }
   f.login.focus();
-  if (!einrichten && f.login.value === "") setTimeout(() => f.login.focus(), 50);
+  if (!einrichten && f.login.value === "") setTimeout(() => { if (f.login.value === "" && document.activeElement !== f.passwort) f.login.focus(); }, 50);
   f.onsubmit = async e => {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(f));

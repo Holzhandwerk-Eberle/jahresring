@@ -44,6 +44,7 @@ done
 # dazu im Browser (beide bauen sich ihre Instanz selbst auf): Widerruf mit Sperre im Kalender, einheitliche Oberfläche und Seite „Gesetzliche Werte“
 schritt widerruf_ui bash -c "cd $T/v25 && cp $T/neu/widerruf_ui.js s/widerruf_ui.js && timeout 600 node s/widerruf_ui.js > $O/tor_aus_widerruf_ui.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_widerruf_ui.txt"
 schritt ui152 bash -c "cd $T/v25 && cp $T/neu/ui152.js s/ui152.js && timeout 900 node s/ui152.js > $O/tor_aus_ui152.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_ui152.txt"
+schritt seitenwechsel bash -c "cd $T/v25 && cp $T/neu/seitenwechsel.js s/seitenwechsel.js && timeout 400 node s/seitenwechsel.js > $O/tor_aus_seitenwechsel.txt 2>&1; grep -q 'FEHLER: \[\]' $O/tor_aus_seitenwechsel.txt"
 bash $T/v25/neu.sh >/dev/null 2>&1
 schritt durchlauf bash -c "cd $T/v25 && timeout 600 node s/t10.js > $O/tor_t10.txt 2>&1; tail -1 $O/tor_t10.txt | grep -q 'fehler \[\]'"
 schritt seiten bash -c "cd $T/v25 && timeout 600 node s/crawl.js > $O/tor_crawl.txt 2>&1; grep -q '^Fehler: 0' $O/tor_crawl.txt && grep -q '^Auffällige Texte: 0' $O/tor_crawl.txt"

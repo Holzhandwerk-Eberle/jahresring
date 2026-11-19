@@ -92,7 +92,8 @@ const tag = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(
   ok('Klick auf die Sperre öffnet den Beleg', new RegExp(`#/beleg/${ang.id}$`).test(p.url()) && await p.isChecked('#agvB'));
   // Rechnung hat den Abschnitt nicht
   const re = await ruf('POST', `auftraege/${a.id}/belege`, { art: 'rechnung' });
-  await p.goto(U + `/#/beleg/${re.id}`); await p.waitForSelector('#f');
+  // erst weiter, wenn wirklich die Rechnung dasteht (vorher zeigt die Seite noch das Angebot, das auch ein Formular #f hat)
+  await p.goto(U + `/#/beleg/${re.id}`); await p.waitForFunction(() => /Rechnung/.test((document.querySelector('#inhalt .titel h2') || {}).innerText || ''), null, { timeout: 15000 }); await p.waitForSelector('#f');
   ok('Rechnung: kein Abschnitt „Widerrufsrecht“', (await p.locator('[name=agv]').count()) === 0);
   // Einstellungen: Texte
   await p.goto(U + '/#/einstellungen/belege'); await p.waitForSelector('[name=widerruf_belehrung]', { timeout: 15000 });

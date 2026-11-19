@@ -700,12 +700,14 @@ const API_STAND = {};
 const apiStandSchluessel = pfad => { const m = /^([a-z_]+)\/(\d+)/.exec(pfad); return m ? m[1] + "/" + m[2] : (/^einstellungen(\?|$)/.test(pfad) ? "einstellungen" : ""); };
 async function api(pfad, opt = {}) {
   const methode = opt.method || "GET", sk = apiStandSchluessel(pfad);
+  const fuerLauf = methode === "GET" ? API_LAUF : 0;   // lesender Abruf zu Beginn eines Seitenaufbaus (siehe render)
   const kopf = {"Content-Type": "application/json", "X-Rueckfrage": "1"};
   if (opt._bestaetigt) kopf["X-Bestaetigt"] = opt._bestaetigt.join(",");
   if (methode !== "GET" && sk && API_STAND[sk]) kopf["X-Stand"] = API_STAND[sk];
   const r = await fetch("/api/" + pfad, {method: methode, headers: kopf, body: opt.body !== undefined ? JSON.stringify(opt.body) : undefined});
   const j = await r.json().catch(() => ({}));
   if (r.status === 401 && j.anmelden) { location.reload(); throw new Error("Bitte anmelden."); }
+  if (fuerLauf && fuerLauf !== seitenLauf) return new Promise(() => {});   // die Seite ist inzwischen verlassen: ihr Aufbau endet hier
   if (r.status === 409 && j.rueckfrage && methode !== "GET") {
     // ungewöhnliche Eingabe oder gleichzeitige Änderung: nachfragen und bei „Ja“ mit Bestätigung wiederholen
     if (await frage(j.fehler, {ok: j.knopf || "Trotzdem ausführen"})) return api(pfad, {...opt, _bestaetigt: [...(opt._bestaetigt || []), j.rueckfrage]});
@@ -953,6 +955,7 @@ const menueSichtbar = ([t, u]) => u === "#/meine" ? !!(ICH && ICH.mitarbeiter_id
 function kopfFirma() { const k = $("#lbFirma"); if (k) { k.textContent = E.firma || ""; k.title = E.firma || ""; } }
 function leiste() {
   const l = $("#leiste");
+  if (!ICH) return;   // ohne angemeldeten Benutzer gibt es keine Leiste (siehe „gestartet“ beim Seitenwechsel)
   if (!l.dataset.fertig) {
     l.dataset.fertig = "1";
     l.innerHTML = `
@@ -2854,8 +2857,18 @@ document.addEventListener("click", e => {
   if (VERLAUF.length > 1) { VERLAUF.pop(); zurueckLaeuft = true; }
   location.hash = ziel;
 });
+// Seitenwechsel, während die vorige Seite noch Daten holt: Jeder Aufbau bekommt eine laufende Nummer. Abrufe, die eine Seite gleich zu
+// Beginn startet, tragen sie (API_LAUF, siehe api()); kommt ihre Antwort erst, wenn schon eine andere Seite verlangt ist, endet der alte
+// Aufbau dort still. Baut eine verlassene Seite trotzdem noch etwas auf (spätere Abrufe), wird die verlangte danach noch einmal aufgebaut.
+// Ohne das stand unter der neuen Adresse die alte Seite, wenn deren Daten später eintrafen als die der neuen.
+let seitenLauf = 0, seitenFertig = 0, API_LAUF = 0;
+// Vor dem Ende des Programmstarts (Anmeldung und Einstellungen geladen) wird keine Seite aufgebaut: Ein Seitenwechsel in diesem
+// Augenblick – ein schneller Klick, ein langsames Netz – baute sonst die Kopfleiste ohne Benutzer auf, und danach zeigte jede Seite
+// nur noch eine Fehlermeldung, bis das Fenster neu geladen wurde. Der Start baut am Ende selbst die dann verlangte Seite auf.
+let gestartet = false;
 async function render() {
-  if (!$(".wrap")) return;   // Anmeldeseite: noch keine Programmoberfläche
+  if (!$(".wrap") || !gestartet) return;   // Anmeldeseite oder Programmstart: noch keine Programmoberfläche
+  const lauf = ++seitenLauf;
   verlaufMerken();
   window.onbeforeunload = null;
   window.onfocus = null;
@@ -2864,49 +2877,59 @@ async function render() {
   $("#seite").innerHTML = "";
   $$(".pb-menue").forEach(m => m.remove());
   const [a, b, c, d] = (location.hash.slice(2) || "start").split("/");
+  const seite = () => {   // liefert den Aufbau der verlangten Seite (ein Versprechen), ohne darauf zu warten
+      if (a === "meine") return ansichtMeine(b);
+      else if (a === "personal") return ansichtPersonal(b, c, d);
+      else if (a === "kunde" && b) return ansichtKunde(+b, c || "stamm");
+      else if (a === "auftraege") return ansichtAuftraege();
+      else if (a === "auftrag" && b) return ansichtAuftrag(+b, c || "auftrag", d);
+      else if (a === "position" && b) return ansichtPosition(+b, c || "position", d);
+      else if (a === "beleg" && b) return ansichtBeleg(+b);
+      else if (a === "montage" && b) return ansichtMontage(+b);
+      else if (a === "unterschrift" && b) return ansichtUnterschrift(+b);
+      else if (a === "bautagebuch" && b) return ansichtBautagebuch(+b);
+      else if (a === "brief" && b) return ansichtBrief(+b);
+      else if (a === "leitstand") return ansichtLeitstand(b);
+      else if (a === "projekte") return ansichtProjekte();
+      else if (a === "projekt" && b) return ansichtProjekt(+b);
+      else if (a === "kalender") return ansichtKalender(b || "planung", c);
+      else if (a === "belege") { kopf({}); return alleBelege($("#inhalt")); }
+      else if (a === "vorgaben") return ansichtVorgaben(b || "werkstoffe");
+      else if (a === "op" && b === "mahnwesen") return ansichtMahnwesen(c);
+      else if (a === "op" && b === "bank") return ansichtBank();
+      else if (a === "op" && b === "liquiditaet") return ansichtLiquiditaet();
+      else if (a === "op") { OP_REITER("op"); return opListeNeu($("#inhalt")); }
+      else if (a === "briefe") { kopf({}); return briefListe($("#inhalt")); }
+      else if (a === "statistik") return ansichtStatistik();
+      else if (a === "einstellungen") return ansichtEinstellungen(b || "firma", c, d);
+      else if (a === "lieferanten") return ansichtLieferanten();
+      else if (a === "material") return ansichtMaterial(b || "holzwerkstoffe", c);
+      else if (a === "mat" && b) return ansichtMaterialDetail(+b, c || "stamm");
+      else if (a === "lieferant" && b) return ansichtLieferant(+b, c || "stamm");
+      else if (a === "zahlungen") { LIEF_REITER("z"); return zahlungsListe($("#inhalt"), null); }
+      else if (a === "zahlung" && b) return ansichtZahlung(+b);
+      else if (a === "kunden" && b === "import") return ansichtKundenImport();
+      else if (a === "kunden") return ansichtKunden();
+      else if (a === "arbeitsschutz") return ansichtArbeitsschutz(b || "uebersicht", c, d);
+      else return ansichtStart(b);
+  };
   try {
     if ((a === "start" || !a) && !darf("start")) { location.replace(startseiteFuer()); return; }
     if (ROUTE_BEREICH[a] && !darf(ROUTE_BEREICH[a])) {
       kopf({}); $("#inhalt").innerHTML = `<div class="leer">Für diesen Bereich fehlt die Berechtigung.<br><br><a href="${startseiteFuer()}">Zur Übersicht</a></div>`; return;
     }
-    if (a === "meine") await ansichtMeine(b);
-    else if (a === "personal") await ansichtPersonal(b, c, d);
-    else if (a === "kunde" && b) await ansichtKunde(+b, c || "stamm");
-    else if (a === "auftraege") await ansichtAuftraege();
-    else if (a === "auftrag" && b) await ansichtAuftrag(+b, c || "auftrag", d);
-    else if (a === "position" && b) await ansichtPosition(+b, c || "position", d);
-    else if (a === "beleg" && b) await ansichtBeleg(+b);
-    else if (a === "montage" && b) await ansichtMontage(+b);
-    else if (a === "unterschrift" && b) await ansichtUnterschrift(+b);
-    else if (a === "bautagebuch" && b) await ansichtBautagebuch(+b);
-    else if (a === "brief" && b) await ansichtBrief(+b);
-    else if (a === "leitstand") await ansichtLeitstand(b);
-    else if (a === "projekte") await ansichtProjekte();
-    else if (a === "projekt" && b) await ansichtProjekt(+b);
-    else if (a === "kalender") await ansichtKalender(b || "planung", c);
-    else if (a === "belege") { kopf({}); await alleBelege($("#inhalt")); }
-    else if (a === "vorgaben") await ansichtVorgaben(b || "werkstoffe");
-    else if (a === "op" && b === "mahnwesen") await ansichtMahnwesen(c);
-    else if (a === "op" && b === "bank") await ansichtBank();
-    else if (a === "op" && b === "liquiditaet") await ansichtLiquiditaet();
-    else if (a === "op") { OP_REITER("op"); await opListeNeu($("#inhalt")); }
-    else if (a === "briefe") { kopf({}); await briefListe($("#inhalt")); }
-    else if (a === "statistik") await ansichtStatistik();
-    else if (a === "einstellungen") await ansichtEinstellungen(b || "firma", c, d);
-    else if (a === "lieferanten") await ansichtLieferanten();
-    else if (a === "material") await ansichtMaterial(b || "holzwerkstoffe", c);
-    else if (a === "mat" && b) await ansichtMaterialDetail(+b, c || "stamm");
-    else if (a === "lieferant" && b) await ansichtLieferant(+b, c || "stamm");
-    else if (a === "zahlungen") { LIEF_REITER("z"); await zahlungsListe($("#inhalt"), null); }
-    else if (a === "zahlung" && b) await ansichtZahlung(+b);
-    else if (a === "kunden" && b === "import") await ansichtKundenImport();
-    else if (a === "kunden") await ansichtKunden();
-    else if (a === "arbeitsschutz") await ansichtArbeitsschutz(b || "uebersicht", c, d);
-    else await ansichtStart(b);
+    let aufbau;
+    API_LAUF = lauf;   // Abrufe, die die Seite gleich zu Beginn startet, gehören zu diesem Aufbau
+    try { aufbau = seite(); } finally { API_LAUF = 0; }
+    await aufbau;
   } catch (e) {
+    if (lauf !== seitenLauf) return;   // Fehler einer inzwischen verlassenen Seite gehört nicht auf die neue
     // Nur wenn der Server gar nicht antwortet, liegt es am Programm im Hintergrund – sonst ist die Meldung selbst die Erklärung
     const netz = !e.status && /fetch|network|load failed/i.test(String(e.message));
     $("#inhalt").innerHTML = `<div class="leer">${e.status ? esc(e.message) : `Fehler: ${esc(e.message)}${netz ? "<br><br>Läuft das Programm noch? Ggf. start.bat neu starten." : ""}`}</div>`;
+  } finally {
+    if (lauf === seitenLauf) seitenFertig = lauf;
+    else if (seitenFertig === seitenLauf) render();   // eine verlassene Seite hat nach der neuen noch etwas aufgebaut: die neue noch einmal
   }
 }
 window.addEventListener("hashchange", render);
@@ -2923,6 +2946,7 @@ const VERSION = "2026.11.01-152";
   ICH = st.benutzer;
   try { E = await api("einstellungen"); } catch (e) { toast("Server nicht erreichbar", true); }
   document.title = "Jahresring" + (E.firma ? " · " + E.firma : "");
+  gestartet = true;
   render();
   if (darf("auftraege", 2)) setTimeout(bildVariantenNachruesten, 4000);
 })();

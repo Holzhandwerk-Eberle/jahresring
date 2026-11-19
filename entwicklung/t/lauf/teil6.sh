@@ -12,4 +12,5 @@ cd $T/v25 && cp $T/neu/startas_ui.js s/ && timeout 400 node s/startas_ui.js > $O
 # Version 152 (Umsetzung des zweiten Prüfberichts), jede Prüfung auf frischer Instanz; die beiden Browserprüfungen bauen sich ihre selbst auf
 for n in bank152 rechnen152 import152 widerruf152 sicher152 spur152 pflege152; do $N >/dev/null 2>&1; timeout 900 python3 $T/neu/$n.py > $O/teil6_$n.txt 2>&1; done
 cd $T/v25 && cp $T/neu/widerruf_ui.js $T/neu/ui152.js s/ && timeout 600 node s/widerruf_ui.js > $O/teil6_widerruf_ui.txt 2>&1; timeout 900 node s/ui152.js > $O/teil6_ui152.txt 2>&1
+cp $T/neu/seitenwechsel.js s/ && timeout 400 node s/seitenwechsel.js > $O/teil6_seitenwechsel.txt 2>&1
 echo FERTIG > $O/teil6.done
