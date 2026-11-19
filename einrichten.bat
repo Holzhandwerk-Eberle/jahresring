@@ -10,7 +10,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$o='%~dp0.'; $d=[Environ
 echo  3. Verknuepfung auch im Startmenue anlegen ...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$o='%~dp0.'; $d=[Environment]::GetFolderPath('Programs'); $s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d 'Jahresring.lnk')); $s.TargetPath=(Join-Path $o 'start.bat'); $s.WorkingDirectory=$o; $s.WindowStyle=7; $s.IconLocation=(Join-Path $o 'static\jahresring.ico'); $s.Description='Jahresring'; $s.Save()"
 echo.
-echo  Fertig. Ab jetzt startest du das Programm ueber "Jahresring" auf dem Desktop.
-echo  Nach einem Update diese Datei einfach noch einmal doppelklicken.
+echo  Fertig. Das Programm startet ab jetzt ueber "Jahresring" auf dem Desktop.
+echo  Nach einem Update diese Datei noch einmal doppelt anklicken.
 echo.
 pause

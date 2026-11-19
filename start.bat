@@ -24,20 +24,20 @@ if not errorlevel 1 (
 rem --- 3. Versuch ueber winget (in Windows 10/11 enthalten) ---
 where winget >NUL 2>NUL
 if not errorlevel 1 (
-  winget install --id Python.Python.3.13 -e --silent --accept-package-agreements --accept-source-agreements
+  winget install --id Python.Python.3.14 -e --silent --accept-package-agreements --accept-source-agreements
   call :pruefen
   if defined PY goto fertig
-  if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
-    set "PY=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+  if exist "%LOCALAPPDATA%\Programs\Python\Python314\python.exe" (
+    set "PY=%LOCALAPPDATA%\Programs\Python\Python314\python.exe"
     goto fertig
   )
 )
 
 rem --- 4. Versuch: Installationsprogramm direkt von python.org laden (nur fuer dieses Benutzerkonto, ohne Administratorrechte) ---
 echo  Python wird von python.org geladen ...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol='Tls12'; $f=Join-Path $env:TEMP 'python-3.13-setup.exe'; Invoke-WebRequest -UseBasicParsing 'https://www.python.org/ftp/python/3.13.17/python-3.13.17-amd64.exe' -OutFile $f; $sig=Get-AuthenticodeSignature $f; if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Python Software Foundation') { Remove-Item $f -Force; throw 'Die Signatur des Python-Installationsprogramms ist ungueltig - nichts installiert.' }; Start-Process -FilePath $f -ArgumentList '/quiet InstallAllUsers=0 PrependPath=0 Include_launcher=0 Include_test=0 Include_doc=0 Shortcuts=0' -Wait"
-if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
-  set "PY=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol='Tls12'; $f=Join-Path $env:TEMP 'python-3.14-setup.exe'; Invoke-WebRequest -UseBasicParsing 'https://www.python.org/ftp/python/3.14.10/python-3.14.10-amd64.exe' -OutFile $f; $sig=Get-AuthenticodeSignature $f; if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Python Software Foundation') { Remove-Item $f -Force; throw 'Die Signatur des Python-Installationsprogramms ist ungueltig - nichts installiert.' }; Start-Process -FilePath $f -ArgumentList '/quiet InstallAllUsers=0 PrependPath=0 Include_launcher=0 Include_test=0 Include_doc=0 Shortcuts=0' -Wait"
+if exist "%LOCALAPPDATA%\Programs\Python\Python314\python.exe" (
+  set "PY=%LOCALAPPDATA%\Programs\Python\Python314\python.exe"
   goto fertig
 )
 
@@ -69,7 +69,7 @@ for %%P in (py python) do (
     %%P -c "import sys,sqlite3;sys.exit(sys.version_info[1] not in range(12,99))" >NUL 2>NUL && set "PY=%%P"
   )
 )
-if not defined PY if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" set "PY=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+if not defined PY for %%V in (314 313 312) do if not defined PY if exist "%LOCALAPPDATA%\Programs\Python\Python%%V\python.exe" set "PY=%LOCALAPPDATA%\Programs\Python\Python%%V\python.exe"
 rem Echte python.exe statt App-Alias (WindowsApps) verwenden - sonst kommen Handys im WLAN nicht durch
 if defined PY (
   for /f "usebackq delims=" %%X in (`%PY% -c "import sys,os;print(os.path.realpath(getattr(sys,'_base_executable',None) or sys.executable))"`) do set "PYECHT=%%X"

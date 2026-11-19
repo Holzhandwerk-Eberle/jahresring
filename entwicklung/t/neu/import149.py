@@ -79,6 +79,7 @@ print("== S6: Größe beim Entpacken")
 riesig = '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + ('<row><c t="inlineStr"><is><t>' + "A" * 1000 + '</t></is></c></row>') * 1 + " " * (200 * 1024 * 1024) + '</sheetData></worksheet>'
 bombe = xlsx("", S, extra=riesig); del riesig
 def speicher():
+    if not __import__("os").path.isdir("/proc"): return 0   # unter Windows ohne Messung des Arbeitsspeichers
     for f in __import__("os").listdir("/proc"):
         if f.isdigit():
             try:

@@ -1,0 +1,3 @@
+# Dateien unverändert ablegen und auschecken (keine Umwandlung der Zeilenenden): Was die Prüfkette unter Windows prüft, soll Byte für
+# Byte dem entsprechen, was das Installationsprogramm ausliefert. Die Stapeldateien (*.bat) liegen mit Windows-Zeilenenden im Repository.
+* -text

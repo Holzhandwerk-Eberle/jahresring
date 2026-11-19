@@ -1,0 +1,50 @@
+# Prüfkette unter Windows: läuft bei jedem Bau (bauen.sh schreibt version.txt) und auf Knopfdruck (Actions › Prüfkette unter Windows › Run workflow).
+# Geprüft wird das Programm aus diesem Repository auf einem frischen Windows-Rechner von GitHub: Schnittstelle und Rechenwege wie in der
+# Entwicklungsumgebung, dazu das, was nur Windows kann (Verschlüsselung der Zugangsdaten, Autostart, PDF über Edge, start.bat, Symbol neben der Uhr).
+# Es werden nur erfundene Prüfdaten verwendet; Geschäftsdaten liegen nicht im Repository.
+name: Prüfkette unter Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - version.txt
+      - .github/workflows/pruefkette-windows.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruefkette-windows
+  cancel-in-progress: true
+
+jobs:
+  pruefkette:
+    name: Prüfkette (Windows, Python 3.14)
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - name: Programm holen
+        uses: actions/checkout@v7
+      - name: Python 3.14 einrichten
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Prüfkette
+        shell: cmd
+        env:
+          JR_PRUEF_ORDNER: ${{ runner.temp }}\jahresring-pruefkette
+          PYTHONUTF8: "1"
+        run: python entwicklung\pruefen.py
+      - name: Ausgaben der Prüfungen aufbewahren
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pruefkette-windows
+          path: |
+            ${{ runner.temp }}\jahresring-pruefkette\aus_*.txt
+            ${{ runner.temp }}\jahresring-pruefkette\instanz.log
+            ${{ runner.temp }}\jahresring-pruefkette\t\v25\startbat\start_aus.txt
+          if-no-files-found: warn
+          retention-days: 14

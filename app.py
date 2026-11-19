@@ -1028,6 +1028,36 @@ def datenbank_notfall(grund):
     return gut, ablage
 
 
+def bestand_version_pruefen():
+    """Vor dem Einrichten der Datenbank: Hat zuletzt eine NEUERE Programmversion mit diesem Datenbestand gearbeitet, startet diese
+    (ältere) nicht. Sie kennt Felder und Regeln der neueren nicht und würde beim Weiterarbeiten Angaben übergehen oder anders
+    rechnen. Gelesen wird nur die Kennzeichnung des Bestands, geändert wird nichts. Rückgabe: Meldung oder leerer Text.
+    Für den Betreuer: Mit der Umgebungsvariablen BUERO_AELTERE_VERSION=ja startet das Programm trotzdem; der Wechsel steht dann wie
+    jeder Versionswechsel im Änderungsprotokoll."""
+    if not os.path.isfile(DB_PFAD):
+        return ""
+    try:
+        c = sqlite3.connect(DB_PFAD, timeout=30)
+        try:
+            c.execute("PRAGMA query_only=ON")
+            z = c.execute("SELECT wert FROM einstellungen WHERE schluessel='programm_version'").fetchone()
+        finally:
+            c.close()
+        bestand = str(json.loads(z[0])) if z else ""
+    except (sqlite3.Error, ValueError, TypeError):
+        return ""   # leere, fremde oder beschädigte Datei: darum kümmert sich der Start der Datenbank
+    if not uebernahme.version_zahl(bestand) > uebernahme.version_zahl(VERSION):
+        return ""
+    if os.environ.get("BUERO_AELTERE_VERSION", "").lower() == "ja":
+        print(f"Hinweis: Der Datenbestand stammt aus der neueren Version {bestand}; Start mit Version {VERSION} auf ausdrücklichen Wunsch (BUERO_AELTERE_VERSION=ja).")
+        return ""
+    return (f"Dieser Datenbestand wurde zuletzt mit Jahresring {bestand} bearbeitet. Das Programm in diesem Ordner hat die ältere "
+            f"Version {VERSION} und startet deshalb nicht: Es kennt die Angaben der neueren Version nicht und könnte sie beim "
+            "Weiterarbeiten übergehen.\n\n"
+            f"Bitte Jahresring {bestand} oder neuer installieren (Jahresring-Setup.exe ausführen) und das Programm danach wieder "
+            "starten. An den Daten wurde nichts verändert.")
+
+
 def datenbank_starten():
     """Datenbank öffnen und einrichten; bei einer beschädigten Datei den Notfallweg gehen statt kommentarlos abzustürzen."""
     try:
@@ -11339,6 +11369,11 @@ def main():
         log = open(os.path.join(DATEN, "protokoll.txt"), "a", encoding="utf-8", buffering=1)
         sys.stdout = sys.stderr = log
         print(f"\n--- Start {datetime.now():%d.%m.%Y %H:%M} ---")
+    neuer = bestand_version_pruefen()
+    if neuer:
+        print(neuer)
+        meldung_fenster(neuer)
+        sys.exit(3)
     datenbank_starten()
     vorlagen_einrichten()
     tmp_aufraeumen()
