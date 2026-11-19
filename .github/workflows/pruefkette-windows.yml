@@ -31,10 +31,9 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      # Die Rechner von GitHub laufen in Weltzeit; das Programm rechnet Kalenderzeiten in die Zeitzone des PCs um.
-      - name: Zeitzone wie am Büro-PC (Mitteleuropa)
-        shell: cmd
-        run: tzutil /s "W. Europe Standard Time"
+      # Die Rechner von GitHub laufen in Weltzeit. Die Zeitzone wird hier bewusst nicht umgestellt: Nach einem „tzutil /s“ brauchte
+      # auf diesen Rechnern jeder Aufruf von PowerShell rund 18 Sekunden. Die eine Kalenderprüfung, die Mitteleuropa voraussetzt,
+      # meldet das und entfällt hier; die Windows-Prüfung misst die Zeitzone des Programms gegen die von Windows.
       - name: Prüfkette
         shell: cmd
         env:

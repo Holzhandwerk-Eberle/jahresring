@@ -5137,10 +5137,12 @@ def autostart_setzen(con, aktiv, fenster):
           "$s.IconLocation=$env:JR_ICON; $s.Description='Jahresring'; $s.Save()")
     umgebung = dict(os.environ, JR_LNK=pfad, JR_ZIEL=ziel, JR_ARG="" if fenster else "kein-browser", JR_ORDNER=BASIS,
                     JR_ICON=os.path.join(STATIC, "jahresring.ico"))
-    try:
+    try:   # der erste Aufruf von PowerShell nach dem Hochfahren kann auf einem ausgelasteten PC über eine halbe Minute brauchen
         subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps], env=umgebung,
-                       capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    except (OSError, subprocess.TimeoutExpired) as f:
+                       capture_output=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except subprocess.TimeoutExpired:
+        raise ApiFehler("Autostart konnte nicht eingerichtet werden: Windows hat nicht rechtzeitig geantwortet. Bitte noch einmal versuchen.")
+    except OSError as f:
         raise ApiFehler(f"Autostart konnte nicht eingerichtet werden: {f}")
     if not os.path.exists(pfad):
         raise ApiFehler("Autostart konnte nicht eingerichtet werden (Verknüpfung wurde nicht angelegt).")
