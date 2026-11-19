@@ -15,12 +15,20 @@ def ok(name, bed, info=""):
     print(("ok   " if bed else "FEHLER ") + name + ("" if bed else "  → " + str(info)[:900]), flush=True)
     if not bed: fehler.append(name)
 def hinweis(text): print("HINWEIS " + str(text)[:600], flush=True)
+_T0 = time.time()
+_druck = print
+def print(*a, **k):   # Überschriften der Abschnitte mit der bis dahin vergangenen Zeit (hilft, langsame Schritte zu finden)
+    if a and isinstance(a[0], str) and a[0].startswith("== "): hinweis(f"{time.time() - _T0:6.1f} s  {a[0][3:]}")
+    _druck(*a, **k)
 if os.name != "nt":
     print("Diese Prüfung läuft nur unter Windows."); print("FEHLER:", fehler); sys.exit(0)
 
+PS_ZEITEN = []   # Dauer jedes PowerShell-Aufrufs dieser Prüfung in Sekunden
 def ps(befehl, zeit=120, env=None):
     """PowerShell-Befehl ausführen, Ausgabe als Text"""
+    t_ps = time.time()
     r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", befehl], capture_output=True, timeout=zeit, env=env)
+    PS_ZEITEN.append(round(time.time() - t_ps, 1))
     return (r.stdout or b"").decode("utf-8", "replace").strip(), (r.stderr or b"").decode("utf-8", "replace").strip(), r.returncode
 
 hinweis(f"Windows {platform.platform()} · Python {sys.version.split()[0]} · Benutzer {os.environ.get('USERNAME', '?')}")
@@ -74,7 +82,8 @@ if os.path.exists(lnk):
     hinweis("Auf diesem PC gibt es schon eine Autostart-Verknüpfung für Jahresring; sie wird nicht angefasst, die Prüfung des Autostarts entfällt.")
 else:
     try:
-        x = A("POST", "autostart", {"aktiv": True, "fenster": False})
+        t_as = time.time(); x = A("POST", "autostart", {"aktiv": True, "fenster": False})
+        hinweis(f"Autostart einschalten (das Programm ruft dafür PowerShell auf): {time.time() - t_as:.1f} s")
         ok("Autostart einschalten legt die Verknüpfung im Autostart-Ordner an", x["_s"] == 200 and x.get("aktiv") is True and os.path.isfile(lnk), x)
         aus, err, rc = ps("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:JR_L); Write-Output ($s.TargetPath + '|' + $s.Arguments + '|' + $s.WorkingDirectory + '|' + $s.WindowStyle)", env=dict(os.environ, JR_L=lnk))
         ziel = (aus.split("|") + ["", "", "", ""])[:4]
@@ -253,5 +262,7 @@ if m:
         hinweis(f"Python {reihe}: " + (f"neuere Ausgabe {reihe}.{fertig} verfügbar – beim nächsten Bau in start.bat eintragen" if fertig else f"{ausgabe_nr} ist die neueste Ausgabe mit Installationsprogramm"))
     except Exception as f:  # noqa: BLE001
         hinweis(f"Liste der Python-Ausgaben nicht abrufbar ({f})")
+hinweis(f"PowerShell-Aufrufe der Prüfung: {len(PS_ZEITEN)}, Dauer in Sekunden {PS_ZEITEN}")
+hinweis(f"{time.time() - _T0:6.1f} s  Ende")
 print("FEHLER:", fehler)
 sys.exit(1 if fehler else 0)
