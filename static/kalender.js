@@ -17,6 +17,8 @@ const kwVon = d => kw(d);
 const ABW_FARBE = {urlaub: "#6f9bcf", krank: "#cf7f6f", kind_krank: "#cf9a6f", schule: "#82b17f", sonder: "#a993cf", ueberstunden: "#c9ab4c", unbezahlt: "#a8a29a", abwesend: "#8f99a8"};
 const abwText = a => `${a.kuerzel || a.name} ${a.art_name}${a.halbtag ? " ½" : ""}${a.beantragt ? " (beantragt)" : ""}`;
 const abwTip = a => `${a.name}: ${a.art_name}${a.halbtag ? " (halbe Tage)" : ""} · ${datum(a.von)}${a.bis !== a.von ? " – " + datum(a.bis) : ""}${a.beantragt ? " · beantragt, noch nicht genehmigt" : ""}`;
+const wdrTip = s => `Widerrufsfrist bis ${datum(s.bis)}: Vertrag vom ${datum(s.vertrag_am)} außerhalb der Geschäftsräume geschlossen (${s.auftragsnr || ""} ${s.kunde || ""}).\n`
+  + (s.beginn ? "Der Kunde hat den Beginn vor Fristende verlangt." : "Arbeiten vor Fristende nur, wenn der Kunde das ausdrücklich verlangt hat.");
 const fsBalken = t => t.gebucht ? `<b class="kp-fs" style="width:${Math.min(100, t.gebucht / (t.geplant || 1) * 100)}%;${t.gebucht > t.geplant + 0.05 ? "background:#e05a4a" : ""}"></b>` : "";
 
 function kalKopf(aktiv) {
@@ -209,6 +211,9 @@ function planungZeichnen(von, bis) {
     }
     if (!zu) for (const t of ts)
       items.push({von: t.von, bis: t.bis, art: "termin", t, farbe: typFarbe(t.typ), tip: `${t.typ}${t.titel ? ": " + t.titel : ""} · gebucht ${n2(t.gebucht || 0, 1)} von ${n2(t.geplant || 0, 1)} h · ${datum(t.von)}${t.bis !== t.von ? " – " + datum(t.bis) : ""}${t.zeit_von ? " " + t.zeit_von + "–" + (t.zeit_bis || "") : ""}${t.notiz ? "\n" + t.notiz : ""}`});
+    // Widerrufsfrist eines außerhalb der Geschäftsräume geschlossenen Vertrags: Sperre über die 14 Tage
+    for (const s of (d.widerruf || []).filter(s => s.auftrag_id === a.id && sichtbar(s.von, s.bis)))
+      items.push({von: s.von, bis: s.bis, art: "wdr", s, tip: wdrTip(s)});
     const n = lanes(items);
     const voll = a.soll_stunden && a.geplant_stunden >= a.soll_stunden - 0.05;
     return `<div class="kp-zeile${zu ? " kp-zu" : ""}" data-a="${a.id}">
@@ -216,7 +221,8 @@ function planungZeichnen(von, bis) {
         <div class="kp-std"><span class="kp-st">${esc(a.status || "")}</span>
           <span title="Ist (gebucht) / geplant (Termine) / Soll (Kalkulation)"> · Ist ${n2(a.ist_stunden || 0, 0)} · Plan <span style="color:${voll ? "var(--gruen)" : "inherit"}">${n2(a.geplant_stunden, 0)}</span>${a.soll_stunden ? ` · Soll ${n2(a.soll_stunden, 0)}` : ""} h</span></div></div>
       <div class="kp-flaeche" style="height:${n * 26 + 8}px;width:${tage * tw}px">${raster}${heuteX}
-        ${items.map(it => it.art === "sum" ? balken(it, "sum", `${ts.length} Termin${ts.length > 1 ? "e" : ""}`, `data-zu="${a.id}"`) : it.art === "plan"
+        ${items.map(it => it.art === "wdr" ? balken(it, "wdr" + (it.s.beginn ? " frei" : ""), `Widerrufsfrist bis ${datum(it.s.bis).slice(0, 6)}`, `data-wdr="${it.s.beleg_id}"`)
+          : it.art === "sum" ? balken(it, "sum", `${ts.length} Termin${ts.length > 1 ? "e" : ""}`, `data-zu="${a.id}"`) : it.art === "plan"
           ? balken(it, a.angebot ? "plan" : "plan fest", a.angebot ? "vorgemerkt" : "geplant", `data-plan="${a.id}"`)
           : balken(it, "termin" + (it.t.erledigt ? " erl" : ""), `${esc(it.t.typ)}${it.t.titel ? " · " + esc(it.t.titel) : ""}${maKurz(it.t) ? ` <small>· ${esc(maKurz(it.t))}</small>` : ""}${it.t.gebucht ? ` <small>${n2(it.t.gebucht, 1)}/${n2(it.t.geplant, 0)} h</small>` : ""}${fsBalken(it.t)}`, `data-t="${it.t.id}"`)).join("")}
       </div></div>`;
@@ -241,7 +247,7 @@ function planungZeichnen(von, bis) {
     ${angebote.length ? `<div class="kp-gruppe">Angebote / Anfragen · geplante Ausführung</div>${angebote.map(zeile).join("")}` : ""}
     ${auftraege.length ? "" : `<div class="leer">Keine offenen Aufträge.</div>`}
   </div>
-  <p class="hinweis">Ziehen in einer leeren Zeile legt einen Termin an. Balken verschieben oder an den Enden in der Länge ändern. Klick öffnet den Termin. Schraffiert = vorgemerkter (reservierter) Ausführungszeitraum eines Angebots; sobald der Auftrag erteilt ist, wird er voll als „geplant“ gezeigt. Unter dem Auftrag: Ist = gebuchte Stunden, Plan = Stunden der Termine, Soll = kalkulierte Stunden. Der helle Strich im Balken zeigt, wie viel vom Termin schon gebucht ist.</p>`;
+  <p class="hinweis">Ziehen in einer leeren Zeile legt einen Termin an. Balken verschieben oder an den Enden in der Länge ändern. Klick öffnet den Termin. Schraffiert = vorgemerkter (reservierter) Ausführungszeitraum eines Angebots; sobald der Auftrag erteilt ist, wird er voll als „geplant“ gezeigt. Unter dem Auftrag: Ist = gebuchte Stunden, Plan = Stunden der Termine, Soll = kalkulierte Stunden. Der helle Strich im Balken zeigt, wie viel vom Termin schon gebucht ist.${(d.widerruf || []).length ? " Rot schraffiert = Widerrufsfrist eines außerhalb der Geschäftsräume geschlossenen Vertrags; Klick öffnet den Beleg." : ""}</p>`;
   planungBinden(ziel, von, tw, tage);
   const neu = () => { try { localStorage.setItem("kal_zu", JSON.stringify([...KAL.zu])); } catch (e) {} planungZeichnen(von, bis); };
   $$("[data-zu]", ziel).forEach(b => b.onclick = ev => { ev.stopPropagation(); const id = +b.dataset.zu; KAL.zu.has(id) ? KAL.zu.delete(id) : KAL.zu.add(id); neu(); });
@@ -250,6 +256,7 @@ function planungZeichnen(von, bis) {
 
 function planungBinden(ziel, von, tw, tage) {
   const d = KAL.daten;
+  $$(".kp-b[data-wdr]", ziel).forEach(el => { el.onpointerdown = ev => ev.stopPropagation(); el.onclick = () => { location.hash = "#/beleg/" + el.dataset.wdr; }; });
   $$(".kp-b[data-abw]", ziel).forEach(el => el.onclick = () => { if (darf("personal")) location.hash = "#/personal/abwesenheit"; });
   const tagAus = (flaeche, clientX) => Math.max(0, Math.min(tage - 1, Math.floor((clientX - flaeche.getBoundingClientRect().left) / tw)));
   // Neue Termine aufziehen
@@ -331,6 +338,8 @@ function eintraegeAm(s) {
   for (const f of d.feiertage || []) if (f.datum === s) out.push({art: "ft", sort: "00", html: `<div class="km-e ext ft" style="--f:#b5ab9e" title="Feiertag">${esc(f.name)}</div>`});
   for (const a of d.abwesenheiten || []) if (a.von <= s && a.bis >= s) out.push({art: "abw", sort: "01" + a.kuerzel, html: `<div class="km-e ext${a.beantragt ? " beantr" : ""}" ${a.id ? `data-abw="${a.id}"` : ""} style="--f:${ABW_FARBE[a.art] || "#8f99a8"}" title="${esc(abwTip(a))}">${esc(abwText(a))}</div>`});
   for (const t of d.termine) if (t.von <= s && t.bis >= s) out.push({art: "t", sort: (t.zeit_von ? "1" + t.zeit_von : "0") + t.typ, html: `<div class="km-e${t.erledigt ? " erl" : ""}" data-t="${t.id}" style="--f:${typFarbe(t.typ)}" title="${esc((t.auftragsnr ? t.auftragsnr + " " + (t.bezeichnung || "") + "\n" : "") + (t.notiz || ""))}">${t.zeit_von ? `<b>${t.zeit_von}</b> ` : ""}${esc(t.typ)}${t.kunde ? " · " + esc(t.kunde) : ""}${t.titel ? " · " + esc(t.titel) : ""}</div>`});
+  for (const w of d.widerruf || []) if (w.von <= s && w.bis >= s)
+    out.push({art: "w", sort: "02", html: `<div class="km-e wdr${w.beginn ? " frei" : ""}" data-b="${w.beleg_id}" title="${esc(wdrTip(w))}">${s === w.bis ? "Ende Widerrufsfrist" : "Widerrufsfrist"} ${esc(w.auftragsnr || "")} ${esc(w.kunde || "")}</div>`});
   for (const a of d.auftraege) if (a.plan_von && a.plan_von <= s && (a.plan_bis || a.plan_von) >= s && (KAL.zeigeAngebote || !a.angebot))
     out.push({art: "p", sort: "2", html: `<div class="km-e plan${a.angebot ? "" : " fest"}" data-a="${a.id}" title="${a.angebot ? "Vorgemerkter Ausführungszeitraum (Angebot)" : "Geplanter Ausführungszeitraum (beauftragt)"}">${esc(a.nummer)} ${esc(a.kunde || "")} (${a.angebot ? "vorgemerkt" : "geplant"})</div>`});
   return out.sort((a, b) => a.sort.localeCompare(b.sort)).map(x => x.html).join("");
@@ -338,6 +347,7 @@ function eintraegeAm(s) {
 function kalBinden(ziel) {
   $$("[data-t]", ziel).forEach(el => el.onclick = ev => { ev.stopPropagation(); terminBearbeiten(KAL.daten.termine.find(t => t.id === +el.dataset.t)); });
   $$("[data-a]", ziel).forEach(el => el.onclick = ev => { ev.stopPropagation(); location.hash = `#/auftrag/${el.dataset.a}`; });
+  $$("[data-b]", ziel).forEach(el => el.onclick = ev => { ev.stopPropagation(); location.hash = `#/beleg/${el.dataset.b}`; });
   $$("[data-abw]", ziel).forEach(el => el.onclick = ev => { ev.stopPropagation(); if (darf("personal")) location.hash = "#/personal/abwesenheit"; });
   $$("[data-tag]", ziel).forEach(el => el.ondblclick = () => terminDialog({von: el.dataset.tag, bis: el.dataset.tag}));
 }

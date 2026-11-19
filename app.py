@@ -73,6 +73,7 @@ import bautagebuch
 import korrespondenz
 import arbeitsschutz
 import unterschrift
+import widerruf
 import uebernahme
 import secrets
 
@@ -362,7 +363,10 @@ NACHRUESTEN = [
     ("zahlungseingaenge", "auf_mahnkosten", "REAL DEFAULT 0"),
     ("mitarbeiter", "geburtsdatum", "TEXT DEFAULT ''"),
     ("material", "umrechnung", "REAL DEFAULT 0"),   # 1 Einheit = so viele Recheneinheiten der Kalkulation (lfm, m², m³); 0 = keine Umrechnung
-    ("offene_posten", "skonto", "REAL DEFAULT 0"),       # vereinbartes Skonto in Prozent, wie es auf der Rechnung steht
+    ("offene_posten", "skonto", "REAL DEFAULT 0"),
+    # Vertrag außerhalb von Geschäftsräumen geschlossen (Angebot, Kostenvoranschlag, Auftragsbestätigung): Schalter, Tag des
+    # Vertragsschlusses und ob der Kunde den Beginn vor Ablauf der Widerrufsfrist verlangt hat (widerruf.py)
+    ("belege", "agv", "INTEGER DEFAULT 0"), ("belege", "vertrag_am", "TEXT DEFAULT ''"), ("belege", "agv_beginn", "INTEGER DEFAULT 0"),       # vereinbartes Skonto in Prozent, wie es auf der Rechnung steht
     ("offene_posten", "skonto_bis", "TEXT DEFAULT ''"),   # letzter Tag der Skontofrist
 ]
 
@@ -474,6 +478,8 @@ STANDARD_EINSTELLUNGEN = {
     # Kostenstellen, deren Arbeit im Haushalt des Kunden geleistet wird: Nur sie zählen zu den Arbeitskosten nach § 35a EStG
     # (Arbeit in der Werkstatt ist nicht begünstigt, BFH 13.05.2020 – VI R 4/18)
     "lohnanteil_kst": ["MONTAGE", "REPARAT", "FAHRZEIT"],
+    # Widerrufsbelehrung für Verträge außerhalb von Geschäftsräumen: leer = Vorgabe nach dem gesetzlichen Muster (widerruf.py)
+    "widerruf_hinweis": "", "widerruf_belehrung": "", "widerruf_erklaerung": "",
     "land_immer": False,      # Land auch bei Inlandsanschriften in die Briefanschrift
     "angebot_gueltig_tage": 7,   # Platzhalter {gueltig_bis} im Angebotstext = Belegdatum + Tage
     "text_lohnanteil": ("Im Rechnungsbetrag sind Arbeitskosten für Leistungen in Ihrem Haushalt (Lohn-, Maschinen- und Fahrtkosten) in Höhe "
@@ -791,7 +797,7 @@ def skonto_der_rechnung(daten, druck, datum):
 # den großen Tabellen. „CREATE INDEX IF NOT EXISTS“ ist beim Start ohne Wirkung, wenn die Indizes schon da sind.
 INDEX_EXTRA = [("belege", "datum"), ("belege", "art, status"), ("zeiten", "datum"), ("stunden", "datum"), ("termine", "bis, von"),
                ("offene_posten", "offen"), ("zahlungen", "bezahlt"), ("zahlungseingaenge", "datum"), ("auftraege", "status"),
-               ("lagerbewegungen", "datum"), ("auftragskosten", "datum")]
+               ("lagerbewegungen", "datum"), ("auftragskosten", "datum"), ("belege", "agv, vertrag_am")]
 
 
 def indizes_anlegen(con):
@@ -3794,6 +3800,7 @@ def beleg_laden(con, bid):
     b["artname"] = art_name(b)
     b["ist_rechnung"] = BELEGARTEN.get(b["art"], {}).get("rechnung", False)
     b["druck"] = druck_einstellung(b, einstellungen(con))
+    b["widerruf_bis"] = widerruf.frist_ende(b.get("vertrag_am"), personal.feiertag) if b.get("agv") and b.get("vertrag_am") else ""
     op = con.execute("SELECT * FROM offene_posten WHERE beleg_id=?", (bid,)).fetchone()
     b["op"] = dict(op) if op else None
     b["versand"] = versand_liste(con, bid)
@@ -3928,6 +3935,12 @@ def beleg_anlegen(con, aid, d):
         werte_db["zahlungsziel"], werte_db["faellig"] = 0, ""
     if plan_uebernahme:
         werte_db["druck"] = json.dumps(plan_uebernahme, ensure_ascii=False)
+    if art in widerruf.ARTEN:
+        # außerhalb von Geschäftsräumen geschlossen: Die Auftragsbestätigung übernimmt die Angabe des letzten Angebots
+        vor_ = con.execute("SELECT agv, vertrag_am, agv_beginn FROM belege WHERE auftrag_id=? AND art IN ('angebot','kv','ab') "
+                           "ORDER BY datum DESC, id DESC LIMIT 1", (aid,)).fetchone()
+        if vor_ and vor_["agv"]:
+            werte_db.update(agv=1, vertrag_am=vor_["vertrag_am"] or "", agv_beginn=vor_["agv_beginn"] or 0)
     if berichtigen:   # ändert weder Umsatz noch offene Posten
         werte_db.update(netto=0, ust=0, brutto=0, zahlbetrag=0, zahlungsziel=0, faellig="",
                         druck=json.dumps({"konditionen": False, "qr": False}))
@@ -4037,6 +4050,16 @@ def termin_sichtbar(t, r=None):
     return True
 
 
+def widerruf_rueckfrage(con, aid, von, bis, was="Der Termin"):
+    """Arbeiten in der Widerrufsfrist eines außerhalb von Geschäftsräumen geschlossenen Vertrags: erst nach Rückfrage eintragen."""
+    s = widerruf.sperre_fuer(con, aid, von, bis, personal.feiertag)
+    if s:
+        kern.rueckfrage("widerrufsfrist", f"{was} liegt in der Widerrufsfrist\n\nDer Vertrag wurde am {de_datum(s['vertrag_am'])} außerhalb von "
+                        f"Geschäftsräumen geschlossen; der Kunde kann bis {de_datum(s['bis'])} widerrufen. Für Arbeiten vor diesem Tag muss der "
+                        "Kunde den Beginn ausdrücklich verlangt haben (Erklärung auf dem Blatt zur Widerrufsbelehrung). Liegt die Erklärung "
+                        "vor, im Beleg „Beginn vor Fristende verlangt“ anhaken – dann entfällt diese Rückfrage.", "Trotzdem eintragen")
+
+
 def kalender_sicht_anwenden(erg):
     """Kalenderdaten auf das kürzen, was der angemeldete Benutzer sehen darf. Der Inhaber sieht alles."""
     r = benutzer.aktuelle_rechte()
@@ -4047,6 +4070,7 @@ def kalender_sicht_anwenden(erg):
         erg["termine"] = [t for t in erg["termine"] if termin_sichtbar(t, r)]
         sichtbar = {t["auftrag_id"] for t in erg["termine"]}
         erg["auftraege"] = [a for a in erg["auftraege"] if a["id"] in sichtbar]
+        erg["widerruf"] = [w for w in erg.get("widerruf") or [] if w["auftrag_id"] in sichtbar]
     if not k.get("extern", True):
         erg["extern"], erg["fehler"] = [], ""
     if not k.get("abwesenheit", True):
@@ -4127,6 +4151,8 @@ def beleg_unterschreiben(con, bid, d, wer):
                              "geo": {k: geo.get(k) for k in ("lat", "lon", "genau") if k in geo} if geo else None,
                              "bild_an": bild_an, "name_an": str(d.get("name_an") or "").strip() if bild_an else ""}
     con.execute("UPDATE belege SET daten=?, geaendert=? WHERE id=?", (json.dumps(daten, ensure_ascii=False), jetzt(), bid))
+    if b.get("agv") and b["art"] in widerruf.ARTEN:   # außerhalb von Geschäftsräumen: Mit der Unterschrift ist der Vertrag geschlossen
+        con.execute("UPDATE belege SET vertrag_am=? WHERE id=?", (daten["unterschrift"]["zeit"][:10], bid))
     ort = daten["unterschrift"]["ort"]
     con.execute("INSERT INTO notizen (kunde_id, auftrag_id, text, angelegt) VALUES (?,?,?,?)",
                 (b["kunde_id"], b["auftrag_id"], f"{b['artname']} {b['nummer']} digital unterschrieben von {name}{' in ' + ort if ort else ''}"
@@ -5451,6 +5477,8 @@ def einstellungen_oeffentlich(con):
     e["_mail_texte_standard"] = MAIL_TEXTE
     e["_unterschrift"] = os.path.exists(os.path.join(DATEN, UNTERSCHRIFT))
     e["_text_14b_standard"] = HINWEIS_14B
+    e["_widerruf_standard"] = {"hinweis": widerruf.HINWEIS, "belehrung": widerruf.BELEHRUNG, "erklaerung": widerruf.ERKLAERUNG,
+                               "fehlt": widerruf.fehlende_angaben(firma_daten(e))}
     e["_kostenstellen"] = [k.get("kst") for k in vorgaben_kopie(e).get("kostenstellen", []) if k.get("kst")]
     e["_pdf_ordner_standard"] = STANDARD_EINSTELLUNGEN["pdf_ordner"]
     e["_ort_warnung"] = " ".join(x for x in (NOTFALL["text"], ort_warnung(), SICHERUNG_PRUEFUNG["text"], SICHERUNG_EXTERN["text"], PROTOKOLL_PRUEFUNG["text"], BELEG_PRUEFUNG["text"],
@@ -6458,6 +6486,7 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False, ue=None):
         t = (e.get("text_lohnanteil") or STANDARD_EINSTELLUNGEN["text_lohnanteil"])
         t = t.replace("{lohn_netto}", de(la["netto"])).replace("{lohn_ust}", de(la["ust"])).replace("{lohn_brutto}", de(la["brutto"]))
         lohn_satz = f'<p class="lohnanteil" style="margin:3mm 0">{h(t)}</p>'
+    mit_widerruf = bool(b.get("agv")) and b["art"] in widerruf.ARTEN
     nr_druck = b["nummer"] or ""
     if dr.get("nummer") == "kurz":
         nr_druck = re.sub(r"^\d{4}-", "", nr_druck)
@@ -6518,6 +6547,7 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False, ue=None):
 {summe_html}
 {ende_block_ende}
 {f'<div class="zahlung">{zahlung}</div>' if zahlung else ''}
+{widerruf.hinweis_html(e) if mit_widerruf else ''}
 {lohn_satz}
 {p14}
 {unterschrift_html(b, "abnahme") if b["art"] == "abnahme" else ""}
@@ -6532,6 +6562,10 @@ def druck_html(con, bid, als_pdf=False, abstand=0.0, marken=False, ue=None):
     if als_pdf and agb_original(beleg_agb_art(e, b, ku)):
         agb_seiten = []   # im PDF wird das Original-AGB-PDF angehängt (klein und gestochen scharf)
     agb_html = "".join(f'<div class="agb"><img class="voll" src="{u}"></div>' for u in agb_seiten)
+    if mit_widerruf:   # Widerrufsbelehrung, Muster-Widerrufsformular und Erklärungen des Kunden als eigene Blätter vor den AGB
+        # Angaben des Betriebs wie im Beleg festgehalten; was dort noch fehlte (Telefon, E-Mail), kommt aus den Einstellungen
+        fi_w = {**fi, **{k_: v_ for k_, v_ in firma_daten(e).items() if v_ and not fi.get(k_)}}
+        agb_html = widerruf.seiten_html(e, fi_w, b, b.get("anschrift") or "") + agb_html
     return briefbogen_html(e, fi, beleg_titel(b), anschrift_html, info_html, inhalt, als_pdf, entwurf=entwurf, agb_html=agb_html, ue=ue)
 
 
@@ -8805,7 +8839,8 @@ def api(methode, teile, q, daten):
             kap = kapazitaet_daten(con, e, von.isoformat(), bis.isoformat(), termine, zeilen_plan)
             erg = {"von": von.isoformat(), "bis": bis.isoformat(), "termine": termine, "auftraege": zeilen_plan, "kapazitaet": kap,
                    "extern": extern, "fehler": fehler, **personal.kalender_eintraege(con, von.isoformat(), bis.isoformat(),
-                                                                                      benutzer.darf("personal", 1))}
+                                                                                      benutzer.darf("personal", 1)),
+                   "widerruf": widerruf.sperren(con, von.isoformat(), bis.isoformat(), personal.feiertag, ende)}
             return kalender_sicht_anwenden(erg)
         if res == "termine":
             felder = ("auftrag_id", "typ", "titel", "von", "bis", "zeit_von", "zeit_bis", "stunden", "notiz", "erledigt", "mitarbeiter")
@@ -8841,6 +8876,10 @@ def api(methode, teile, q, daten):
                             minuten[k] = int(mm_.group(1)) * 60 + int(mm_.group(2))
                     if len(minuten) == 2 and (z_.get("bis") or z_.get("von")) == z_.get("von") and minuten["zeit_bis"] <= minuten["zeit_von"]:
                         raise ApiFehler("Die Uhrzeit „bis“ liegt nicht nach der Uhrzeit „von“.")
+            if methode in ("POST", "PUT") and any(k in w for k in ("von", "bis", "auftrag_id")):
+                alt_w = con.execute("SELECT auftrag_id, von, bis FROM termine WHERE id=?", (rid,)).fetchone() if methode == "PUT" and rid else None
+                z_w = {**(dict(alt_w) if alt_w else {}), **w}
+                widerruf_rueckfrage(con, z_w.get("auftrag_id"), z_w.get("von"), z_w.get("bis") or z_w.get("von"), "Der Termin")
             if methode == "POST" and rid is None:
                 if not w.get("von"):
                     raise ApiFehler("Bitte ein Datum angeben.")
@@ -8927,8 +8966,28 @@ def api(methode, teile, q, daten):
                     raise ApiFehler("Festgeschriebene Belege können nicht mehr geändert werden (GoBD). Bitte stornieren und neu erstellen.")
                 d = daten or {}
                 plan_k = {"konditionen", "plan_anzahlung", "plan_rest", "plan_wochen"}
-                if b["daten"].get("unterschrift") and (set(d) - {"druck"} or plan_k & set(d.get("druck") or {})):
+                if b["daten"].get("unterschrift") and (set(d) - {"druck", "vertrag_am", "agv_beginn"} or plan_k & set(d.get("druck") or {})):
                     raise ApiFehler("Der Beleg ist vom Kunden unterschrieben und kann nicht mehr geändert werden. Für Änderungen bitte einen neuen Beleg erstellen.")
+                if any(k in d for k in ("agv", "vertrag_am", "agv_beginn")):
+                    # Vertrag außerhalb von Geschäftsräumen: Schalter, Tag des Vertragsschlusses, Beginn vor Fristende verlangt
+                    if b["art"] not in widerruf.ARTEN:
+                        raise ApiFehler("Die Angabe gibt es nur bei Angebot, Kostenvoranschlag und Auftragsbestätigung.")
+                    w_ = {}
+                    if "agv" in d:
+                        w_["agv"] = 1 if d["agv"] in (True, 1, "1", "true") else 0
+                        if w_["agv"] and not b.get("vertrag_am") and "vertrag_am" not in d:
+                            w_["vertrag_am"] = b["datum"] or date.today().isoformat()   # Vorgabe: Tag des Belegs (vor Ort unterschrieben)
+                        if not w_["agv"]:
+                            w_["agv_beginn"] = 0
+                    if "vertrag_am" in d:
+                        try:
+                            w_["vertrag_am"] = widerruf.datum_pruefen(d["vertrag_am"])
+                        except ValueError:
+                            raise ApiFehler("Bitte das Datum des Vertragsschlusses als Tag angeben.")
+                    if "agv_beginn" in d:
+                        w_["agv_beginn"] = 1 if d["agv_beginn"] in (True, 1, "1", "true") else 0
+                    w_["geaendert"] = jetzt()
+                    con.execute(f"UPDATE belege SET {','.join(f'{k}=?' for k in w_)} WHERE id=?", list(w_.values()) + [rid])
                 if b["art"] == "abnahme" and isinstance(d.get("abnahme"), dict):
                     dd = b["daten"]
                     dd["abnahme"] = {"vorbehalt": bool(d["abnahme"].get("vorbehalt")), "maengel": str(d["abnahme"].get("maengel") or ""),
@@ -9449,6 +9508,8 @@ def api(methode, teile, q, daten):
                         werte["fertigung"] = date.today().isoformat()
                 if werte.get("plan_von") and werte.get("plan_bis") and werte["plan_bis"] < werte["plan_von"]:
                     werte["plan_von"], werte["plan_bis"] = werte["plan_bis"], werte["plan_von"]
+                if werte.get("plan_von"):
+                    widerruf_rueckfrage(con, rid, werte["plan_von"], werte.get("plan_bis") or werte["plan_von"], "Der geplante Ausführungszeitraum")
                 vorher = con.execute("SELECT status, fertigung, lieferung FROM auftraege WHERE id=?", (rid,)).fetchone()
                 alt_status = vorher["status"] if vorher else None
                 if werte:

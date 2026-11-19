@@ -1660,6 +1660,30 @@ document.addEventListener("change", e => {
   $$(".nb-plan").forEach(x => x.style.display = ["angebot", "kv", "ab"].includes(v) ? "" : "none");
 });
 
+// ---------- Widerrufsrecht: Vertrag außerhalb der Geschäftsräume geschlossen (Angebot, Kostenvoranschlag, Auftragsbestätigung) ----------
+function widerrufZeilen(b, dis) {
+  if (!["angebot", "kv", "ab"].includes(b.art)) return "";
+  const ja = !!b.agv, ws = E._widerruf_standard || {}, fehlt = ws.fehlt || [];
+  const verbraucher = (E.agb_verbraucher_gruppen || ["Privatkunde"]).includes(((b.daten || {}).kunde || {}).gruppe);
+  return `<div class="sektion">Widerrufsrecht <span class="hinweis" style="font-weight:400">· für Verträge mit Verbrauchern, die nicht im Betrieb geschlossen werden, etwa beim Kunden zu Hause</span></div>
+    ${zeile("Vertrag außerhalb der Geschäftsräume geschlossen?", `<div class="radio" style="flex-wrap:wrap"><label><input type="radio" name="agv" value="1" ${ja ? "checked" : ""} ${dis}> Ja</label><label><input type="radio" name="agv" value="0" ${ja ? "" : "checked"} ${dis}> Nein</label>
+      <span class="hinweis" style="padding-top:2px">${ja ? "Der Beleg druckt den Hinweis auf das Widerrufsrecht und hängt ein Blatt mit Widerrufsbelehrung, Muster-Widerrufsformular und den Erklärungen des Kunden an." : "Bei „Ja“ kommen ein Hinweis und ein Blatt mit Widerrufsbelehrung und Muster-Widerrufsformular dazu; die Frist steht als Sperre im Kalender."}</span></div>`, true)}
+    ${ja ? zeile("Vertrag geschlossen am", `<input type="date" id="agvD" value="${esc(b.vertrag_am || "")}" style="flex:0 0 170px">
+      <span style="padding-top:5px" id="agvBis">${b.widerruf_bis ? `Widerrufsfrist bis <b>${datum(b.widerruf_bis)}</b> · <a href="#/kalender/planung/${esc(b.vertrag_am)}">im Kalender zeigen</a>` : `<span style="color:var(--rot)">Ohne Datum gibt es keine Sperre im Kalender.</span>`}</span>`, true) : ""}
+    ${ja ? zeile("Beginn vor Fristende", `<div class="spalte"><label><input type="checkbox" id="agvB" ${b.agv_beginn ? "checked" : ""}> Der Kunde hat ausdrücklich verlangt, dass die Arbeiten vor Ablauf der Widerrufsfrist beginnen (Erklärung unterschrieben)</label>
+      <span class="hinweis">Mit Haken ist die Sperre im Kalender nur noch ein heller Hinweis, und Termine in der Frist werden ohne Rückfrage angenommen.</span></div>`, true) : ""}
+    ${ja ? `<div class="zeile voll"><label></label><div class="spalte" id="agvHinweise">
+      <span class="hinweis">Widerrufsbelehrung und Muster-Widerrufsformular dem Kunden <b>auf Papier</b> übergeben; per E-Mail oder als PDF genügt nur, wenn der Kunde zustimmt. Das Blatt mit den Erklärungen unterschreiben lassen und aufbewahren.</span>
+      ${fehlt.length ? `<span style="color:var(--rot)">In der Belehrung fehlt noch: ${esc(fehlt.join(", "))}. Bitte unter <a href="#/einstellungen/firma">Einstellungen › Firma</a> eintragen – das gesetzliche Muster verlangt Name, Anschrift, Telefonnummer und E-Mail-Adresse.</span>` : ""}
+      ${verbraucher ? "" : `<span style="color:var(--rot)">Der Kunde gehört nicht zu den Verbrauchergruppen (${esc((E.agb_verbraucher_gruppen || ["Privatkunde"]).join(", "))}). Ein Widerrufsrecht haben nur Verbraucher.</span>`}</div></div>` : ""}`;
+}
+function widerrufBinden(b, bid) {
+  const put = body => api("belege/" + bid, {method: "PUT", body}).then(() => ansichtBeleg(bid)).catch(e => { toast(e.message, true); ansichtBeleg(bid); });
+  $$("[name=agv]").forEach(el => el.onchange = () => put({agv: el.value === "1"}));
+  if ($("#agvD")) $("#agvD").onchange = e => put({vertrag_am: e.target.value});
+  if ($("#agvB")) $("#agvB").onchange = e => put({agv_beginn: e.target.checked});
+}
+
 // ---------- Druckeinstellungen eines Belegs ----------
 function druckEinstellungen(b, dis) {
   const dr = b.druck || {}, art = b.art, re = b.ist_rechnung;
@@ -1768,6 +1792,7 @@ async function ansichtBeleg(bid) {
         ${zeile("Abziehen", `<div class="spalte">${b.daten.abschlaege.map(x => `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-abz="${x.id}" ${x.verrechnen ? "checked" : ""} ${dis || x.anderswo ? "disabled" : ""} style="flex:0 0 auto">
           Abschlagsrechnung ${esc(x.nummer)} vom ${datum(x.datum)} · ${eur(x.brutto)} brutto${x.anderswo ? ` <span class="hinweis">(schon in einer anderen Rechnung verrechnet)</span>` : ""}</label>`).join("")}
           <span class="hinweis">Angehakte Abschläge werden in dieser Rechnung abgezogen. Haken weg, wenn ein Abschlag erst in einer späteren Rechnung verrechnet werden soll.</span></div>`, true)}` : ""}
+      ${widerrufZeilen(b, dis)}
       ${druckEinstellungen(b, dis)}
       <div class="sektion">Summen</div>
       <div class="zeile voll"><label></label><div style="display:block;padding:8px 10px">
@@ -1785,6 +1810,7 @@ async function ansichtBeleg(bid) {
     vsTimer = setTimeout(() => vorschauZeichnen(bid, ++vsLauf, () => vsLauf), sofort ? 0 : 1200);
   };
   neuVorschau(true);
+  widerrufBinden(b, bid);
   if (!gesperrt) {
     autospeichern($("#f"), "belege/" + bid, () => neuVorschau());
     const ab = () => api("belege/" + bid, {method: "PUT", body: {prozent: zahlEin($("#abPz").value) || null, betrag: zahlEin($("#abBt").value) || null}}).then(() => ansichtBeleg(bid)).catch(e => toast(e.message, true));
