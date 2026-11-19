@@ -14,7 +14,15 @@ def T(name, body, v, b, soll):
     if ist != soll: fehler.append(name)
 T("jeden 2. Dienstag", "UID:1\nDTSTART;TZID=Europe/Berlin:20260113T190000\nDTEND;TZID=Europe/Berlin:20260113T210000\nRRULE:FREQ=MONTHLY;BYDAY=2TU", von, bis, ["2026-11-10 19:00", "2026-12-08 19:00"])
 T("Monatsletzter", "UID:3\nDTSTART;VALUE=DATE:20260131\nRRULE:FREQ=MONTHLY;BYMONTHDAY=-1", von, bis, ["2026-11-30", "2026-12-31"])
-T("Weltzeit-Serie im Winter eine Stunde früher", "UID:5\nDTSTART:20260601T080000Z\nDTEND:20260601T090000Z\nRRULE:FREQ=WEEKLY;COUNT=24", von, datetime(2026, 11, 8), ["2026-11-02 09:00"])
+# Weltzeit wird in die Zeitzone des Rechners umgerechnet: Die Erwartung gilt für Mitteleuropa (Büro-PC). Steht der Rechner in einer
+# anderen Zone und lässt sie sich nicht umstellen (Windows kennt tzset nicht), wird das gemeldet und dieser eine Fall ausgelassen.
+from datetime import timezone as _tz
+_winter = datetime(2026, 11, 2, 12, tzinfo=_tz.utc).astimezone().utcoffset().total_seconds() / 3600
+_sommer = datetime(2026, 6, 1, 12, tzinfo=_tz.utc).astimezone().utcoffset().total_seconds() / 3600
+if (_winter, _sommer) == (1.0, 2.0):
+    T("Weltzeit-Serie im Winter eine Stunde früher", "UID:5\nDTSTART:20260601T080000Z\nDTEND:20260601T090000Z\nRRULE:FREQ=WEEKLY;COUNT=24", von, datetime(2026, 11, 8), ["2026-11-02 09:00"])
+else:
+    print(f"HINWEIS Zeitzone des Rechners ist nicht Mitteleuropa (Abstand zur Weltzeit im Winter {_winter:+.0f} h, im Sommer {_sommer:+.0f} h): Weltzeit-Serie nicht geprüft")
 T("Mo+Mi fünfmal", "UID:6\nDTSTART:20261102T080000\nDTEND:20261102T090000\nRRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=5", von, bis, ["2026-11-02 08:00", "2026-11-04 08:00", "2026-11-09 08:00", "2026-11-11 08:00", "2026-11-16 08:00"])
 n = len(K.ics_parsen(ics("UID:2\nDTSTART:20190101T080000\nDTEND:20190101T090000\nRRULE:FREQ=DAILY"), von, bis)); print("ok  " if n == 61 else "FEHLER", "tägliche Serie seit 2019:", n)
 if n != 61: fehler.append("täglich")
