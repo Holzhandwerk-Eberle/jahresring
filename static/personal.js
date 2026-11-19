@@ -299,7 +299,7 @@ async function benutzerEinstellungen(z) {
     <div class="kachel" style="margin-top:14px">
       <b>Die Rollen</b>
       <table class="liste" style="margin-top:6px">${meta.rollen.filter(r => r.id !== "eigen").map(r => `<tr><td style="width:130px"><b>${esc(r.name)}</b></td><td>${esc(r.text)}</td></tr>`).join("")}
-        <tr><td><b>Eigene Rechte</b></td><td>je Bereich „kein Zugriff“, „nur ansehen“ oder „bearbeiten“, dazu Preise ein/aus und Aufträge nur mit Werkstatt-Reiter</td></tr></table>
+        <tr><td><b>Eigene Rechte</b></td><td>je Bereich „kein Zugriff“, „nur ansehen“ (Werkstattarbeiten wie Restelager, Scan, Leitstand und Bautagebuch bleiben möglich) oder „bearbeiten“, dazu Preise ein/aus und Aufträge nur mit Werkstatt-Reiter</td></tr></table>
     </div>
 
     ${ICH.rolle === "inhaber" ? `<div class="kachel" style="margin-top:14px">
@@ -398,7 +398,10 @@ async function benutzerBearbeiten(b, meta, mas, danach) {
   const rechteTabelle = () => `<table class="liste" style="margin-top:4px">${meta.bereiche.filter(([k]) => k !== "einstellungen").map(([k, l]) => `<tr><td>${esc(l)}</td><td>
       <select data-rb="${k}" style="width:140px">${optsKV(Object.entries(meta.stufen), eigen.bereiche[k] || 0)}</select></td></tr>`).join("")}
       <tr><td>Aufträge</td><td><select id="bnReiter" style="width:220px">${optsKV([["alle", "alle Reiter"], ["werkstatt", "nur Reiter Werkstatt"]], eigen.auftrag_reiter)}</select></td></tr>
-      <tr><td>Preise und Beträge</td><td><label><input type="checkbox" id="bnPreise" ${eigen.preise !== false ? "checked" : ""}> anzeigen</label></td></tr></table>`;
+      <tr><td>Preise und Beträge</td><td><label><input type="checkbox" id="bnPreise" ${eigen.preise !== false ? "checked" : ""}> anzeigen</label></td></tr></table>
+      <p class="hinweis" id="bnStufeHinweis" style="margin:4px 0 0">„Nur ansehen“ heißt: Stammdaten, Preise und Belege lassen sich nicht ändern. Die Arbeiten der Werkstatt bleiben damit möglich –
+        bei Material: Restelager führen (Wareneingang, Bestellvermerk, Import) und Lagerbuchungen per Scan; bei Aufträgen: Leitstand, Bautagebuch, Montagebericht, Kundenunterschrift und Auftragsstatus.
+        Wer auch das nicht dürfen soll, bekommt für den Bereich „kein Zugriff“. Ohne „Preise und Beträge“ sind Angebote, Rechnungen und ihre PDF gesperrt.</p>`;
   const kal = {typen: [], nur_eigene: false, extern: true, abwesenheit: true, ...((b.rechte || {}).kalender || {})};
   if (neu) kal.extern = false;
   const typNamen = (E.termin_typen || []).map(t => t.name);

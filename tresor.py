@@ -143,8 +143,12 @@ def setzen(daten_ordner, kennwort):
     salz = secrets.token_bytes(16)
     k = ableiten(kennwort, salz)
     p = _datei(daten_ordner)
+    try:
+        geschuetzt = geheim.verschluesseln(k.hex())
+    except geheim.Fehler as f:
+        raise Fehler(str(f))
     with open(p + ".part", "w", encoding="utf-8") as f:
-        json.dump({"salz": salz.hex(), "schluessel": geheim.verschluesseln(k.hex()), "hinweis": "Schlüssel der verschlüsselten Datensicherungen – nicht löschen"}, f)
+        json.dump({"salz": salz.hex(), "schluessel": geschuetzt, "hinweis": "Schlüssel der verschlüsselten Datensicherungen – nicht löschen"}, f)
     os.replace(p + ".part", p)
     try:
         os.chmod(p, 0o600)

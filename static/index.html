@@ -1403,8 +1403,18 @@ function kundeStamm(k) {
     try {
       const i = await api(`kunden/${k.id}/anonymisieren`);
       if (!i.erlaubt) return frage(i.offene_posten ? `Es gibt noch ${i.offene_posten} offene Posten.` : `Noch nicht möglich.\n\nLetzter Beleg ${datum(i.letzter_beleg)} – die Aufbewahrungsfrist (Rechnungen ${fristJahre()}, Angebote und E-Mails 6 Jahre ab Jahresende) läuft bis ${datum(i.frist_ende)}. Bis dahin müssen Belege unverändert bleiben (GoBD).`, {titel: "Anonymisieren", ok: "OK", abbrechen: "Schließen"});
-      if (!await frage(`Kunde „${k.kurzname}“ anonymisieren?\n\nName, Anschrift, Kontaktdaten, Notizen, Korrespondenz, Anhänge, Unterschriften und archivierte Beleg-PDFs werden endgültig entfernt; Beträge, Positionen und Stunden bleiben für die Statistik.${i.ordner.length ? "\n\nProjektordner bitte selbst löschen:\n" + i.ordner.join("\n") : ""}`, {ok: "Endgültig anonymisieren"})) return;
-      await api(`kunden/${k.id}/anonymisieren`, {method: "POST"}); toast("Kunde anonymisiert"); ansichtKunde(k.id, "stamm");
+      // Stellen, an denen der Name ohne Anrede oder Vornamen in einem Text steht: zeigen und einzeln entscheiden lassen
+      const funde = i.fundstellen || [], wahl = new Set(funde.map(f => f.id));
+      if (funde.length) {
+        const ok = await modal("Name in freien Texten", `<p style="margin-top:0">An ${funde.length === 1 ? "dieser Stelle" : "diesen " + funde.length + " Stellen"} steht ein Teil des Namens allein in einem Text. Solche Wörter lässt das Programm von sich aus stehen, weil sie auch die Ware bezeichnen können („Schrank“ beim Kunden Schrank).
+          Angehakte Stellen werden geschwärzt: Das Namenswort wird durch „…“ ersetzt, auch im gespeicherten Stand der Belege. Den Haken entfernen, wo das Wort stehen bleiben soll.</p>
+          <div id="anFunde" style="max-height:46vh;overflow:auto;border:1px solid var(--linie);border-radius:4px">${funde.map(f => `<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-bottom:1px solid var(--linie)">
+            <input type="checkbox" data-fund="${esc(f.id)}" checked style="margin-top:3px"><span><b>${esc(f.wort)}</b> in: ${esc(f.text)}<br><span class="hinweis">${esc(f.wo.join(" · "))}</span></span></label>`).join("")}</div>`,
+          "Weiter", hg => $$("[data-fund]", hg).forEach(c => c.onchange = () => { c.checked ? wahl.add(c.dataset.fund) : wahl.delete(c.dataset.fund); }));
+        if (!ok) return;
+      }
+      if (!await frage(`Kunde „${k.kurzname}“ anonymisieren?\n\nName, Anschrift, Kontaktdaten, Notizen, Korrespondenz, Anhänge, Unterschriften und archivierte Beleg-PDFs werden endgültig entfernt; Beträge, Positionen und Stunden bleiben für die Statistik.${funde.length ? `\n\nVon ${funde.length} Textstellen mit einzeln stehendem Namen werden ${wahl.size} geschwärzt.` : ""}${i.ordner.length ? "\n\nProjektordner bitte selbst löschen:\n" + i.ordner.join("\n") : ""}`, {ok: "Endgültig anonymisieren"})) return;
+      await api(`kunden/${k.id}/anonymisieren`, {method: "POST", body: {schwaerzen: [...wahl]}}); toast("Kunde anonymisiert"); ansichtKunde(k.id, "stamm");
     } catch (e) { toast(e.message, true); }
   };
   $("#loeschen").onclick = async () => {

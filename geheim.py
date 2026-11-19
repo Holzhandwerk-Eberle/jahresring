@@ -2,13 +2,18 @@
 
 Unter Windows wird das Passwort mit der Windows-Datenschutz-API (DPAPI, CryptProtectData) an das
 Windows-Benutzerkonto gebunden verschlüsselt: Wer nur die Datenbankdatei oder eine Sicherung kopiert,
-kann es nicht lesen. Auf anderen Systemen (Entwicklung, Test) bleibt der Wert unverändert.
+kann es nicht lesen. Schlägt die Verschlüsselung fehl, wird das gemeldet (Fehler) und nichts gespeichert.
+Auf anderen Systemen (Entwicklung, Test) bleibt der Wert unverändert.
 Nach einer Rücksicherung auf einem anderen PC/Benutzerkonto muss das Passwort neu eingegeben werden.
 """
 import base64
 import os
 
 PRAEFIX = "dpapi:"
+
+
+class Fehler(RuntimeError):
+    """Windows konnte den Wert nicht verschlüsseln. Er darf dann nicht im Klartext abgelegt werden."""
 _ENTROPIE = b"Jahresring-Zugangsdaten"
 
 
@@ -39,7 +44,8 @@ def verschluesseln(text):
     ent, p2 = _blob(ctypes, BLOB, _ENTROPIE)
     aus = BLOB()
     if not ctypes.windll.crypt32.CryptProtectData(ctypes.byref(ein), "Jahresring", ctypes.byref(ent), None, None, 0x1, ctypes.byref(aus)):
-        return text
+        # früher wurde hier der Klartext zurückgegeben und so gespeichert – jetzt wird der Fehler gemeldet und nichts abgelegt
+        raise Fehler("Windows konnte die Zugangsdaten nicht verschlüsseln (Datenschutz-API des Benutzerkontos). Sie wurden nicht gespeichert.")
     try:
         roh = ctypes.string_at(aus.pbData, aus.cbData)
     finally:

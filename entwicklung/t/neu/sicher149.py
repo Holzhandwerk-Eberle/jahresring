@@ -74,7 +74,8 @@ a = A("POST", "auftraege", {"kunde_id": k["id"], "bezeichnung": "Garderobe"})
 po = A("POST", f"auftraege/{a['id']}/positionen", {"text": "Garderobe"}); pid = po.get("id") or po["position"]["id"]; A("PUT", f"positionen/{pid}", {"einzelpreis": 1234.56, "preis_manuell": 1, "menge": 1})
 b = A("POST", f"auftraege/{a['id']}/belege", {"art": "rechnung"}); f = A("POST", f"belege/{b['id']}/festschreiben", {}); bid = b["id"]
 erg = {lg: rq(c, "GET", f"/api/belege/{bid}/zugferd.xml")[0] for lg, c in sitz.items()}
-ok("E-Rechnungs-XML: Werkstatt, Mitarbeiter, Lohnbüro 403; Büro und Benutzer mit Auftragsrecht 200", erg == {"werk": 403, "mita": 403, "buero": 200, "lohn": 403, "ohnepreis": 200}, erg)
+# seit Version 152 auch für Benutzer ohne Preisrecht gesperrt (die E-Rechnung enthält alle Beträge)
+ok("E-Rechnungs-XML: Werkstatt, Mitarbeiter, Lohnbüro und Benutzer ohne Preisrecht 403; Büro 200", erg == {"werk": 403, "mita": 403, "buero": 200, "lohn": 403, "ohnepreis": 403}, erg)
 wz = A("POST", "werkzeuge", {"bezeichnung": "Tauchsäge", "preis": 612.5})
 geld = lambda t: re.findall(r"\d[\d.]*,\d\d\s*(?:€|&euro;)", t)
 for lg in ("werk", "ohnepreis"):

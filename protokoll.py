@@ -19,6 +19,8 @@ import threading
 import time
 from datetime import datetime
 
+from kern import csv_zelle
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS protokoll (
     nr INTEGER PRIMARY KEY,
@@ -400,6 +402,6 @@ def csv_text(con):
     w = csv.writer(buf, delimiter=";")
     w.writerow(["Nr", "Zeit", "Benutzer", "Vorgang", "Objekt", "Text", "Daten", "Programmversion", "Hash Vorgänger", "Hash"])
     for e in reversed(liste(con, limit=10 ** 9)):
-        w.writerow([e["nr"], e["zeit"], e["benutzer"], e["art_name"], e["objekt"], e["text"],
-                    json.dumps(e["daten"], ensure_ascii=False, sort_keys=True), e["version"], e["vorher"], e["hash"]])
+        w.writerow([csv_zelle(v) for v in (e["nr"], e["zeit"], e["benutzer"], e["art_name"], e["objekt"], e["text"],
+                                           json.dumps(e["daten"], ensure_ascii=False, sort_keys=True), e["version"], e["vorher"], e["hash"])])
     return "﻿" + buf.getvalue()

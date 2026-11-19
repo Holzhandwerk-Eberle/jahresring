@@ -151,7 +151,7 @@ def reset_adresse(con, b, firmen_adresse=""):
 
 def reset_code_anlegen(con, login, ip=""):
     """Legt einen 6-stelligen Code an (15 Minuten gültig). Gibt (benutzer, code) zurück oder (None, None)."""
-    login = (login or "").strip().lower()
+    login = str(login or "").strip().lower()[:LOGIN_LAENGE]
     schluessel = f"reset|{ip}"
     if _gesperrt(schluessel) or _gesperrt(f"reset-login|{login}"):
         raise Fehler("Zu viele Anfragen. Bitte ein paar Minuten warten.", 429)
@@ -171,7 +171,7 @@ def reset_code_anlegen(con, login, ip=""):
 
 def reset_ausfuehren(con, login, code, neu, ip=""):
     """Setzt das Passwort mit Mail-Code oder (nur Inhaber) Notfallschlüssel neu. Gibt (benutzer, art) zurück."""
-    login = (login or "").strip().lower()
+    login = str(login or "").strip().lower()[:LOGIN_LAENGE]
     schluessel = f"reset-login|{login}"
     if _gesperrt(schluessel) or _gesperrt(f"reset-code|{ip}"):
         raise Fehler("Zu viele Fehlversuche. Bitte ein paar Minuten warten.", 429)
@@ -355,28 +355,56 @@ def sitzung_benutzer(con, token):
     return b
 
 
+LOGIN_LAENGE = 100         # längere Benutzernamen gibt es nicht; mehr wird weder gesucht noch gemerkt
+FEHLVERSUCHE_MAX = 5000    # so viele Zähler bleiben höchstens im Arbeitsspeicher
+FEHLVERSUCH_MERKEN = 900   # Sekunden ohne weiteren Versuch, nach denen ein Zähler verfällt
+_ATTRAPPE = {}             # Passwort-Hash eines Benutzers, den es nicht gibt (siehe anmelden)
+
+
+def _aufraeumen(jetzt_):
+    """Abgelaufene Zähler entfernen; sind es dann immer noch zu viele, die ältesten. Aufruf nur unter _sperre."""
+    for k in [k for k, v in _fehlversuche.items() if v[1] <= jetzt_ and v[2] + FEHLVERSUCH_MERKEN <= jetzt_]:
+        _fehlversuche.pop(k, None)
+    if len(_fehlversuche) > FEHLVERSUCHE_MAX:
+        for k in sorted(_fehlversuche, key=lambda k: _fehlversuche[k][2])[:len(_fehlversuche) - FEHLVERSUCHE_MAX // 2]:
+            _fehlversuche.pop(k, None)
+
+
 def _gesperrt(schluessel):
     with _sperre:
-        n, bis = _fehlversuche.get(schluessel, (0, 0))
-        return bis > time.time()
+        return _fehlversuche.get(schluessel, (0, 0, 0))[1] > time.time()
 
 
-def _fehlversuch(schluessel):
-    """Zählt einen Fehlversuch und gibt die neue Anzahl zurück."""
+def _fehlversuch(schluessel, ab=5):
+    """Zählt einen Fehlversuch und gibt die neue Anzahl zurück; ab dem fünften (ab) gilt eine wachsende Wartezeit. Die Liste wächst
+    nicht unbegrenzt: Zähler verfallen eine Viertelstunde nach dem letzten Versuch, und es bleiben höchstens FEHLVERSUCHE_MAX Einträge."""
     with _sperre:
-        n, bis = _fehlversuche.get(schluessel, (0, 0))
-        n += 1
-        _fehlversuche[schluessel] = (n, time.time() + min(300, 5 * 2 ** (n - 4)) if n >= 5 else 0)
+        jetzt_ = time.time()
+        if len(_fehlversuche) >= FEHLVERSUCHE_MAX or (len(_fehlversuche) > 200 and int(jetzt_) % 20 == 0):
+            _aufraeumen(jetzt_)
+        n = _fehlversuche.get(schluessel, (0, 0, 0))[0] + 1
+        _fehlversuche[schluessel] = (n, jetzt_ + min(300, 5 * 2 ** min(n - ab + 1, 10)) if n >= ab else 0, jetzt_)
         return n
 
 
+def _attrappe():
+    if not _ATTRAPPE:
+        _ATTRAPPE["hash"] = pw_hash(secrets.token_urlsafe(12))
+    return _ATTRAPPE["hash"]
+
+
 def anmelden(con, login, pw, geraet="", ip=""):
-    login = (login or "").strip().lower()
-    schluessel = f"{login}|{ip}"
-    if _gesperrt(schluessel):
+    login = str(login or "").strip().lower()[:LOGIN_LAENGE]
+    schluessel, geraet_schluessel = f"{login}|{ip}", f"anmeldung-ip|{ip}"
+    if _gesperrt(schluessel) or _gesperrt(geraet_schluessel):
         raise Fehler("Zu viele Fehlversuche. Bitte kurz warten und dann erneut versuchen.", 429)
     b = con.execute("SELECT * FROM benutzer WHERE lower(login)=? AND aktiv=1", (login,)).fetchone()
-    if not b or not pw_pruefen(pw, b["pw_hash"]):
+    # Auch für einen unbekannten Namen wird ein Passwort geprüft (gegen eine Attrappe): Sonst käme die Absage schneller und
+    # verriete über die Antwortzeit, welche Benutzernamen es gibt. Damit sich so keine Rechenlast erzeugen lässt, zählen die
+    # Fehlversuche zusätzlich je Gerät (Adresse), gleich unter welchem Namen: ab dem zwanzigsten mit Wartezeit.
+    stimmt = pw_pruefen(pw, b["pw_hash"] if b else _attrappe())
+    if not b or not stimmt:
+        _fehlversuch(geraet_schluessel, ab=20)
         if _fehlversuch(schluessel) == 5:   # einmal je Sperre festhalten, nicht jeden Versuch (sonst ließe sich das Protokoll fluten)
             _melden(con, "anmeldung", login[:60], f"Anmeldung für „{login[:60]}“ nach fünf Fehlversuchen vorübergehend gesperrt (von {ip})")
             con.commit()
@@ -384,6 +412,7 @@ def anmelden(con, login, pw, geraet="", ip=""):
         raise Fehler("Benutzername oder Passwort stimmt nicht.", 401)
     with _sperre:
         _fehlversuche.pop(schluessel, None)
+        _fehlversuche.pop(geraet_schluessel, None)
     if pw_veraltet(b["pw_hash"]):   # mit der heute üblichen Rundenzahl neu ablegen
         con.execute("UPDATE benutzer SET pw_hash=? WHERE id=?", (pw_hash(pw), b["id"]))
     token = secrets.token_urlsafe(32)
@@ -663,11 +692,11 @@ def pruefen(methode, teile, q, daten=None):
             raise Fehler("Dafür fehlt die Berechtigung (nur Werkstatt).", 403)
 
 
-GELD = ("preis", "summe", "betrag", "netto", "brutto", "umsatz", "marge", "kosten", "lohn", "zuschlag", "rabatt", "ek_", "vk_",
+GELD = ("preis", "summe", "betrag", "netto", "brutto", "umsatz", "marge", "kosten", "lohn", "zuschlag", "aufschlag", "rabatt", "ek_", "vk_",
         "stundensatz", "deckung", "gewinn", "skonto", "wert", "gk", "ust", "mwst", "verrechnung", "satz")
 
 
-GELD_GENAU = {"ep", "gp", "wg", "ek", "vk", "db", "lnk", "offen", "saldo", "erloes", "ertrag", "bezahlt"}
+GELD_GENAU = {"ep", "gp", "wg", "ek", "vk", "db", "lnk", "offen", "saldo", "erloes", "ertrag", "bezahlt", "hoechst_zugang", "zahlbetrag"}
 GELD_TEIL = ("ep_", "_ep", "gp_", "_gp", "erloes", "ertrag", "_db", "db_")
 KEIN_GELD = ("zeige",)   # Schalter „Preis anzeigen ja/nein“ sind keine Beträge
 

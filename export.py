@@ -13,7 +13,7 @@ import re
 import zipfile
 from datetime import datetime
 from xml.sax.saxutils import escape
-from kern import kfm
+from kern import kfm, csv_zelle
 
 # von app.py gesetzt
 HILFE = {"daten": "", "basis": "", "einstellungen": None, "archiv_pdf": None, "klartext": None, "version": ""}
@@ -131,7 +131,7 @@ def csv_excel(kopf, zeilen):
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";", lineterminator="\r\n")
     w.writerow(kopf)
-    w.writerows(zeilen)
+    w.writerows([csv_zelle(v) for v in z] for z in zeilen)
     return ("﻿" + buf.getvalue()).encode("utf-8")
 
 
@@ -140,7 +140,7 @@ def csv_pruefer(zeilen):
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";", lineterminator="\r\n", quotechar='"', quoting=csv.QUOTE_MINIMAL)
     for z in zeilen:
-        w.writerow(["" if v is None else v for v in z])
+        w.writerow(["" if v is None else csv_zelle(v) for v in z])
     return buf.getvalue().encode("utf-8")
 
 
@@ -438,7 +438,8 @@ def datev_cfg(e):
 
 
 def _dt_text(t, n):
-    t = str(t or "").replace("€", "EUR").replace('"', "'").replace("\r", " ").replace("\n", " ").strip()[:n]
+    # führende Formelzeichen (= + - @) entfallen: Wird der Stapel in einer Tabellenkalkulation geöffnet, bleibt der Text ein Text
+    t = str(t or "").replace("€", "EUR").replace('"', "'").replace("\r", " ").replace("\n", " ").strip().lstrip("=+-@\t ")[:n]
     return '"' + t + '"'
 
 
@@ -447,7 +448,7 @@ def _dt_betrag(x):
 
 
 def _dt_beleg(t):
-    return re.sub(r"[^A-Za-z0-9$&%*+\-/]", "", str(t or ""))[:36]
+    return re.sub(r"[^A-Za-z0-9$&%*+\-/]", "", str(t or "")).lstrip("+-")[:36]
 
 
 def _ttmm(iso):

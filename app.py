@@ -647,7 +647,11 @@ def init_db():
         if mz:
             m = json.loads(mz[0] or "{}")
             if m.get("passwort") and not str(m["passwort"]).startswith(geheim.PRAEFIX):
-                vs = geheim.verschluesseln(m["passwort"])
+                try:
+                    vs = geheim.verschluesseln(m["passwort"])
+                except geheim.Fehler as f:
+                    print("Mail-Passwort:", f)
+                    vs = m["passwort"]
                 if vs != m["passwort"]:
                     m["passwort"] = vs
                     con.execute("UPDATE einstellungen SET wert=? WHERE schluessel='mail'", (json.dumps(m, ensure_ascii=False),))
@@ -1691,8 +1695,20 @@ def kunde_auskunft(con, kid):
         "termine": zeilen(con.execute(f"SELECT von, bis, typ, titel FROM termine WHERE auftrag_id IN ({ph})", ids)),
         "anhaenge": [r["name"] if "name" in r.keys() else os.path.basename(r["pfad"]) for r in con.execute(f"SELECT * FROM anhaenge WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids))],
         "rapporte": zeilen(con.execute(f"SELECT datum, status, kunde_name FROM montageberichte WHERE auftrag_id IN ({ph})", ids)),
+        "wiedervorlagen": zeilen(con.execute(f"SELECT datum, art, text, notiz, erledigt FROM wiedervorlagen WHERE kunde_id=? OR auftrag_id IN ({ph}) ORDER BY datum", (kid, *ids))),
+        "bautagebuch": zeilen(con.execute(f"SELECT datum, arbeiten, personal, material, behinderungen, maengel, besonderes, fotos FROM bautagebuch WHERE auftrag_id IN ({ph}) ORDER BY datum", ids)),
         "hinweis": "Projektordner und E-Mails im Mailprogramm liegen außerhalb des Programms und sind dort zu prüfen.",
     }
+    for e_ in erg["bautagebuch"]:
+        e_["fotos"] = len(jl(e_.get("fotos"), []) or [])
+    # digitale Unterschriften des Kunden auf Belegen (Auftragsbestätigung, Lieferschein, Abnahme): wer, wann, wo – das Bild selbst nicht
+    erg["unterschriften"] = []
+    for b in con.execute(f"SELECT nummer, art, daten FROM belege WHERE auftrag_id IN ({ph}) OR kunde_id=?", (*ids, kid)):
+        u = (jl(b["daten"], {}) or {}).get("unterschrift")
+        if u:
+            erg["unterschriften"].append({"beleg": b["nummer"], "art": BELEGARTEN.get(b["art"], {}).get("name", b["art"]), "name": u.get("name"), "ort": u.get("ort"),
+                                          "zeit": u.get("zeit"), "standort": bool(u.get("geo"))})
+    erg["zahlerkonten"] = [dict(r) for r in con.execute("SELECT iban, zuletzt FROM bank_kundenkonten WHERE kunde_id=? ORDER BY zuletzt", (kid,))]
     ops = [r["id"] for r in con.execute(f"SELECT id FROM offene_posten WHERE kunde_id=? OR auftrag_id IN ({ph})", (kid, *ids))] or [0]
     oph = ",".join("?" * len(ops))
     erg["zahlungen"] = zeilen(con.execute(f"SELECT datum, betrag, art, bemerkung FROM zahlungseingaenge WHERE op_id IN ({oph}) ORDER BY datum", ops))
@@ -1752,6 +1768,12 @@ def auskunft_brief(con, kid):
         liste("Notizen", [f"{de_datum((x['angelegt'] or '')[:10])}: {h(x['text'])}" for x in a["notizen"]]),
         liste("Termine", [f"{de_datum(x['von'])}{' – ' + de_datum(x['bis']) if x.get('bis') and x['bis'] != x['von'] else ''} · {h(x['typ'] or '')} {h(x['titel'] or '')}" for x in a["termine"]]),
         liste("Dateien, Fotos, Rapporte", [h(x) for x in a["anhaenge"]] + [f"Rapport vom {de_datum(x['datum'])} ({h(x['status'])}), unterschrieben von {h(x['kunde_name'] or '')}" for x in a["rapporte"]]),
+        liste("Digitale Unterschriften auf Belegen", [f"{h(x['art'])} {h(x['beleg'] or '')}: unterschrieben von {h(x['name'] or '')}{' in ' + h(x['ort']) if x.get('ort') else ''} am "
+                                                      f"{de_datum((x['zeit'] or '')[:10])}{' (mit Standort des Geräts)' if x.get('standort') else ''}" for x in a["unterschriften"]]),
+        liste("Wiedervorlagen", [f"{de_datum(x['datum'])} · {h(x['text'] or x['art'] or '')}{' · ' + h(x['notiz']) if x.get('notiz') else ''}" for x in a["wiedervorlagen"]]),
+        liste("Bautagebuch", [f"{de_datum(x['datum'])} · " + h(" · ".join(str(x[f]) for f in ("arbeiten", "personal", "material", "behinderungen", "maengel", "besonderes") if x.get(f))[:400])
+                              + (f" · {x['fotos']} Fotos" if x.get("fotos") else "") for x in a["bautagebuch"]]),
+        liste("Gemerkte Bankverbindungen (Konten, von denen Zahlungen eingegangen sind)", [f"{h(nachweis.maske(x['iban']))} · zuletzt {de_datum(x['zuletzt'])}" for x in a["zahlerkonten"]]),
         liste("Speicherorte", [h(str(e.get("auskunft_speicherorte") or "").strip() or STANDARD_EINSTELLUNGEN["auskunft_speicherorte"])]),
         liste("Empfänger", [h(str(e.get("auskunft_empfaenger") or "").strip() or STANDARD_EINSTELLUNGEN["auskunft_empfaenger"])]),
         liste("Speicherdauer", [f"Rechnungen und Kontoauszüge {frist_jahre(e)} Jahre, Angebote und Geschäftsbriefe 6 Jahre, jeweils ab Ende des Kalenderjahres "
@@ -1804,12 +1826,12 @@ def beleg_dateien(con, bid):
     return [p for p in pfade if os.path.isfile(p)]
 
 
-def kunde_anonymisieren(con, kid, ausfuehren=False):
+def kunde_anonymisieren(con, kid, ausfuehren=False, schwaerzen=None, mit_fundstellen=False):
     """Nach Ablauf der Aufbewahrungsfristen: Personenbezug eines Kunden entfernen (Art. 17 DSGVO) – siehe datenschutz.kunde()."""
     return datenschutz.kunde(con, kid, DATEN, ausfuehren, ich_login() if ausfuehren else "", VERSION, hilfe={
         "jahre_rechnung": frist_jahre(einstellungen(con)), "rechnungsarten": {a for a, v in BELEGARTEN.items() if v.get("rechnung")},
         "beleg_dateien": lambda bid: beleg_dateien(con, bid), "montage_ordner": montage.ordner, "bautagebuch_ordner": bautagebuch.ordner,
-        "korrespondenz_loeschen": _korrespondenz_loeschen})
+        "korrespondenz_loeschen": _korrespondenz_loeschen}, schwaerzen=schwaerzen, mit_fundstellen=mit_fundstellen)
 
 
 def konstruktion_dateien(con, aid, datei=None):
@@ -3969,6 +3991,38 @@ LIEFERANT_OHNE_RECHT = ("iban", "bic", "zahlkonto", "unsere_kundennr", "info_zah
                         "skontotage", "bemerkungen", "glaeubiger_id", "mandat", "steuernummer", "ustid", "datev_konto")
 
 
+BEZUG_TABELLEN = ("briefe", "notizen", "anhaenge", "korrespondenz")
+
+
+def bezug_erlaubt(rechte, x):
+    """Briefe, Notizen, Anhänge und Schriftverkehr gehören zu einem Kunden bzw. Auftrag oder zu einem Lieferanten. Das Recht für einen
+    der drei Bereiche öffnet die Adresse – zu sehen und zu ändern gibt es aber nur, was zum eigenen Bereich gehört: Mit dem Recht für
+    Lieferanten allein nichts zu Kunden, mit dem Recht für Kunden oder Aufträge allein nichts zu Lieferanten."""
+    if not rechte or rechte.get("inhaber"):
+        return True
+    b = rechte["bereiche"]
+    kunde = bool(x.get("kunde_id") or x.get("auftrag_id"))
+    if kunde and b.get("kunden", 0) < 1 and b.get("auftraege", 0) < 1:
+        return False
+    if x.get("lieferant_id") and not kunde and b.get("lieferanten", 0) < 1:
+        return False
+    return True
+
+
+def bezug_pruefen(con, tabelle, rid, daten=None):
+    """Vor dem Lesen einer Datei oder dem Ändern eines Eintrags: Gehört er zu einem Bereich, den der Benutzer sehen darf?"""
+    rechte = benutzer.aktuelle_rechte()
+    if not rechte or rechte.get("inhaber") or tabelle not in BEZUG_TABELLEN:
+        return
+    if rid:
+        r = con.execute(f"SELECT kunde_id, auftrag_id, lieferant_id FROM {tabelle} WHERE id=?", (rid,)).fetchone()
+        ziel = dict(r) if r else {}
+    else:
+        ziel = {k: (daten or {}).get(k) for k in ("kunde_id", "auftrag_id", "lieferant_id")} if isinstance(daten, dict) else {}
+    if not bezug_erlaubt(rechte, ziel):
+        raise ApiFehler("Dafür fehlt die Berechtigung.", 403)
+
+
 def sicht_einschraenken(teile, methode, erg, rechte):
     """Antworten für Benutzer mit eingeschränkten Rechten kürzen (Datensparsamkeit):
     Wer Kunden nur über den Auftrag erreicht (Werkstatt), bekommt vom Kunden Name, Anschrift und Erreichbarkeit, aber keine
@@ -3977,6 +4031,8 @@ def sicht_einschraenken(teile, methode, erg, rechte):
     if methode != "GET" or not teile:
         return erg
     b = rechte["bereiche"]
+    if teile[0] in BEZUG_TABELLEN and isinstance(erg, list):
+        return [x for x in erg if not isinstance(x, dict) or bezug_erlaubt(rechte, x)]
     if teile[0] == "kunden" and b.get("kunden", 0) < 1 and isinstance(erg, dict) and "kurzname" in erg:
         return {k: v for k, v in erg.items() if k in KUNDE_OHNE_KUNDENRECHT}
     if teile[0] == "lieferanten":
@@ -7871,31 +7927,45 @@ def start_arbeitsschutz(con, e):
 
 
 def suche(con, q):
+    """Suche über Kunden, Aufträge, Projekte, Belege und Lieferanten – je Trefferart nur mit dem Recht für diesen Bereich.
+    (Bisher bekam jeder mit irgendeinem der Rechte alle Trefferarten: wer nur das Material sehen darf, fand auch Kunden.)"""
     q = (q or "").strip().lower()
     if len(q) < 2:
         return []
     like = f"%{q}%"
     erg = []
-    for r in con.execute("SELECT id, nummer, kurzname, ort FROM kunden WHERE ulower(kurzname) LIKE ? OR CAST(nummer AS TEXT) LIKE ? "
-                         "OR ulower(anschrift) LIKE ? OR ulower(ort) LIKE ? LIMIT 8", (like, like, like, like)):
-        erg.append({"art": "Kunde", "titel": f"{r['nummer']} · {r['kurzname']}", "zusatz": r["ort"] or "", "link": f"#/kunde/{r['id']}"})
-    for r in con.execute("SELECT a.id, a.nummer, a.bezeichnung, a.status, k.kurzname FROM auftraege a JOIN kunden k ON k.id=a.kunde_id "
-                         "WHERE ulower(a.nummer) LIKE ? OR ulower(a.bezeichnung) LIKE ? OR ulower(k.kurzname) LIKE ? "
-                         "ORDER BY a.nummer DESC LIMIT 8", (like, like, like)):
-        erg.append({"art": "Auftrag", "titel": f"{r['nummer']} · {r['bezeichnung']}", "zusatz": f"{r['kurzname']} · {r['status']}",
-                    "link": f"#/auftrag/{r['id']}"})
-    for r in con.execute("SELECT id, nummer, bezeichnung, status FROM projekte WHERE ulower(nummer) LIKE ? OR ulower(bezeichnung) LIKE ? "
-                         "ORDER BY nummer DESC LIMIT 5", (like, like)):
-        erg.append({"art": "Projekt", "titel": f"{r['nummer']} · {r['bezeichnung']}", "zusatz": "laufend" if r["status"] == "aktiv" else "abgeschlossen",
-                    "link": f"#/projekt/{r['id']}"})
-    for r in con.execute("SELECT b.id, b.art, b.artname, b.nummer, b.datum, k.kurzname FROM belege b LEFT JOIN kunden k ON k.id=b.kunde_id "
-                         "WHERE b.nummer<>'' AND ulower(b.nummer) LIKE ? ORDER BY b.datum DESC LIMIT 6", (like,)):
-        erg.append({"art": art_name(r), "titel": r["nummer"],
-                    "zusatz": f"{r['kurzname'] or ''} · {r['datum'][8:10]}.{r['datum'][5:7]}.{r['datum'][:4]}" if r["datum"] else "",
-                    "link": f"#/beleg/{r['id']}"})
-    for r in con.execute("SELECT id, nummer, kurzname, ort FROM lieferanten WHERE ulower(kurzname) LIKE ? OR CAST(nummer AS TEXT) LIKE ? LIMIT 5",
-                         (like, like)):
-        erg.append({"art": "Lieferant", "titel": f"{r['nummer']} · {r['kurzname']}", "zusatz": r["ort"] or "", "link": f"#/lieferant/{r['id']}"})
+    r0 = benutzer.aktuelle_rechte()
+    nur_werkstatt = bool(r0 and not r0["inhaber"] and r0["auftrag_reiter"] == "werkstatt")
+    if benutzer.darf("kunden", 1):
+        for r in con.execute("SELECT id, nummer, kurzname, ort FROM kunden WHERE ulower(kurzname) LIKE ? OR CAST(nummer AS TEXT) LIKE ? "
+                             "OR ulower(anschrift) LIKE ? OR ulower(ort) LIKE ? LIMIT 8", (like, like, like, like)):
+            erg.append({"art": "Kunde", "titel": f"{r['nummer']} · {r['kurzname']}", "zusatz": r["ort"] or "", "link": f"#/kunde/{r['id']}"})
+    if benutzer.darf("auftraege", 1):
+        for r in con.execute("SELECT a.id, a.nummer, a.bezeichnung, a.status, k.kurzname FROM auftraege a JOIN kunden k ON k.id=a.kunde_id "
+                             "WHERE ulower(a.nummer) LIKE ? OR ulower(a.bezeichnung) LIKE ? OR ulower(k.kurzname) LIKE ? "
+                             "ORDER BY a.nummer DESC LIMIT 8", (like, like, like)):
+            erg.append({"art": "Auftrag", "titel": f"{r['nummer']} · {r['bezeichnung']}", "zusatz": f"{r['kurzname']} · {r['status']}",
+                        "link": f"#/auftrag/{r['id']}"})
+        if not nur_werkstatt:
+            for r in con.execute("SELECT id, nummer, bezeichnung, status FROM projekte WHERE ulower(nummer) LIKE ? OR ulower(bezeichnung) LIKE ? "
+                                 "ORDER BY nummer DESC LIMIT 5", (like, like)):
+                erg.append({"art": "Projekt", "titel": f"{r['nummer']} · {r['bezeichnung']}", "zusatz": "laufend" if r["status"] == "aktiv" else "abgeschlossen",
+                            "link": f"#/projekt/{r['id']}"})
+        if not nur_werkstatt and not ohne_preise():   # Belege tragen Beträge: nicht für „nur Werkstatt“ und nicht ohne Preisrecht
+            for r in con.execute("SELECT b.id, b.art, b.artname, b.nummer, b.datum, k.kurzname FROM belege b LEFT JOIN kunden k ON k.id=b.kunde_id "
+                                 "WHERE b.nummer<>'' AND ulower(b.nummer) LIKE ? ORDER BY b.datum DESC LIMIT 6", (like,)):
+                erg.append({"art": art_name(r), "titel": r["nummer"],
+                            "zusatz": f"{r['kurzname'] or ''} · {r['datum'][8:10]}.{r['datum'][5:7]}.{r['datum'][:4]}" if r["datum"] else "",
+                            "link": f"#/beleg/{r['id']}"})
+    if benutzer.darf("lieferanten", 1):
+        for r in con.execute("SELECT id, nummer, kurzname, ort FROM lieferanten WHERE ulower(kurzname) LIKE ? OR CAST(nummer AS TEXT) LIKE ? LIMIT 5",
+                             (like, like)):
+            erg.append({"art": "Lieferant", "titel": f"{r['nummer']} · {r['kurzname']}", "zusatz": r["ort"] or "", "link": f"#/lieferant/{r['id']}"})
+    if benutzer.darf("material", 1):
+        for r in con.execute("SELECT id, nummer, bezeichnung, gruppe FROM material WHERE aktiv=1 AND (ulower(nummer) LIKE ? OR ulower(bezeichnung) LIKE ? "
+                             "OR ulower(IFNULL(bestellnr,'')) LIKE ?) ORDER BY nummer LIMIT 6", (like, like, like)):
+            erg.append({"art": "Material", "titel": f"{r['nummer']} · {(r['bezeichnung'] or '').splitlines()[0] if r['bezeichnung'] else ''}", "zusatz": r["gruppe"] or "",
+                        "link": f"#/mat/{r['id']}"})
     return erg
 
 
@@ -7932,6 +8002,8 @@ def api(methode, teile, q, daten):
             con.execute("BEGIN IMMEDIATE")
         rid = int(teile[1]) if len(teile) > 1 and teile[1].isdigit() else None
         unter = teile[2] if len(teile) > 2 else None
+        if res in BEZUG_TABELLEN and (rid or methode == "POST"):
+            bezug_pruefen(con, res, rid, daten)
 
         if res == "stempel" and len(teile) >= 2 and teile[1] in ("unterschriften", "unterweisung", "monatsbeleg", "verbandbuch"):
             try:
@@ -8425,7 +8497,10 @@ def api(methode, teile, q, daten):
                     neu = {k: v for k, v in daten["mail"].items() if k != "passwort_gesetzt"}
                     if not neu.get("passwort"):
                         neu["passwort"] = alt.get("passwort", "")
-                    neu["passwort"] = geheim.verschluesseln(neu["passwort"])   # Windows: DPAPI, nie im Klartext ablegen
+                    try:
+                        neu["passwort"] = geheim.verschluesseln(neu["passwort"])   # Windows: DPAPI, nie im Klartext ablegen
+                    except geheim.Fehler as f:
+                        raise ApiFehler(f"{f} Bitte das Mail-Passwort erneut eintragen; bleibt der Fehler, Windows neu starten.")
                     daten["mail"] = neu
                 if isinstance(daten.get("update"), dict):
                     if not benutzer.ist_inhaber():
@@ -8436,7 +8511,10 @@ def api(methode, teile, q, daten):
                         raise ApiFehler("Die Adresse für den Update-Hinweis muss mit https:// beginnen.")
                     schl = daten["update"].get("schluessel")
                     schl = alt_u.get("schluessel", "") if schl in (None, "") and not daten["update"].get("schluessel_loeschen") else str(schl or "").strip()
-                    daten["update"] = {"adresse": adr, "schluessel": geheim.verschluesseln(schl) if schl else ""}
+                    try:
+                        daten["update"] = {"adresse": adr, "schluessel": geheim.verschluesseln(schl) if schl else ""}
+                    except geheim.Fehler as f:
+                        raise ApiFehler(str(f))
                     UPDATE.update(neu="", geprueft="", fehler="")
                     threading.Thread(target=lambda: (time.sleep(1.5), update_pruefen()), daemon=True).start()
                 if isinstance(daten.get("sollplaene"), list):
@@ -9215,7 +9293,9 @@ def api(methode, teile, q, daten):
             if rid and unter == "anonymisieren" and methode in ("GET", "POST"):
                 if not benutzer.ist_inhaber():
                     raise ApiFehler("Anonymisieren darf nur der Inhaber.", 403)
-                return kunde_anonymisieren(con, rid, ausfuehren=methode == "POST")
+                wahl = (daten or {}).get("schwaerzen") if methode == "POST" else None
+                return kunde_anonymisieren(con, rid, ausfuehren=methode == "POST", schwaerzen=wahl if isinstance(wahl, list) else None,
+                                           mit_fundstellen=methode == "GET")
             if methode == "GET" and rid:
                 return kunde_mit_zaehlern(con, rid)
             if methode == "POST" and rid is None:
@@ -10179,9 +10259,26 @@ class Handler(BaseHTTPRequestHandler):
         nur_werkstatt = bool(r0 and not r0["inhaber"] and r0["auftrag_reiter"] == "werkstatt")
         if re.fullmatch(r"/api/belege/\d+/(xrechnung|zugferd)\.xml", pfad):
             # E-Rechnungs-Daten enthalten Kunde, Positionen und Beträge: wie die Druckansicht nur mit Auftragsrecht, nicht für „nur Werkstatt“
-            if not benutzer.darf("auftraege", 1) or nur_werkstatt:
+            if not benutzer.darf("auftraege", 1) or nur_werkstatt or ohne_preise():
                 raise benutzer.Fehler("Dafür fehlt die Berechtigung.", 403)
             return
+        mbr = re.fullmatch(r"/druck/brief/(\d+)(\.pdf)?", pfad)
+        if mbr:   # Briefe: an Kunden mit Kunden- oder Auftragsrecht, an Lieferanten mit Lieferantenrecht; nicht für „nur Werkstatt“
+            if nur_werkstatt or not any(benutzer.darf(x, 1) for x in ("kunden", "auftraege", "lieferanten")):
+                raise benutzer.Fehler("Dafür fehlt die Berechtigung.", 403)
+            with verbindung() as con:
+                try:
+                    bezug_pruefen(con, "briefe", int(mbr.group(1)))
+                except ApiFehler:
+                    raise benutzer.Fehler("Dafür fehlt die Berechtigung.", 403)
+            return
+        mb = re.match(r"/api/(korrespondenz|anhaenge)/(\d+)/", pfad)
+        if mb:   # abgelegte E-Mails und Anhänge: nur aus dem eigenen Bereich (Kunden/Aufträge oder Lieferanten)
+            with verbindung() as con:
+                try:
+                    bezug_pruefen(con, mb.group(1), int(mb.group(2)))
+                except ApiFehler:
+                    raise benutzer.Fehler("Dafür fehlt die Berechtigung.", 403)
         if pfad.startswith("/api/bild/") and not any(benutzer.darf(x, 1) for x in ("auftraege", "material", "kunden")):
             raise benutzer.Fehler("Dafür fehlt die Berechtigung.", 403)   # Positionsbilder: nicht für Benutzer ganz ohne Bereichsrechte
         mp = re.fullmatch(r"/papier/(\d+)/([a-z]+)", pfad)
@@ -10205,15 +10302,17 @@ class Handler(BaseHTTPRequestHandler):
                 r = benutzer.aktuelle_rechte()
                 if muster == "/api/service/" and not benutzer.darf("einstellungen", 2):
                     raise benutzer.Fehler("Dafür fehlt die Berechtigung.", 403)
-                if muster == "/druck/" and r and not r["inhaber"] and r["auftrag_reiter"] == "werkstatt":
-                    # Werkstatt darf Lieferschein und Abnahmeprotokoll ansehen (zum Unterschreiben lassen), sonst nichts
+                werk = bool(r and not r["inhaber"] and r["auftrag_reiter"] == "werkstatt")
+                if muster == "/druck/" and (werk or (ohne_preise() and re.match(r"/druck/\d+", pfad))):
+                    # Werkstatt darf Lieferschein und Abnahmeprotokoll ansehen (zum Unterschreiben lassen), sonst nichts. Dasselbe gilt
+                    # für Belege bei Benutzern ohne Preisrecht: Angebot, Rechnung und ihre versandten Fassungen zeigen alle Beträge.
                     mm = re.fullmatch(r"/druck/(\d+)(\.pdf)?", pfad)
                     if mm:
                         with verbindung() as con:
                             br = con.execute("SELECT art FROM belege WHERE id=?", (int(mm.group(1)),)).fetchone()
                         if br and br["art"] in ("lieferschein", "abnahme"):
                             return
-                    raise benutzer.Fehler("Dafür fehlt die Berechtigung (nur Werkstatt).", 403)
+                    raise benutzer.Fehler("Dafür fehlt die Berechtigung (nur Werkstatt)." if werk else "Dafür fehlt die Berechtigung (Beleg mit Preisen).", 403)
                 return
 
     def anmeldung(self, methode, pfad):
@@ -10828,6 +10927,16 @@ class Handler(BaseHTTPRequestHandler):
         typ = mimetypes.guess_type(name)[0] or "application/octet-stream"
         self.senden(200, inhalt, typ, {"Content-Disposition": f"inline; filename*=UTF-8''{quote(name)}"})
 
+    def inhaber_angemeldet(self):
+        """Ist in diesem Browser der Inhaber angemeldet? Für Dateien, die sonst ohne Anmeldung ausgeliefert werden."""
+        try:
+            with verbindung() as con:
+                b = benutzer.sitzung_benutzer(con, self.token)
+                con.commit()
+        except sqlite3.Error:
+            return False
+        return bool(b) and b["rolle"] == "inhaber"
+
     def statisch(self, pfad):
         if pfad in ("", "/"):
             pfad = "/index.html"
@@ -10835,8 +10944,11 @@ class Handler(BaseHTTPRequestHandler):
             pfad = "/stempel.html"
         if pfad in ("/scan", "/scan/"):
             pfad = "/scan.html"
-        if pfad.startswith("/hilfe/") and pfad[7:] in EIGENE_DOKUMENTE and os.path.isfile(os.path.join(DATEN, "dokumente", pfad[7:])):
-            voll = os.path.join(DATEN, "dokumente", pfad[7:])   # betriebseigene Fassung statt neutraler Vorlage
+        if pfad.startswith("/hilfe/") and pfad[7:] in EIGENE_DOKUMENTE and os.path.isfile(os.path.join(DATEN, "dokumente", pfad[7:])) \
+                and self.inhaber_angemeldet():
+            # betriebseigene Fassung statt neutraler Vorlage – nur für den angemeldeten Inhaber: Die Seiten unter /hilfe/ sind
+            # ohne Anmeldung abrufbar, die ausgefüllten Unterlagen (Verfahrens- und Datenschutzdokumentation) gehen niemanden sonst an.
+            voll = os.path.join(DATEN, "dokumente", pfad[7:])
             with open(voll, "rb") as f:
                 return self.senden(200, html_kennung(f.read()), "text/html; charset=utf-8")   # vom Programm bzw. der Einrichtung abgelegt
         voll = os.path.normpath(os.path.join(STATIC, pfad.lstrip("/")))

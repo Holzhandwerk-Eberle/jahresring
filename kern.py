@@ -173,6 +173,18 @@ def de(z, n=2):
     return ("-" if z < 0 else "") + s
 
 
+_CSV_ZAHL = re.compile(r"[+-]?\d[\d.,]*%?")
+
+
+def csv_zelle(v):
+    """Wert für eine CSV-Datei, die in einer Tabellenkalkulation geöffnet werden kann. Beginnt ein Text mit = + - @ (oder Tabulator,
+    Wagenrücklauf), wertet Excel ihn als Formel aus – etwa einen Positionstext „=HYPERLINK(…)“. Solche Texte bekommen ein Hochkomma
+    vorangestellt und bleiben damit Text. Zahlen wie „-12,50“ bleiben unverändert."""
+    if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r") and not _CSV_ZAHL.fullmatch(v):
+        return "'" + v
+    return v
+
+
 def de_menge(x):
     """Menge für Druck und Listen: ganze Zahlen ohne, sonst mit zwei Nachkommastellen – mit drei, wenn zwei die Menge verfälschen würden
     (0,393 m³ wurde als 0,39 gedruckt, gerechnet aber mit 0,393)."""
