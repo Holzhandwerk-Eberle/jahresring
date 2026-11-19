@@ -246,12 +246,12 @@ async function ansichtUnterschrift(bid) {
   if (b.unterschrift) {
     z.innerHTML = `<div class="titel"><h2>${esc(b.artname)} ${esc(b.nummer || "")}</h2></div>
       <div class="kachel" style="margin-bottom:12px">✓ Unterschrieben von <b>${esc(b.unterschrift.name)}</b>${b.unterschrift.ort ? " in " + esc(b.unterschrift.ort) : ""} am ${datum(b.unterschrift.zeit.slice(0, 10))} um ${b.unterschrift.zeit.slice(11, 16)} Uhr.</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn prim" href="/druck/${bid}.pdf" target="_blank">PDF ansehen</a>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn prim" href="/druck/${bid}.pdf" target="_blank">PDF</a>
         ${darf("mail", 2) || darf("auftraege", 2) ? `<button class="btn" id="usMail">✉ Per E-Mail an den Kunden</button>` : ""}<a class="btn" href="#/auftrag/${a.id}/werkstatt">Zurück zum Auftrag</a></div>`;
     if ($("#usMail")) $("#usMail").onclick = () => belegMailen(bid);
     return;
   }
-  z.innerHTML = `<div class="titel"><h2>${esc(b.artname)} ${esc(b.nummer || "")}</h2><div class="rechts"><a class="btn" href="/druck/${bid}.pdf" target="_blank">PDF ansehen</a></div></div>
+  z.innerHTML = `<div class="titel"><h2>${esc(b.artname)} ${esc(b.nummer || "")}</h2><div class="rechts"><a class="btn" href="/druck/${bid}.pdf" target="_blank">PDF</a></div></div>
     <div style="position:relative"><div id="vsInfo" class="hinweis" style="position:absolute;top:8px;right:12px;background:#fff;padding:2px 8px;border-radius:4px"></div>
     <div id="vorschau" style="width:100%;max-height:55vh;overflow:auto;border:1px solid var(--linie);border-radius:6px;background:#8a8a8a;padding:14px 0"></div></div>
     ${b.art === "abnahme" ? `<div class="form" style="grid-template-columns:1fr;margin-top:12px">
@@ -262,7 +262,7 @@ async function ansichtUnterschrift(bid) {
       ${zeile(b.art === "lieferschein" ? "Name Empfänger" : "Name Auftraggeber", `<input id="usName" value="${esc(b.kunde.name || "")}" placeholder="Vor- und Nachname">`)}
       ${zeile("Ort", `<input id="usOrt" value="${esc(b.kunde.ort || "")}" placeholder="Ort der Unterschrift"><button class="btn" id="usGps" type="button" title="Standort des Tablets mit ablegen (wenn der Browser es erlaubt)">📍</button>`)}
     </div>
-    <div class="mb-pads" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:10px">
+    <div class="mb-pads" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:14px;margin-top:10px">
       <div><div class="hinweis">Auftragnehmer (optional)</div><input id="usNameAn" value="${esc((ICH && ICH.name) || E.firma_inhaber || "")}" placeholder="Name" style="margin:4px 0">
         <canvas class="mb-pad" id="usPadAn"></canvas><button class="btn" id="usLeerAn">löschen</button></div>
       <div><div class="hinweis">${b.art === "abnahme" ? "Auftraggeber (Abnahme)" : b.art === "lieferschein" ? "Empfänger (Ware erhalten)" : "Auftraggeber (Auftrag bestätigt)"}</div><div style="height:38px"></div>
@@ -302,7 +302,7 @@ async function bautagebuchAbschnitt(box, a) {
       ${L.map(e => `<tr class="klick" data-bt="${e.id}"><td><a href="#/bautagebuch/${e.id}">▸ ${datum(e.datum)}</a></td><td>${esc(e.wetter || "")}${e.temperatur ? " · " + esc(e.temperatur) + " °C" : ""}</td>
         <td>${esc(kurz(e.arbeiten || "", 70))}</td><td class="r">${e.fotos.length || ""}</td></tr>`).join("")}</table>` : `<p class="hinweis" style="margin-top:0">Noch keine Einträge.</p>`}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn prim" id="btHeute">+ Eintrag für heute</button>
-        ${L.length ? `<a class="btn" href="/papier/bautagebuch/${a.id}" target="_blank">Bautagebuch drucken / PDF</a>` : ""}</div>
+        ${L.length ? `<a class="btn" href="/papier/bautagebuch/${a.id}" target="_blank">Bautagebuch ansehen</a>` : ""}</div>
       <p class="hinweis" style="margin-bottom:0">Je Tag ein Eintrag mit Wetter, Personal (aus der Zeiterfassung vorgeschlagen), ausgeführten Arbeiten, Lieferungen, Behinderungen, Mängeln und Fotos.</p></div>`;
   $$("[data-bt]", box).forEach(tr => tr.onclick = ev => { if (!ev.target.closest("a")) location.hash = "#/bautagebuch/" + tr.dataset.bt; });
   $("#btHeute", box).onclick = async () => {
@@ -331,7 +331,7 @@ async function ansichtBautagebuch(eid) {
   const ta = (k, l, rows = 3, ph = "") => zeile(l, `<textarea data-f="${k}" rows="${rows}" placeholder="${ph}">${esc(e[k] || "")}</textarea>`, true);
   const zeichnen = () => {
     z.innerHTML = `<div class="titel"><h2>Bautagebuch ${datum(e.datum)}</h2><span class="speicher"></span>
-      <div class="rechts"><a class="btn" href="/papier/bautagebuch/${a.id}" target="_blank">Bautagebuch drucken / PDF</a></div></div>
+      <div class="rechts"><a class="btn" href="/papier/bautagebuch/${a.id}" target="_blank">Bautagebuch ansehen</a></div></div>
       <div class="form" id="btF">
         ${zeile("Datum", `<input type="date" data-f="datum" value="${esc(e.datum)}">`)}
         ${zeile("Wetter", `<select data-f="wetter"><option value="">–</option>${e.wetter_liste.map(w => `<option ${w === e.wetter ? "selected" : ""}>${esc(w)}</option>`).join("")}</select><input data-f="temperatur" value="${esc(e.temperatur || "")}" placeholder="°C" style="width:70px;flex:0 0 70px">`)}

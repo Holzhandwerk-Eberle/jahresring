@@ -136,7 +136,9 @@ async function mahnungErstellen(opid, danach) {
       <tr><td>offener Rechnungsbetrag</td><td class="r">${eur(w.offen)}</td></tr>
       ${w.kosten_bisher ? `<tr><td>Mahnkosten aus vorherigen Mahnungen</td><td class="r">${eur(w.kosten_bisher)}</td></tr>` : ""}
       ${w.gebuehr ? `<tr><td>Mahngebühr</td><td class="r">${eur(w.gebuehr)}</td></tr>` : ""}
-      ${w.zinsen ? `<tr><td>Verzugszinsen ${zahlDE(w.zinssatz)} % für ${w.zinstage} Tage</td><td class="r">${eur(w.zinsen)}</td></tr>` : ""}
+      ${w.zinsen ? ((w.zinsabschnitte || []).length > 1
+        ? `<tr><td>Verzugszinsen für ${w.zinstage} Tage<br><span class="hinweis">${w.zinsabschnitte.map(a => `${datum(a.von)} bis ${datum(a.bis)}: ${a.tage} Tage zu ${zahlDE(a.satz)} % = ${eur(a.betrag)}`).join("<br>")}</span></td><td class="r">${eur(w.zinsen)}</td></tr>`
+        : `<tr><td>Verzugszinsen ${zahlDE(w.zinssatz)} % für ${w.zinstage} Tage</td><td class="r">${eur(w.zinsen)}</td></tr>`) : ""}
       ${w.pauschale ? `<tr><td>Verzugspauschale § 288 Abs. 5 BGB</td><td class="r">${eur(w.pauschale)}</td></tr>` : ""}
       <tr><td><b>Gesamt</b></td><td class="r"><b>${eur(w.gesamt)}</b></td></tr></table>`;
   const inhalt = `
@@ -148,6 +150,7 @@ async function mahnungErstellen(opid, danach) {
     <div class="zeile"><label>Mahngebühr</label><div><input id="mGeb" class="zahl" value="${n2(v.gebuehr)}" style="width:100px"> €</div></div>
     <div class="zeile"><label></label><div class="spalte">
       <label><input type="checkbox" id="mZins" ${st.zinsen ? "checked" : ""}> Verzugszinsen berechnen (${zahlDE(v.basiszins)} % Basiszins + ${v.unternehmer ? "9" : "5"} Prozentpunkte, ${v.unternehmer ? "Geschäftskunde" : "Verbraucher"})</label>
+      ${v.basiszins_offen ? `<span class="hinweis" id="mZinsOffen">Für das Halbjahr ab ${datum(v.basiszins_offen)} ist noch kein Basiszinssatz eingetragen (Einstellungen › Kalkulation › Gesetzliche Werte); gerechnet wird mit dem zuletzt eingetragenen.</span>` : ""}
       ${v.unternehmer ? `<label><input type="checkbox" id="mPausch" ${st.pauschale ? "checked" : ""}> Verzugspauschale 40 € (§ 288 Abs. 5 BGB, nur einmal je Rechnung)</label>` : ""}
     </div></div>
     <div class="zeile"><label>Beträge</label><div id="mBetr" style="display:block">${betraege(v)}</div></div>
@@ -196,7 +199,7 @@ async function mahnungErstellen(opid, danach) {
   if (r.hinweis) toast(r.hinweis, true);
   const weiter = await auswahl(`${v.stufen[st.stufe].name} ${r.nummer} erstellt`,
     `<p style="margin-top:0">Das PDF liegt im Archiv${r.projekt ? ` und im Projektordner unter <b>${esc(r.projekt)}</b>` : ""}. Wie soll sie zum Kunden?</p>`,
-    [["mail", "Per E-Mail senden"], ["druck", "Drucken"], ["pdf", "PDF ansehen"], ["", "Fertig"]]);
+    [["mail", "Per E-Mail senden"], ["druck", "Drucken"], ["pdf", "PDF"], ["", "Fertig"]]);
   if (weiter === "mail") await mailDialog(`mahnungen/${r.id}`, "Mahnung per E-Mail senden", () => danach && danach());
   else if (weiter === "druck") window.open(`/druck/mahnung/${r.id}?drucken=1`, "_blank");
   else if (weiter === "pdf") window.open(`/api/mahnungen/${r.id}/pdf`, "_blank");
@@ -221,7 +224,8 @@ function auswahl(titel, text, knoepfe) {
 // ---------- Einstellungen > Texte > Mahnungen ----------
 function mahnEinstellungen(z) {
   const std = E.mahnwesen || {};
-  const cfg = {basiszins: std.basiszins ?? 1.52, stufen: JSON.parse(JSON.stringify(std.stufen || []))};
+  const rw = E._rechtswerte || {};
+  const cfg = {basiszinsen: JSON.parse(JSON.stringify(std.basiszinsen || [])), stufen: JSON.parse(JSON.stringify(std.stufen || []))};
   const sp = speicherer("einstellungen", r => { E = {...E, ...r}; });
   const speichern = () => sp.setze("mahnwesen", cfg);
   z.innerHTML = `<div class="titel"><h2>Mahnungen</h2><span class="speicher"></span></div>
@@ -230,7 +234,9 @@ function mahnEinstellungen(z) {
     {betrag} (Rechnungsbetrag), {offen}, {faellig}, {zahlbetrag} (Gesamtforderung inkl. Kosten), {gebuehr}, {frist}, {letzte_mahnung}, {auftrag}.
     Die Signatur wird an E-Mails automatisch angehängt.</p>
     <div class="kachel" style="margin-bottom:10px"><div class="form" style="grid-template-columns:1fr">
-      ${zeile("Basiszinssatz", `<input id="mzBasis" class="zahl" value="${zahlDE(cfg.basiszins)}" style="flex:0 0 90px;width:90px"> % <span class="hinweis" style="padding:6px 0 0 8px">nach § 247 BGB, ändert sich zum 1. Januar und 1. Juli (Deutsche Bundesbank). Seit 1. Juli 2026: 1,52 %.</span>`)}
+      ${zeile("Basiszinssatz", `<span id="mzBasis" style="padding-top:6px"><b>${zahlDE(rw.basiszins ?? 0)} %</b> nach § 247 BGB${(rw.basiszinsen || []).length ? `, eingetragen ab ${datum(rw.basiszinsen[rw.basiszinsen.length - 1].ab)}` : ""}.
+        ${rw.basiszins_offen ? `<span style="color:#8a5a00">⚠ Für das Halbjahr ab ${datum(rw.basiszins_offen)} fehlt der Satz noch.</span>` : ""}
+        <a href="#/einstellungen/kalkulation/rechtswerte">Sätze pflegen</a> <span class="hinweis">(Kalkulation › Gesetzliche Werte; der Satz kann sich zum 1. Januar und zum 1. Juli ändern)</span></span>`)}
     </div></div>
     ${cfg.stufen.map((s, i) => `<div class="kachel" style="margin-bottom:10px"><h4>${esc(s.kz)} · ${esc(s.name)}</h4>
       <div class="form" style="grid-template-columns:1fr">
@@ -249,7 +255,6 @@ function mahnEinstellungen(z) {
     <p class="hinweis">Rechtlicher Hinweis: Eine Mahngebühr darf nur die tatsächlichen Kosten (Porto, Papier) abdecken; Gerichte akzeptieren meist 1 bis 5 €.
     Für die Zahlungserinnerung, die den Verzug erst auslöst, sollte keine Gebühr anfallen. Verbraucher kommen ohne Mahnung erst 30 Tage nach Zugang der Rechnung in Verzug,
     wenn die Rechnung darauf hinweist.</p>`;
-  $("#mzBasis", z).oninput = e => { cfg.basiszins = zahlEin(e.target.value); speichern(); };
   $$("[data-ms]", z).forEach(el => {
     const ev = el.type === "checkbox" ? "onchange" : "oninput";
     el[ev] = () => {

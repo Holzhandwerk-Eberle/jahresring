@@ -79,6 +79,7 @@ async function ansichtStart(wieder) {
       <div class="rechts"><select id="stJahr">${[0, 1, 2, 3].map(i => new Date().getFullYear() - i).map(y => `<option ${y === j ? "selected" : ""}>${y}</option>`).join("")}</select></div></div>
     ${E._ort_warnung && ICH.rechte.inhaber ? `<div class="kachel" style="border-left:4px solid var(--rot);margin-bottom:12px">${esc(E._ort_warnung)}</div>` : ""}
     ${E._sicherung_erinnerung && ICH.rechte.inhaber ? `<div class="kachel" style="border-left:4px solid #c9a227;margin-bottom:12px">⚠ ${esc(E._sicherung_erinnerung)} <a href="#/einstellungen/service/sicherung">Zur Datensicherung ›</a></div>` : ""}
+    ${ICH.rechte.inhaber ? ((E._rechtswerte || {}).hinweise || []).map(x => `<div class="kachel rw-hinweis" style="border-left:4px solid #c9a227;margin-bottom:12px">⚠ ${esc(x.text)} <a href="${esc(x.link)}">Zu den gesetzlichen Werten ›</a></div>`).join("") : ""}
     ${(E._update || {}).neu && ICH.rechte.inhaber ? `<div class="kachel" style="border-left:4px solid var(--akzent);margin-bottom:12px">Eine neuere Programmversion ist verfügbar: <b>${esc(E._update.neu)}</b> (installiert: ${esc(VERSION)}). <a href="#/einstellungen/programm">Einstellungen › Programm ›</a></div>` : ""}
     <div id="stAS"></div>
 

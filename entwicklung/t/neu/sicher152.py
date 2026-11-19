@@ -112,7 +112,9 @@ ok("kern.csv_zelle: Texte mit = + - @ bekommen ein Hochkomma, Zahlen und gewöhn
 
 print("== S13: Verschlüsselung der Zugangsdaten")
 import geheim, types
-ok("geheim.Fehler ist vorhanden; ohne Windows bleibt der Wert wie bisher unverändert", issubclass(geheim.Fehler, RuntimeError) and geheim.verschluesseln("abc") == "abc")
+import os as _os
+ok("geheim.Fehler ist vorhanden; ohne Windows bleibt der Wert wie bisher unverändert, unter Windows wird er verschlüsselt",
+   issubclass(geheim.Fehler, RuntimeError) and (geheim.verschluesseln("abc").startswith("dpapi:") if _os.name == "nt" else geheim.verschluesseln("abc") == "abc"))
 class _Falsch:   # Windows-Schnittstelle, deren Verschlüsselung scheitert
     class crypt32:
         @staticmethod

@@ -43,7 +43,7 @@ function eingangDialog(v, {lieferanten, auftraege, materialien, wzMeta}, danach)
   hg.className = "modal-hg";
   hg.innerHTML = `<div class="modal" style="width:min(1250px,97vw);max-height:95vh;overflow:auto">
     <h3 style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">Rechnung einlesen <span class="hinweis" style="font-weight:400">${esc(v.dateiname)} · ${esc(v.format)}</span>
-      <a class="btn" href="/api/eingang/datei/${v.token}" target="_blank" style="margin-left:auto">📄 Original ansehen</a>${v.format !== "PDF ohne E-Rechnung" ? `<button class="btn" type="button" id="eXml">🔍 XML</button>` : ""}</h3>
+      <a class="btn" href="/api/eingang/datei/${v.token}" target="_blank" style="margin-left:auto">Original ansehen</a>${v.format !== "PDF ohne E-Rechnung" ? `<button class="btn" type="button" id="eXml">🔍 XML</button>` : ""}</h3>
     ${v.doppelt ? `<div class="kachel" style="border-left:4px solid var(--rot);margin-bottom:8px">Diese Rechnung ist schon als Zahlungsauftrag <a href="#/zahlung/${v.doppelt.id}">${esc(v.doppelt.nummer)}</a> erfasst.</div>` : ""}
     ${(v.warnungen || []).map(h => `<div class="kachel" style="border-left:4px solid var(--rot);margin-bottom:8px;color:var(--rot)"><b>⚠</b> ${esc(h).replace(/\n/g, "<br>")}</div>`).join("")}
     ${(v.hinweise || []).map(h => `<div class="hinweis" style="margin-bottom:4px">ℹ ${esc(h)}</div>`).join("")}
@@ -210,7 +210,7 @@ async function werkzeugListe() {
       <div class="such"><input id="wzQ" placeholder="Bezeichnung, Nr., Seriennr., Standort …" value="${esc(wzFilter.q)}" style="width:260px">
         <select id="wzS">${[["aktiv", "Alle aktiven"], ["faellig", "Prüfung/Wartung fällig"], ...meta.status.map(s => [s, s]), ["", "Alle"]].map(([v, l]) => `<option value="${v}" ${v === wzFilter.status ? "selected" : ""}>${l}</option>`).join("")}</select>
         <select id="wzA">${opts(meta.arten, wzFilter.art, "Alle Arten")}</select></div>
-      <div class="rechts"><button class="btn" id="wzPdf" title="Liste mit den aktuellen Filtern als PDF, mit Gesamtanschaffungswert">📄 PDF</button><button class="btn prim" id="wzNeu">+ Werkzeug</button></div></div>
+      <div class="rechts"><button class="btn" id="wzPdf" title="Liste mit den aktuellen Filtern als PDF, mit Gesamtanschaffungswert">PDF</button><button class="btn prim" id="wzNeu">+ Werkzeug</button></div></div>
     <div id="wzL"></div>
     <p class="hinweis">Elektrische Geräte brauchen eine regelmäßige Prüfung (DGUV Vorschrift 3, in Werkstätten meist jährlich). Fällige Prüf- und Wartungstermine erscheinen rot.
     GWG = geringwertiges Wirtschaftsgut bis ${zahlDE(meta.gwg_grenze, 0)} € netto, kann sofort abgeschrieben werden – das entscheidet die Buchhaltung.</p>`;

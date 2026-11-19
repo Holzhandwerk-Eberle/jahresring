@@ -16,6 +16,7 @@ def A(m, p, d=None):
     s, b, _ = rq(inh, m, "/api/" + p, d); j = J(b)
     if isinstance(j, dict): j["_s"] = s
     return j
+sys.path.insert(0, "/home/claude/eberle-buero/lib")   # pypdf aus dem Programm, nicht aus dem System
 from pypdf import PdfReader
 def seiten(bid, name):
     st, daten, _ = rq(inh, "GET", f"/druck/{bid}.pdf", roh=True)

@@ -463,7 +463,7 @@ async function ansichtPosition(pid, reiter = "position", sub) {
   const z = $("#inhalt");
   // Bei Unterpositionen nur die Unterpositionen derselben Hauptposition zur Auswahl
   const wahlListe = el ? d.liste.filter(x => x.ebene && String(x.posnr).startsWith(el.posnr + ".")) : d.liste;
-  const posWahl = `<select id="posWahl" style="max-width:520px">${wahlListe.map(x => `<option value="${x.id}" ${x.id === pid ? "selected" : ""}>${el ? "Unterposition " + String(x.posnr).split(".").pop() : `${x.ebene ? "   └ " : ""}${x.titel ? "T" + String(x.titel).padStart(2, "0") + " " : ""}Pos. ${x.posnr}`} · ${mengeDE(x.menge)} ${esc(x.einheit)} ${esc(x.text)}</option>`).join("")}</select>`;
+  const posWahl = `<select id="posWahl" style="max-width:min(520px,100%)">${wahlListe.map(x => `<option value="${x.id}" ${x.id === pid ? "selected" : ""}>${el ? "Unterposition " + String(x.posnr).split(".").pop() : `${x.ebene ? "   └ " : ""}${x.titel ? "T" + String(x.titel).padStart(2, "0") + " " : ""}Pos. ${x.posnr}`} · ${mengeDE(x.menge)} ${esc(x.einheit)} ${esc(x.text)}</option>`).join("")}</select>`;
   const ctx = {d, p, a, pid, z, posWahl, neu: () => ansichtPosition(pid, reiter, sub)};
   if (reiter === "werte") return auftragsWerte(z, {auftrag: a, teil: sub || "werkstoffe"});
   ({position: posSeite, werkstoffe: stuecklisteSeite, beschlaege: beschlagSeite, zeiten: zeitenSeite, summen: summenSeite, unterpositionen: unterSeite}[reiter] || posSeite)(ctx);
@@ -1747,7 +1747,7 @@ async function ansichtBeleg(bid) {
   const dis = gesperrt ? "disabled" : "";
   const knoepfe = [
     b.status !== "storniert" || b.art === "storno" ? `<button class="btn prim" id="bMail" title="Beleg als PDF per E-Mail an den Kunden senden">✉ Per E-Mail senden</button>` : "",
-    `<a class="btn" href="/druck/${bid}.pdf" target="_blank">PDF ansehen</a>`,
+    `<a class="btn" href="/druck/${bid}.pdf" target="_blank">PDF</a>`,
     `<a class="btn" href="/druck/${bid}?drucken=1" target="_blank">Drucken</a>`,
     `<button class="btn" id="bPdf">PDF in Projektordner</button>`,
     ["angebot", "kv"].includes(b.art) && !b.versendet ? `<button class="btn" id="bVers" title="Das Angebot wurde auf anderem Weg übergeben (Post, persönlich, eigenes E-Mail-Programm). Erst dann zählt es auf der Startseite als offenes Angebot.">✓ Als versendet vermerken</button>` : "",

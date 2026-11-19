@@ -177,8 +177,8 @@ def ablauf_tage(login, pw):
     return round((datetime.fromisoformat(r[0]) - datetime.now()).total_seconds() / 86400, 1)
 tb, tm = ablauf_tage("buero", PW), ablauf_tage("sechs", "123456")
 ok("Anmeldung im Büro gilt die eingestellten 2 Tage, die der Rolle Mitarbeiter 9 Tage", tb == 2.0 and tm == 9.0, (tb, tm))
-A("PUT", "einstellungen", {"sitzung_tage_buero": 0, "sitzung_tage_mitarbeiter": 5000}); tb, tm = ablauf_tage("buero", PW), ablauf_tage("sechs", "123456")
-ok("unsinnige Werte (0 und 5000 Tage) fallen auf die Vorgabe zurück (30 und 120 Tage)", tb == 30.0 and tm == 120.0, (tb, tm))
+xu = A("PUT", "einstellungen", {"sitzung_tage_buero": 0, "sitzung_tage_mitarbeiter": 5000}); tb, tm = ablauf_tage("buero", PW), ablauf_tage("sechs", "123456")
+ok("unsinnige Werte (0 und 5000 Tage) werden seit Version 152 beim Speichern abgelehnt; die eingestellten Zeiten bleiben", xu["_s"] == 400 and "zwischen 1 und 365" in (xu.get("fehler") or "") and tb == 2.0 and tm == 9.0, (xu, tb, tm))
 A("PUT", "einstellungen", {"sitzung_tage_buero": 30, "sitzung_tage_mitarbeiter": 120})
 
 print("== M3 Anmeldungen im Protokoll")

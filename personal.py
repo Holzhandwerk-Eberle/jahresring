@@ -75,21 +75,46 @@ RUHEZEIT_STUNDEN = 11   # § 5 ArbZG: ununterbrochene Ruhezeit nach dem Ende der
 MINDESTLOHN = [("2024-01-01", 12.41), ("2025-01-01", 12.82), ("2026-01-01", 13.90), ("2027-01-01", 14.60)]
 
 
-def mindestlohn(tag_iso):
+def mindestlohn_eigene(liste):
+    """Eigene Einträge der Einstellung „mindestlohn“, geprüft und sortiert: [{ab, satz}] (Stichtag ab 2015, Satz 5 bis 100 € je Stunde)."""
+    aus = {}
+    for x in liste if isinstance(liste, list) else []:
+        if not isinstance(x, dict):
+            continue
+        try:
+            t, satz = date.fromisoformat(str(x.get("ab") or "")[:10]), round(float(x.get("satz")), 2)
+        except (TypeError, ValueError):
+            continue
+        if t.year >= 2015 and 5 <= satz <= 100:
+            aus[t.isoformat()] = satz
+    return [{"ab": ab, "satz": s} for ab, s in sorted(aus.items())]
+
+
+def mindestlohn_liste(eigene=None):
+    """Hinterlegte und eigene Sätze, aufsteigend nach Stichtag. Bei gleichem Stichtag zählt der eigene Eintrag."""
+    d = dict(MINDESTLOHN)
+    for x in mindestlohn_eigene(eigene):
+        d[x["ab"]] = x["satz"]
+    return sorted(d.items())
+
+
+def mindestlohn(tag_iso, eigene=None):
     """Mindestlohn am genannten Tag (für spätere Jahre gilt der letzte bekannte Satz weiter)."""
-    return next((w for ab, w in reversed(MINDESTLOHN) if ab <= str(tag_iso)[:10]), MINDESTLOHN[0][1])
+    liste = mindestlohn_liste(eigene)
+    return next((w for ab, w in reversed(liste) if ab <= str(tag_iso)[:10]), liste[0][1])
 
 
-def minijob_grenze(tag_iso):
+def minijob_grenze(tag_iso, eigene=None):
     import math
-    return math.ceil(round(mindestlohn(tag_iso) * 130 / 3, 4))
+    return math.ceil(round(mindestlohn(tag_iso, eigene) * 130 / 3, 4))
 
 
-def lohn_hinweise(m, monat, ist_stunden, soll_stunden):
-    """Hinweise zu Mindestlohn und Minijob-Grenze für einen Monat – nur Hinweise, gerechnet aus den Angaben im Mitarbeiterstamm."""
+def lohn_hinweise(m, monat, ist_stunden, soll_stunden, eigene=None):
+    """Hinweise zu Mindestlohn und Minijob-Grenze für einen Monat – nur Hinweise, gerechnet aus den Angaben im Mitarbeiterstamm.
+    eigene: Einträge der Einstellung „mindestlohn“."""
     aus = []
     stichtag = f"{monat}-01"
-    ml = mindestlohn(stichtag)
+    ml = mindestlohn(stichtag, eigene)
     art = m["lohnart"]
     geld = lambda v: f"{v:,.2f}".replace(",", "#").replace(".", ",").replace("#", ".") + " €"   # noqa: E731
     if art in ("stunde", "minijob") and 0 < (m["stundenlohn"] or 0) < ml - 0.004:
@@ -98,7 +123,7 @@ def lohn_hinweise(m, monat, ist_stunden, soll_stunden):
         aus.append(f"Gehalt {geld(m['gehalt'])} bei {str(round(soll_stunden, 1)).replace('.', ',')} Sollstunden ergibt {geld(m['gehalt'] / soll_stunden)} je Stunde – "
                    f"unter dem gesetzlichen Mindestlohn von {geld(ml)}")
     if art == "minijob" and (m["stundenlohn"] or 0) > 0:
-        grenze, verdienst = minijob_grenze(stichtag), (m["stundenlohn"] or 0) * ist_stunden
+        grenze, verdienst = minijob_grenze(stichtag, eigene), (m["stundenlohn"] or 0) * ist_stunden
         if verdienst > grenze + 0.004:
             aus.append(f"Richtwert {geld(verdienst)} liegt über der Minijob-Grenze von {geld(grenze)} im Monat "
                        f"(bei {geld(m['stundenlohn'])} sind das höchstens {str(round(grenze / m['stundenlohn'], 1)).replace('.', ',')} Stunden)")
@@ -1114,6 +1139,7 @@ def lohn_liste(con, monat):
     j, mo = int(monat[:4]), int(monat[5:7])
     von, bis = f"{monat}-01", f"{monat}-{calendar.monthrange(j, mo)[1]:02d}"
     aus = []
+    e = HILFE["einstellungen"](con)
     for m in con.execute("SELECT * FROM mitarbeiter WHERE (aktiv=1 OR austritt>=?) AND (eintritt='' OR eintritt<=?) AND lohnart<>'inhaber' "
                          "ORDER BY nummer", (von, bis)):
         l = con.execute("SELECT * FROM lohn WHERE mitarbeiter_id=? AND monat=?", (m["id"], monat)).fetchone()
@@ -1127,8 +1153,8 @@ def lohn_liste(con, monat):
                     "soll": round(sum(t["soll"] for t in ts), 2),
                     "urlaub": sum(t["urlaubstage"] for t in ts), "krank": sum(1 for t in ts if t["abw"] in ("krank", "kind_krank") and t["soll"]),
                     "schaetzung": round(m["stundenlohn"] * sum(t["ist"] for t in ts), 2) if m["lohnart"] in ("stunde", "minijob") else m["gehalt"],
-                    "hinweise": lohn_hinweise(m, monat, sum(t["ist"] for t in ts), sum(t["soll"] + (t.get("feiertag_std") or 0) for t in ts))})
-    e = HILFE["einstellungen"](con)
+                    "hinweise": lohn_hinweise(m, monat, sum(t["ist"] for t in ts), sum(t["soll"] + (t.get("feiertag_std") or 0) for t in ts),
+                                              e.get("mindestlohn"))})
     return {"monat": monat, "zeilen": aus, "faellig": lohn_faelligkeiten(monat), "finanzamt_id": e.get("lohn_finanzamt_id"),
             "empfaenger": [dict(r) for r in con.execute("SELECT id, kurzname, gruppe, iban FROM lieferanten WHERE aktiv=1 AND gruppe<>'Mitarbeiter' "
                                                         "ORDER BY gruppe='Finanzamt' DESC, kurzname")]}

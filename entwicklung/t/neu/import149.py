@@ -1,6 +1,6 @@
 """Version 149, Preis- und Tabellenimport: Zeichensätze und Zeilenenden, Zahlenformate mit Hinweisen, Excel-Sonderfälle,
 Größengrenze beim Entpacken, kaputte Dateien ohne internen Fehler. Erwartet eine frische Prüfinstanz."""
-import json, re, sys, base64, time, io, zipfile, resource
+import json, re, sys, base64, time, io, zipfile
 exec(open("/tmp/claude-0/t/sec/sec.py").read().split("inh = cl()")[0])
 J = lambda t: json.loads(t) if t and t[:1] in "[{" else {}
 fehler = []

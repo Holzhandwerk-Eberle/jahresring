@@ -73,6 +73,8 @@ import bautagebuch
 import korrespondenz
 import arbeitsschutz
 import unterschrift
+import rechtswerte
+import einstpruefung
 import widerruf
 import uebernahme
 import secrets
@@ -94,7 +96,7 @@ BACKUP_PFAD = os.path.join(DATEN, "backup")
 STATIC = os.path.join(BASIS, "static")
 PORT = int(os.environ.get("BUERO_PORT", "8765"))
 MAX_ANFRAGE = 300 * 1024 * 1024   # größte angenommene Anfrage (Uploads als Base64)
-VERSION = "2026.11.01-151"
+VERSION = "2026.11.01-152"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kunden (
@@ -450,7 +452,9 @@ STANDARD_EINSTELLUNGEN = {
     "datenschutzdoku": {},   # ausgefüllte Felder der Datenschutz-Dokumentation (hilfe/datenschutz.html)
     "mail": {},
     "mail_texte": {},
-    "mahnwesen": mahnwesen.STANDARD,
+    "mahnwesen": mahnwesen.STANDARD,   # stufen […], basiszinsen: eigene Einträge [{ab, satz}] zusätzlich zur hinterlegten Liste
+    "steuersaetze": [],        # eigene Umsatzsteuersätze mit Stichtag [{ab, regel, ermaessigt}] zusätzlich zu rechtswerte.STEUERSAETZE
+    "mindestlohn": [],         # eigene Mindestlohnsätze mit Stichtag [{ab, satz}] zusätzlich zu personal.MINDESTLOHN
     "zugferd": True,
     # Mengeneinheiten für Positionen, Kostenliste und Materialstamm (Einstellungen › Allgemein › Auswahllisten)
     "einheiten": ["lfm.", "m²", "m³", "Stk.", "Std.", "Pauschale", "Paar", "Satz", "Garnitur", "Dose", "Rolle", "Tube", "Packung", "Liter", "kg"],
@@ -779,6 +783,12 @@ def init_db():
             if r and jl(r[0], None) == TEXT_LOHNANTEIL_ALT:
                 con.execute("DELETE FROM einstellungen WHERE schluessel='text_lohnanteil'")
             con.execute("INSERT INTO einstellungen VALUES ('_lohntext_152', 'true')")
+        # Version 152: Der Basiszinssatz steht als Liste mit Stichtagen in den Einstellungen. Ein früher gespeicherter einzelner Satz
+        # bleibt als eigener Eintrag ab dem laufenden Halbjahr erhalten, wenn er vom hinterlegten abweicht.
+        r = con.execute("SELECT wert FROM einstellungen WHERE schluessel='mahnwesen'").fetchone()
+        mw = jl(r[0], None) if r else None
+        if isinstance(mw, dict) and "basiszins" in mw:
+            con.execute("UPDATE einstellungen SET wert=? WHERE schluessel='mahnwesen'", (json.dumps(mahnwesen.umstellen(mw), ensure_ascii=False),))
         indizes_anlegen(con)
 
 
@@ -947,7 +957,8 @@ def laufendes_programm_fremd():
 
 
 def meldung_fenster(text):
-    if os.name == "nt":
+    """Hinweisfenster beim Start (nur Windows). Mit BUERO_FENSTER=nein bleibt es aus – für Läufe, bei denen niemand klicken kann."""
+    if os.name == "nt" and os.environ.get("BUERO_FENSTER", "").lower() != "nein":
         try:
             import ctypes
             ctypes.windll.user32.MessageBoxW(0, text, "Jahresring", 0x30)
@@ -957,8 +968,9 @@ def meldung_fenster(text):
 
 
 def frage_fenster(text):
-    """Ja/Nein-Frage beim Start (ohne Browser). Ohne Windows-Fenster entscheidet die Umgebungsvariable BUERO_NOTFALL=ja."""
-    if os.name == "nt":
+    """Ja/Nein-Frage beim Start (ohne Browser). Ohne Windows-Fenster (oder mit BUERO_FENSTER=nein) entscheidet die
+    Umgebungsvariable BUERO_NOTFALL=ja."""
+    if os.name == "nt" and os.environ.get("BUERO_FENSTER", "").lower() != "nein":
         try:
             import ctypes
             return ctypes.windll.user32.MessageBoxW(0, text, "Jahresring", 0x34) == 6   # Ja/Nein mit Warnsymbol
@@ -1078,13 +1090,16 @@ def datenbank_starten():
 
 
 def zwischenspeicher_vorwaermen():
-    """Arbeitszeitkonten der Mitarbeiter (abgeschlossene Monate) gleich nach dem Start im Hintergrund berechnen,
-    damit der erste Aufruf von Personal nicht wartet."""
-    try:
-        time.sleep(3)
-        api("GET", ["mitarbeiter"], {"status": "aktiv"}, None)
-    except Exception as x:  # noqa: BLE001
-        print("Zwischenspeicher Personal:", x)
+    """Gleich nach dem Start im Hintergrund vorbereiten, was sonst der erste Aufruf bezahlt: zuerst die Startseite (Auftragswerte der
+    laufenden Aufträge, Umsätze der Rechnungen), danach die Arbeitszeitkonten der Mitarbeiter (abgeschlossene Monate). Nacheinander,
+    damit sich beides nicht gegenseitig ausbremst – bis Version 151 lief nur das Zweite und der erste Aufruf der Startseite wartete
+    bei großem Bestand daneben bis zu zwölf Sekunden (P7)."""
+    time.sleep(1)
+    for name, teile, q in (("Startseite", ["start"], {}), ("Personal", ["mitarbeiter"], {"status": "aktiv"})):
+        try:
+            api("GET", teile, q, None)
+        except Exception as x:  # noqa: BLE001
+            print(f"Zwischenspeicher {name}:", x)
 
 
 def projekt_cfg():
@@ -1449,9 +1464,16 @@ def einstellungen(con):
     e = dict(STANDARD_EINSTELLUNGEN)
     for r in con.execute("SELECT schluessel, wert FROM einstellungen"):
         try:
-            e[r["schluessel"]] = json.loads(r["wert"])
+            v = json.loads(r["wert"])
         except ValueError:
-            pass
+            continue
+        k = r["schluessel"]
+        if k in STANDARD_EINSTELLUNGEN and type(v) is not type(STANDARD_EINSTELLUNGEN[k]):
+            # Art passt nicht zur Vorgabe (aus früherer Zeit): Eindeutiges übernehmen, sonst gilt die Vorgabe – keine Seite fällt aus
+            brauchbar, v = einstpruefung.beim_lesen(k, v, STANDARD_EINSTELLUNGEN[k])
+            if not brauchbar:
+                continue
+        e[k] = v
     LAND_EINST["immer"] = bool(e.get("land_immer"))
     m = e.get("mail")
     if isinstance(m, dict) and str(m.get("passwort") or "").startswith(geheim.PRAEFIX):
@@ -3635,6 +3657,17 @@ def lohnanteil_rechnen(erg, summen, ust_satz, mit_wg=True):
     return {"netto": n, "ust": u, "brutto": kfm(n + u)}
 
 
+def beleg_steuertag(con, opts, auftrag=None, art=""):
+    """Tag, nach dem sich der Umsatzsteuersatz eines Belegs richtet: das Leistungsdatum, sonst das Belegdatum, sonst heute.
+    Bei einem vorhandenen Beleg (opts.beleg_id) aus dem Beleg, bei einem neuen aus den Angaben zum Anlegen."""
+    if opts.get("beleg_id"):
+        r = con.execute("SELECT datum, leistungsdatum FROM belege WHERE id=?", (opts["beleg_id"],)).fetchone()
+        if r and (r["leistungsdatum"] or r["datum"]):
+            return r["leistungsdatum"] or r["datum"]
+    leistung = (opts.get("leistungsdatum") or (auftrag or {}).get("lieferung")) if (BELEGARTEN.get(art) or {}).get("rechnung") else ""
+    return str(leistung or opts.get("datum") or date.today().isoformat())[:10]
+
+
 def beleg_snapshot(con, aid, art, opts=None):
     """Friert Auftrag, Kunde, Positionen und Summen für einen Beleg ein."""
     opts = opts or {}
@@ -3642,6 +3675,8 @@ def beleg_snapshot(con, aid, art, opts=None):
     a = auftrag_laden(con, aid)
     k = auftrag_kunde(con, aid)
     ust_satz = fl(k.get("ust") if k.get("ust") is not None else 19)
+    # Regelsatz oder ermäßigter Satz: Es zählt der Satz, der am Leistungstag gilt (Einstellungen › Belege & Briefbogen › Umsatzsteuersätze)
+    ust_satz = rechtswerte.steuersatz_am(e.get("steuersaetze"), ust_satz, beleg_steuertag(con, opts, a, art))
     variante = opts.get("variante") if isinstance(opts.get("variante"), dict) else None
     if variante and variante.get("steuer") == "13b":
         ust_satz = 0.0   # Steuerschuldnerschaft des Leistungsempfängers
@@ -4534,6 +4569,20 @@ def rechnungsdatum_pruefen(con, datum):
                         "Nach dem Festschreiben lassen sich Datum und Nummer nicht mehr ändern (nur noch stornieren).", "Mit diesem Datum festschreiben")
 
 
+def steuersatz_pruefen(con, b):
+    """Vor dem Festschreiben: Der Entwurf ist mit einem Regel- oder ermäßigten Satz gerechnet, der am Leistungstag nicht gilt (der
+    Entwurf entstand vor einer Änderung des Steuersatzes oder das Leistungsdatum wurde danach geändert). Beim Festschreiben wird mit
+    dem Satz des Leistungstags neu gerechnet – das ändert den Betrag und geschieht deshalb erst nach Rückfrage."""
+    tag = b.get("leistungsdatum") or b.get("datum") or date.today().isoformat()
+    ist = fl(b.get("ust_satz"))
+    soll = rechtswerte.steuersatz_am(einstellungen(con).get("steuersaetze"), ist, tag)
+    if ist > 0 and abs(soll - ist) > 0.005:
+        kern.rueckfrage("steuersatz", f"Anderer Umsatzsteuersatz am Leistungsdatum\n\nDer Entwurf ist mit {de(ist)} % gerechnet. Am "
+                        f"{de_datum(tag)} (Leistungsdatum) gilt nach den Einstellungen der Satz {de(soll)} %.\n\n"
+                        f"Beim Festschreiben wird die Rechnung mit {de(soll)} % neu gerechnet; der Bruttobetrag ändert sich. "
+                        "Stimmt das Leistungsdatum nicht, abbrechen und es berichtigen.", "Mit " + de(soll) + " % festschreiben")
+
+
 def rechnung_plausibel(con, b):
     """Vor dem Festschreiben: Abschläge über der Auftragssumme, ein Zahlbetrag unter null und Positionen zu 0,00 € werden erst nach
     Rückfrage angenommen; ein Abschlag von 0 € oder weniger gar nicht."""
@@ -4570,7 +4619,9 @@ def beleg_festschreiben(con, bid):
         raise ApiFehler("Nur Rechnungen werden festgeschrieben.")
     if b["status"] != "entwurf":
         raise ApiFehler("Dieser Beleg ist bereits festgeschrieben.")
-    beleg_aktualisieren(con, bid) if b["art"] != "storno" else None
+    if b["art"] != "storno":
+        steuersatz_pruefen(con, b)   # fragt nach, bevor das Aktualisieren den Satz des Leistungstags einsetzt
+        beleg_aktualisieren(con, bid)
     b = beleg_laden(con, bid)
     berichtigung = b["daten"].get("modus") == "berichtigen"
     if b["art"] != "storno" and abs(b["brutto"]) < 0.005 and not berichtigung:
@@ -5079,7 +5130,7 @@ def autostart_setzen(con, aktiv, fenster):
     if not aktiv:
         if os.path.exists(pfad):
             os.remove(pfad)
-        return autostart_status()
+        return {**autostart_status(), "fenster": bool(fenster)}
     ziel = os.path.join(BASIS, "start.bat")
     ps = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:JR_LNK); $s.TargetPath=$env:JR_ZIEL; "
           "$s.Arguments=$env:JR_ARG; $s.WorkingDirectory=$env:JR_ORDNER; $s.WindowStyle=7; "
@@ -5093,7 +5144,7 @@ def autostart_setzen(con, aktiv, fenster):
         raise ApiFehler(f"Autostart konnte nicht eingerichtet werden: {f}")
     if not os.path.exists(pfad):
         raise ApiFehler("Autostart konnte nicht eingerichtet werden (Verknüpfung wurde nicht angelegt).")
-    return autostart_status()
+    return {**autostart_status(), "fenster": bool(fenster)}   # der eben gesetzte Stand; gespeichert ist er erst mit dem Ende der Anfrage
 
 
 def ort_warnung():
@@ -5363,7 +5414,7 @@ def beleg_archiv_pfad(b, bid):
     return None
 
 
-# Druckansicht: Gedruckt wird immer das PDF des Programms (dieselbe Datei wie in „PDF ansehen“, im Archiv und im Versand) –
+# Druckansicht: Gedruckt wird immer das PDF des Programms (dieselbe Datei wie unter „PDF“, im Archiv und im Versand) –
 # so kann der Ausdruck nicht vom abgelegten Beleg abweichen. Die Seite zeigt das PDF und öffnet das Druckfenster des Browsers.
 # Lässt sich kein PDF erzeugen, wird ersatzweise die Bildschirmfassung gedruckt (ohne Seitenzahlen).
 DRUCKANSICHT_JS = """(function () {
@@ -5566,6 +5617,17 @@ def einstellungen_oeffentlich(con):
     e["_widerruf_standard"] = {"hinweis": widerruf.HINWEIS, "belehrung": widerruf.BELEHRUNG, "erklaerung": widerruf.ERKLAERUNG,
                                "fehlt": widerruf.fehlende_angaben(firma_daten(e))}
     e["_kostenstellen"] = [k.get("kst") for k in vorgaben_kopie(e).get("kostenstellen", []) if k.get("kst")]
+    mw = mahnwesen.einstellung(e)
+    e["mahnwesen"] = {"basiszinsen": mw["eigene"], "stufen": mw["stufen"]}   # eigene Sätze und die Stufen mit allen Feldern
+    e["_rechtswerte"] = {"basiszinsen": [{"ab": ab, "satz": s} for ab, s in mw["basiszinsen"]], "basiszins": mw["basiszins"], "basiszins_offen": mw["offen"],
+                         "mindestlohn": [{"ab": ab, "satz": s, "minijob": personal.minijob_grenze(ab, e.get("mindestlohn"))}
+                                         for ab, s in personal.mindestlohn_liste(e.get("mindestlohn"))],
+                         "steuersaetze": [{"ab": ab, "regel": r, "ermaessigt": erm} for ab, r, erm in rechtswerte.steuerliste(e.get("steuersaetze"))],
+                         "hinweise": []}
+    if benutzer.ist_inhaber():
+        zinsen = any(s.get("zinsen") for s in mw["stufen"]) or bool(con.execute("SELECT 1 FROM mahnungen WHERE zinstage>0 LIMIT 1").fetchone())
+        lohn = bool(con.execute("SELECT 1 FROM mitarbeiter WHERE aktiv=1 AND lohnart IN ('stunde','gehalt','minijob','azubi') LIMIT 1").fetchone())
+        e["_rechtswerte"]["hinweise"] = rechtswerte.hinweise(e, zinsen, lohn)
     e["_pdf_ordner_standard"] = STANDARD_EINSTELLUNGEN["pdf_ordner"]
     e["_ort_warnung"] = " ".join(x for x in (NOTFALL["text"], ort_warnung(), SICHERUNG_PRUEFUNG["text"], SICHERUNG_EXTERN["text"], PROTOKOLL_PRUEFUNG["text"], BELEG_PRUEFUNG["text"],
                                                 projektsicherung.warnung(DATEN, projektsicherung.einstellung(e.get("projektsicherung")))) if x)
@@ -6896,7 +6958,7 @@ def mahnung_vorschlag(con, opid, q):
             "datum": datum_iso, "frist": frist_iso, **betr, "betreff": text_einsetzen(sc["betreff"], werte),
             "text": text_einsetzen(sc["text"], werte), "schluss": text_einsetzen(sc.get("schluss") or "", werte),
             "mit_zinsen": betr["zinstage"] > 0 or (ja(q.get("zinsen")) if q.get("zinsen") not in (None, "") else bool(sc.get("zinsen"))),
-            "mit_pauschale": betr["pauschale"] > 0, "unternehmer": unternehmer, "basiszins": cfg["basiszins"],
+            "mit_pauschale": betr["pauschale"] > 0, "unternehmer": unternehmer, "basiszins": cfg["basiszins"], "basiszins_offen": cfg["offen"],
             "kunde": k.get("kurzname") or "", "bisher": [{"kz": cfg["stufen"][min(m["stufe"], 2)]["kz"], "datum": m["datum"]} for m in bisher]}
 
 
@@ -6928,6 +6990,8 @@ def mahnung_erstellen(con, opid, d):
              "rechnung": {x: op.get(x) for x in ("nummer", "datum", "betrag", "faellig", "beleg_id")},
              "auftrag": {"nummer": a["nummer"] if a else "", "bezeichnung": a["bezeichnung"] if a else ""},
              "vorherige": [{"name": cfg["stufen"][min(m["stufe"], 2)]["name"], "datum": m["datum"]} for m in bisher]}
+    if betr.get("zinsabschnitte"):
+        daten["zinsabschnitte"] = betr["zinsabschnitte"]   # je Zeitraum Tage, Satz und Betrag – so steht es auf der Mahnung
     cur = con.execute(
         "INSERT INTO mahnungen (op_id, kunde_id, auftrag_id, stufe, nummer, datum, frist, offen, kosten_bisher, gebuehr, zinsen, zinstage, "
         "zinssatz, pauschale, gesamt, anschrift, betreff, text, schluss, daten, angelegt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -7753,8 +7817,9 @@ RECHNUNGSARTEN = ("abschlag", "rechnung", "storno", "gutschrift", "korrektur")
 _UMSATZ_ABZUG = {}
 
 
-def beleg_umsatz(b):
-    """Netto-Umsatz eines festgeschriebenen Rechnungsbelegs ohne doppelt gezählte Abschläge."""
+def beleg_umsatz(b, con=None):
+    """Netto-Umsatz eines festgeschriebenen Rechnungsbelegs ohne doppelt gezählte Abschläge. Mit con genügt eine Zeile ohne die
+    Spalte „daten“ (id, geaendert, status, netto): Der Beleginhalt wird dann nur gelesen, wenn das Ergebnis noch nicht gemerkt ist."""
     # Der Abzug der Abschläge steckt im Beleginhalt (JSON). Festgeschriebene Belege ändern sich nicht mehr – das Ergebnis je
     # Beleg und Änderungsstand merken, statt bei jedem Aufruf der Startseite alle Rechnungen neu zu zerlegen.
     try:
@@ -7762,7 +7827,11 @@ def beleg_umsatz(b):
     except (KeyError, IndexError, TypeError):
         schl = None
     if schl is None or schl not in _UMSATZ_ABZUG:
-        d = jl(b["daten"], {})
+        if con is not None and "daten" not in b.keys():
+            r = con.execute("SELECT daten FROM belege WHERE id=?", (b["id"],)).fetchone()
+            d = jl(r["daten"], {}) if r else {}
+        else:
+            d = jl(b["daten"], {})
         abzug = sum(x.get("netto", 0) for x in d.get("abzuege", []))
         if schl is None:
             return (b["netto"] or 0) - abzug
@@ -7770,6 +7839,42 @@ def beleg_umsatz(b):
             _UMSATZ_ABZUG.clear()
         _UMSATZ_ABZUG[schl] = abzug
     return (b["netto"] or 0) - _UMSATZ_ABZUG[schl]
+
+
+_AUFTRAG_KURZ = {}   # Auftrag → (Fingerabdruck seiner Zeilen, Nettosumme, Sollstunden)
+
+
+def auftraege_kurz(con, ids):
+    """Nettosumme und Sollstunden je Auftrag für die Startseite: {id: (netto, sollstunden)}. Die Kalkulation eines Auftrags wird
+    gemerkt und nur neu gerechnet, wenn sich an seinen Kalkulationswerten, Titeln oder Positionen etwas geändert hat. Erkannt wird
+    das am Inhalt der Zeilen, nicht an einem Zeitstempel. Bis Version 151 rechnete jeder Aufruf der Startseite alle laufenden
+    Aufträge durch (P7: bei 900 laufenden Aufträgen rund zwei Sekunden je Aufruf)."""
+    ids = [int(i) for i in ids]
+    r = con.execute("SELECT GROUP_CONCAT(wert, '|') FROM (SELECT wert FROM einstellungen WHERE schluessel IN ('bezug_eigen','lohnanteil_kst') ORDER BY schluessel)").fetchone()
+    allgemein = (r[0] or "").encode("utf-8", "replace")
+    fp = {i: hashlib.blake2b(allgemein, digest_size=16) for i in ids}
+    for n in range(0, len(ids), 400):
+        teil = ids[n:n + 400]
+        platz = ",".join("?" * len(teil))
+        for z in con.execute(f"SELECT id, kalk, titel, titel_druck FROM auftraege WHERE id IN ({platz})", teil):
+            fp[z["id"]].update(repr(tuple(z)).encode("utf-8", "replace"))
+        for z in con.execute(f"SELECT * FROM positionen WHERE auftrag_id IN ({platz}) ORDER BY auftrag_id, id", teil):
+            fp[z["auftrag_id"]].update(repr(tuple(z)).encode("utf-8", "replace"))
+    aus = {}
+    for i in ids:
+        stand = fp[i].digest()
+        c = _AUFTRAG_KURZ.get(i)
+        if not c or c[0] != stand:
+            try:
+                erg = auftrag_rechnen(con, i)
+                c = (stand, erg["netto"], round(erg["soll"]["stunden"], 1))
+            except ApiFehler:
+                c = (stand, 0, 0)
+            if len(_AUFTRAG_KURZ) > 50000:
+                _AUFTRAG_KURZ.clear()
+            _AUFTRAG_KURZ[i] = c
+        aus[i] = (c[1], c[2])
+    return aus
 
 
 def start_daten(con, jahr):
@@ -7797,8 +7902,10 @@ def start_daten(con, jahr):
             monate[y][m - 1] += u
         if y == vj and datum_iso <= stichtag_vj:
             umsatz_vj_bis_stichtag += u
-    for b in con.execute("SELECT * FROM belege WHERE status IN ('fest','storniert') AND art IN ('abschlag','rechnung','storno','gutschrift','korrektur')"):
-        u = beleg_umsatz(b)
+    # ohne den Beleginhalt (Spalte daten): Bei vielen Rechnungen ist er der größte Teil der Datenbank, gebraucht wird er nur einmal je Beleg
+    for b in con.execute("SELECT id, geaendert, status, netto, auftrag_id, datum, ust_satz FROM belege "
+                         "WHERE status IN ('fest','storniert') AND art IN ('abschlag','rechnung','storno','gutschrift','korrektur')").fetchall():
+        u = beleg_umsatz(b, con)
         umsatz_auftrag[b["auftrag_id"]] = umsatz_auftrag.get(b["auftrag_id"], 0) + u
         if not nach_zahlung:
             buchen(b["datum"], u, u * (1 + (b["ust_satz"] or 0) / 100))
@@ -7855,18 +7962,12 @@ def start_daten(con, jahr):
     for b in con.execute("SELECT id, auftrag_id, art, nummer, datum, netto, brutto, versendet FROM belege WHERE art IN ('angebot','kv') "
                          "ORDER BY datum, id"):
         (letzte_belege if b["versendet"] else entwuerfe)[b["auftrag_id"]] = dict(b)
-    for a in con.execute("SELECT a.*, k.kurzname AS kunde, k.telefon, k.email1, k.id AS kid FROM auftraege a "
-                         "JOIN kunden k ON k.id=a.kunde_id ORDER BY a.nummer"):
-        a = dict(a)
+    offen_zeilen = [dict(a) for a in con.execute("SELECT a.*, k.kurzname AS kunde, k.telefon, k.email1, k.id AS kid FROM auftraege a "
+                                                 "JOIN kunden k ON k.id=a.kunde_id ORDER BY a.nummer") if a["status"] not in st_ende]
+    kurz = auftraege_kurz(con, [a["id"] for a in offen_zeilen])
+    for a in offen_zeilen:
         a["telefon"] = (a["telefon"] or "").split("\n")[0]
-        if a["status"] in st_ende:
-            continue
-        try:
-            erg = auftrag_rechnen(con, a["id"])
-            a["netto"] = erg["netto"]
-            a["soll_stunden"] = round(erg["soll"]["stunden"], 1)
-        except ApiFehler:
-            a["netto"], a["soll_stunden"] = 0, 0
+        a["netto"], a["soll_stunden"] = kurz.get(a["id"], (0, 0))
         tage_alt = (heute_d - date.fromisoformat(a["angelegt"][:10])).days if a.get("angelegt") else 0
         ang = letzte_belege.get(a["id"])
         if a["status"] in st_ang and not ang and (a["status"] == st_ang[0] or a["id"] in entwuerfe):
@@ -8032,6 +8133,8 @@ def api(methode, teile, q, daten):
             con.execute("BEGIN IMMEDIATE")
         rid = int(teile[1]) if len(teile) > 1 and teile[1].isdigit() else None
         unter = teile[2] if len(teile) > 2 else None
+        if methode in ("POST", "PUT"):
+            kern.datumsfelder_pruefen(daten, res)   # unmögliche Datumsangaben ablehnen, bevor irgendetwas gespeichert wird
         if res in BEZUG_TABELLEN and (rid or methode == "POST"):
             bezug_pruefen(con, res, rid, daten)
 
@@ -8514,6 +8617,10 @@ def api(methode, teile, q, daten):
             if methode == "GET":
                 return einstellungen_oeffentlich(con)
             if methode == "PUT":
+                try:   # Art und Wertebereich jeder Einstellung prüfen, bevor irgendetwas gespeichert wird (einstpruefung.py)
+                    daten = einstpruefung.pruefen(daten, STANDARD_EINSTELLUNGEN)
+                except einstpruefung.Fehler as f:
+                    raise ApiFehler(str(f))
                 if "sicherung_ziel" in daten:   # neues Sicherungsziel: heutige Datenbanksicherung gleich dorthin kopieren
                     threading.Thread(target=lambda: (time.sleep(2), backup()), daemon=True).start()
                 if "rechnung_zusatz" in daten:

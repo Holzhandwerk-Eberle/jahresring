@@ -319,9 +319,9 @@ async function benutzerEinstellungen(z) {
         : E.netzwerk ? `<span style="color:var(--rot)">Eingeschaltet – wirkt nach dem nächsten Neustart des Programms.</span> Danach steht hier die Adresse fürs Handy.`
         : `<span class="hinweis">ausgeschaltet – das Programm ist nur hier am PC erreichbar.</span>`}</div>`)}
       ${netz.aktiv && (E.https || "aus") === "aus" ? zeile("", `<div class="kachel" style="border-left:4px solid var(--rot);margin:0"><b>Die Verbindung im Netzwerk ist unverschlüsselt.</b> Anmeldung und Daten gehen im Klartext durchs Netz; wer im selben Netzwerk mitliest, kann sie sehen. Empfohlen: unten „https zusätzlich“ wählen, die Geräte einrichten und danach auf „nur https“ stellen.</div>`) : ""}
-      ${zeile("Weitere Adressen", `<div class="spalte"><input id="nzHosts" value="${esc(E.netz_adressen || "")}" placeholder="z. B. buero.meinbetrieb.de" style="max-width:420px">
+      ${zeile("Weitere Adressen", `<div class="spalte"><input id="nzHosts" value="${esc(E.netz_adressen || "")}" placeholder="z. B. buero.meinbetrieb.de" style="max-width:min(420px,100%)">
         <span class="hinweis" style="margin-top:4px">Nur nötig, wenn das Programm im eigenen Netz unter einem eigenen Namen mit Punkt aufgerufen wird. Ohne Eintrag gelten: localhost, die IP-Adresse, der Name dieses PCs und Namen wie „pc.fritz.box“ oder „pc.local“. Mehrere durch Komma trennen.</span></div>`)}
-      ${zeile("Verschlüsselung (https)", `<div class="spalte"><select id="nzHttps" style="max-width:420px" ${E.netzwerk ? "" : "disabled"}>
+      ${zeile("Verschlüsselung (https)", `<div class="spalte"><select id="nzHttps" style="width:100%;max-width:420px" ${E.netzwerk ? "" : "disabled"}>
           <option value="aus" ${(E.https || "aus") === "aus" ? "selected" : ""}>aus – nur http (unverschlüsselt im Netzwerk)</option>
           <option value="zusaetzlich" ${E.https === "zusaetzlich" ? "selected" : ""}>https zusätzlich – beide Adressen funktionieren (zum Einrichten der Geräte)</option>
           <option value="nur" ${E.https === "nur" ? "selected" : ""}>nur https – andere Geräte werden auf die verschlüsselte Adresse umgeleitet</option></select>
@@ -840,7 +840,7 @@ async function monatsbelegSeite(mid, monat) {
   const d = await api(`monatsbeleg/${w.id}?monat=${monat}`);
   const kst = Object.entries(d.kostenstellen).sort((a, b) => b[1] - a[1]);
   z.innerHTML = `<div class="titel"><h2>Monatsbeleg</h2><div class="such">${w.html}<button class="btn" id="mbZur" title="Voriger Monat">‹</button><b style="padding:6px 4px">${monatName(monat)}</b><button class="btn" id="mbVor" title="Nächster Monat">›</button></div>
-      <div class="rechts"><a class="btn" href="/druck/monatsbeleg/${w.id}/${monat}.pdf" target="_blank">📄 PDF</a></div></div>
+      <div class="rechts"><a class="btn" href="/druck/monatsbeleg/${w.id}/${monat}.pdf" target="_blank">PDF</a></div></div>
     <div id="mbSig"></div>
     ${kontenKachel(d)}
     ${monatsTabelle(d)}
@@ -943,7 +943,7 @@ function unproduktivVorgabe(z) {
   z.innerHTML = `<div class="titel"><h2>Unproduktive Tätigkeiten</h2><span class="speicher"></span></div>
     <p class="hinweis" style="margin-top:-6px">Zeiten, die keinem Auftrag zugeordnet werden – sie stecken in den Gemeinkosten. Auf der Stempeluhr erscheinen sie unter „Ohne Auftrag“, in der Zeiterfassung im Bereich Mitarbeiter ebenso. Die Tätigkeiten auf Aufträgen sind die Kostenstellen (Reiter Zuschläge).</p>
     <div class="form" style="grid-template-columns:1fr">
-      ${zeile("Tätigkeiten", `<textarea id="zgk" rows="10" style="max-width:420px">${esc((E.zeit_gemeinkosten || []).join("\n"))}</textarea><span class="hinweis" style="padding-top:5px">eine je Zeile</span>`)}
+      ${zeile("Tätigkeiten", `<textarea id="zgk" rows="10" style="max-width:min(420px,100%)">${esc((E.zeit_gemeinkosten || []).join("\n"))}</textarea><span class="hinweis" style="padding-top:5px">eine je Zeile</span>`)}
     </div>`;
   $("#zgk").onchange = async e => {
     try { E = await api("einstellungen", {method: "PUT", body: {zeit_gemeinkosten: e.target.value.split("\n").map(s => s.trim()).filter(Boolean)}}); toast("Gespeichert"); }

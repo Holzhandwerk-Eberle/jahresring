@@ -49,7 +49,7 @@ async function werkstattSeite(z, a) {
         ${zeile("Positionen", `<div class="spalte"><label><input type="radio" name="wsPos" value="alle" ${wsWahl.pos ? "" : "checked"}> Alle Positionen</label>
           <label><input type="radio" name="wsPos" value="wahl" ${wsWahl.pos ? "checked" : ""}> Nur ausgewählte</label>
           <div id="wsPosListe" style="${wsWahl.pos ? "" : "display:none"};padding-left:22px">${haupt.map(p => `<label><input type="checkbox" data-pid="${p.id}" ${wsWahl.pos && wsWahl.pos.has(p.id) ? "checked" : ""}> ${esc(p.posnr)} · ${esc(kurz(klartext(p.text), 70))}${p.gesperrt ? ` <span class="hinweis">(gesperrt)</span>` : p.alternativ ? ` <span class="hinweis">(Alternative)</span>` : ""}</label>`).join("") || `<span class="hinweis">Keine Positionen</span>`}</div></div>`)}
-        ${zeile("Erstellen", `<a class="btn prim" id="wsAnsehen" target="_blank">${doc[1]} ansehen / drucken</a><button class="btn" id="wsPdf">PDF in Projektordner</button>`)}
+        ${zeile("Erstellen", `<a class="btn prim" id="wsAnsehen" target="_blank">${doc[1]} ansehen</a><button class="btn" id="wsPdf">PDF in Projektordner</button>`)}
       </div>
 
       <div class="sektion" style="margin-top:18px">Zuschnitt</div>
@@ -131,7 +131,7 @@ function auswertungSeite(z, a) {
         ${awWahl.art === "zeitbericht" ? zeile("Zeitraum", `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="date" id="zbVon"> bis <input type="date" id="zbBis">
           <select id="zbSort"><option value="ab">neueste zuerst</option><option value="auf">älteste zuerst</option></select>
           <span class="hinweis">leer = alle Zeiten; Mitarbeiter lassen sich im Bericht oben wählen</span></div>`) : ""}
-        ${zeile("Auswertung erstellen", `<a class="btn prim" id="awAnsehen" target="_blank">${doc[1]} ansehen / drucken</a><button class="btn" id="awPdf">PDF in Projektordner</button>${awWahl.art === "sollist" ? `<a class="btn" href="#/auftrag/${a.id}/sollist">Soll/Ist am Bildschirm</a>` : ""}`)}
+        ${zeile("Auswertung erstellen", `<a class="btn prim" id="awAnsehen" target="_blank">${doc[1]} ansehen</a><button class="btn" id="awPdf">PDF in Projektordner</button>${awWahl.art === "sollist" ? `<a class="btn" href="#/auftrag/${a.id}/sollist">Soll/Ist am Bildschirm</a>` : ""}`)}
       </div>`;
     $$("[data-art]", z).forEach(b => b.onclick = () => { awWahl.art = b.dataset.art; zeichnen(); });
     $$("[name=awA]", z).forEach(el => el.onchange = () => { awWahl.ausgabe = el.value; link(); });
@@ -169,7 +169,7 @@ function zuschnittEinstellungen() {
         <input name="etikett_hoehe" type="number" min="20" max="210" step="0.5" value="${esc(E.etikett_hoehe ?? 74)}" style="width:90px"> mm (Breite × Höhe)</span>
         <span class="hinweis">Größe der Etiketten im Etikettendrucker, 20 bis 210 mm. Gilt für die Teile- und Restetiketten des Zuschnittprogramms und für die QR-Etiketten von Material und Resten auf allen Geräten. Die Etiketten sind für 70 × 74 mm gezeichnet; bei einer anderen Größe wird der Inhalt als Ganzes passend skaliert und mittig gesetzt. Im Druckdialog dieselbe Papiergröße wählen.</span></div>`, true)}
     <div class="sektion">Material</div>
-    ${zeile("Lagerpreis", `<div class="spalte"><select name="lagerpreis_methode" style="max-width:360px">${[["mittel", "Mittelpreis (gleitender Durchschnitt)"], ["hoechst", "Höchster Einkaufspreis (letzte 12 Monate)"]].map(([v, l]) => `<option value="${v}" ${(E.lagerpreis_methode || "mittel") === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="hinweis">Preis, mit dem Lagerartikel in die Kalkulation übernommen und als Auftragskosten gebucht werden. Der Lagerwert wird immer zum Durchschnittspreis gerechnet.</span></div>`, true)}
+    ${zeile("Lagerpreis", `<div class="spalte"><select name="lagerpreis_methode" style="max-width:min(360px,100%)">${[["mittel", "Mittelpreis (gleitender Durchschnitt)"], ["hoechst", "Höchster Einkaufspreis (letzte 12 Monate)"]].map(([v, l]) => `<option value="${v}" ${(E.lagerpreis_methode || "mittel") === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="hinweis">Preis, mit dem Lagerartikel in die Kalkulation übernommen und als Auftragskosten gebucht werden. Der Lagerwert wird immer zum Durchschnittspreis gerechnet.</span></div>`, true)}
     ${zeile("Lagerorte", `<textarea name="lagerorte" rows="3" placeholder="ein Lagerort je Zeile">${esc((E.lagerorte || []).join("\n"))}</textarea>`)}`;
 }
 

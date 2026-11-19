@@ -93,7 +93,13 @@ EINST_FAKT = {"firma_anschrift": "Firmenanschrift", "firma_telefon": "Telefon de
               "google_kalender": "abonnierte Kalender", "netz_adressen": "zugelassene Adressen im Netz", "verfahrensdoku": "Verfahrensdokumentation",
               "datenschutzdoku": "Datenschutzunterlagen", "text_14b": "Text des Hinweises nach § 14b UStG", "rechnung_zusatz": "Zusatztext auf Rechnungen",
               "text_lohnanteil": "Text zum Lohnanteil", "zahlungsplan_text": "Text des Zahlungsplans", "kundengruppen": "Kundengruppen",
-              "lieferantengruppen": "Lieferantengruppen", "auftragsstatus": "Auftragsstatus", "wiedervorlage_regeln": "Regeln für Wiedervorlagen"}
+              "lieferantengruppen": "Lieferantengruppen", "auftragsstatus": "Auftragsstatus", "wiedervorlage_regeln": "Regeln für Wiedervorlagen", "steuersaetze": "Umsatzsteuersätze", "mindestlohn": "Mindestlohn",
+              "termin_typen": "Terminarten", "zuschnitt_zugabe": "Zugaben beim Zuschnitt", "leitstand_schritte": "Schritte im Leitstand",
+              "leitstand_status": "Status im Leitstand", "nachfass_tage": "Nachfassen nach (Tage)", "anfrage_tage": "Anfragen erinnern nach (Tage)",
+              "geburtstag_tage": "Geburtstage anzeigen (Tage vorher)", "posteingang_minuten": "Posteingang prüfen (Minuten)",
+              "tagesstunden": "Stunden je Arbeitstag", "etikett_breite": "Etikettenbreite", "etikett_hoehe": "Etikettenhöhe",
+              "unterschrift_hoehe": "Höhe der Unterschrift", "zahlungsplan_rest": "Zahlungsplan: Frist für den Rest (Tage)",
+              "seitenzahl_unten": "Seitenzahl: Abstand unten", "seitenzahl_rechts": "Seitenzahl: Abstand rechts", "ziel_stundensatz": "Ziel-Stundensatz"}
 # Einstellungen, die sich bei der täglichen Arbeit von selbst ändern oder nur die Anzeige betreffen: kein Protokolleintrag
 EINST_STILL = {"auskunft_speicherorte", "auskunft_empfaenger"}
 
@@ -162,6 +168,29 @@ def _teile(k, a, n, neu_gesetzt):
     return g[:10]
 
 
+# Gesetzliche Werte mit Stichtag: Bei ihnen steht der Inhalt im Protokoll, weil sie in Rechnungen, Mahnungen und Lohnhinweise eingehen.
+EINST_STICHTAG = {"steuersaetze": ("Umsatzsteuersätze", ("regel", "ermaessigt"), " %"), "mindestlohn": ("Mindestlohn", ("satz", "minijob"), " €"),
+                  "basiszinsen": ("Basiszinssätze", ("satz",), " %")}
+
+
+def _zahl_de(v):
+    try:
+        return f"{float(v):.2f}".replace(".", ",")
+    except (TypeError, ValueError):
+        return "?"
+
+
+def stichtage(k, liste):
+    """Liste der eigenen Einträge als Text: „ab 01.01.2028 20,00/7,00 %“; leer: „keine eigenen Einträge“."""
+    _, felder, einheit = EINST_STICHTAG[k]
+    aus = []
+    for x in liste if isinstance(liste, list) else []:
+        if isinstance(x, dict):
+            ab = str(x.get("ab") or "")
+            aus.append(f"ab {ab[8:10]}.{ab[5:7]}.{ab[:4]} " + "/".join(_zahl_de(x.get(f)) for f in felder if x.get(f) not in (None, "")) + einheit)
+    return ", ".join(aus)[:330] or "keine eigenen Einträge"
+
+
 def einstellungen(con, vorher, nachher, geheim_neu=()):
     teile, felder, werte = [], [], {}
     for k in sorted(set(vorher) | set(nachher)):
@@ -189,6 +218,17 @@ def einstellungen(con, vorher, nachher, geheim_neu=()):
                 felder.pop()
                 continue
             teile.append(f"{EINST_FAKT[k]} geändert ({', '.join(g)})")
+        elif k in EINST_STICHTAG:
+            teile.append(f"{EINST_STICHTAG[k][0]}: {stichtage(k, a)} → {stichtage(k, n)}")
+            werte[k] = [a, n]
+        elif k == "mahnwesen":   # Basiszinssätze mit Inhalt, Stufen und Gebühren wie bisher als Tatsache
+            az, nz = (a or {}).get("basiszinsen") if isinstance(a, dict) else None, (n or {}).get("basiszinsen") if isinstance(n, dict) else None
+            if (az or []) != (nz or []):
+                teile.append(f"{EINST_STICHTAG['basiszinsen'][0]}: {stichtage('basiszinsen', az)} → {stichtage('basiszinsen', nz)}")
+                werte["basiszinsen"] = [az or [], nz or []]
+            ohne = lambda d: {x: y for x, y in d.items() if x != "basiszinsen"} if isinstance(d, dict) else d   # noqa: E731
+            if ohne(a) != ohne(n):
+                teile.append(f"{EINST_FAKT[k]} geändert")
         else:
             teile.append(f"{EINST_FAKT.get(k) or 'Einstellung „' + k + '“'} geändert")
     if not teile:

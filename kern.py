@@ -199,6 +199,54 @@ def de_menge(x):
     return de(v, n)
 
 
+# Datumsfelder in Anfragen (F7): Unter diesen Namen kommt in allen Bereichen ein Kalendertag (JJJJ-MM-TT, teils mit Uhrzeit). Sie
+# werden an einer Stelle geprüft, bevor eine Anfrage verarbeitet wird – ein unmögliches Datum (30.02., Jahr 0026, „abc“) wird
+# abgelehnt statt gespeichert. Namen, die nur in einzelnen Bereichen ein Datum sind, stehen in DATUMSFELDER_BEREICH.
+DATUMSFELDER = {
+    "datum": "Datum", "leistungsdatum": "Leistungsdatum", "belegdatum": "Belegdatum", "faellig": "Fälligkeit", "skonto_bis": "Skonto bis",
+    "geburtstag": "Geburtstag", "geburtsdatum": "Geburtsdatum", "aufbewahren_bis": "Aufbewahren bis", "eintritt": "Eintritt", "austritt": "Austritt",
+    "fertigung": "Fertigung", "lieferung": "Lieferung", "plan_von": "Fertigung von", "plan_bis": "Fertigung bis", "nachgefasst": "Nachgefasst am",
+    "vertrag_am": "Vertragsschluss", "kaufdatum": "Kaufdatum", "garantie_bis": "Garantie bis", "pruefung_bis": "Prüfung bis",
+    "wartung_bis": "Wartung bis", "gueltig_bis": "Gültig bis", "zahlungsdatum": "Zahlungsdatum",
+}
+DATUMSFELDER_BEREICH = {
+    "termine": {"von": "Beginn", "bis": "Ende"}, "abwesenheiten": {"von": "Erster Tag", "bis": "Letzter Tag"},
+    "mahnungen": {"frist": "Frist"}, "zahlungen": {"bezahlt": "Bezahlt am"},
+}
+_DATUM_FORM = re.compile(r"(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?")
+JAHR_VON, JAHR_BIS = 1900, 2200
+
+
+def datum_pruefen(wert, name="Datum"):
+    """Prüft eine Datumsangabe aus einer Anfrage (JJJJ-MM-TT, auch mit Uhrzeit dahinter). Leer bleibt leer. Wirft ApiFehler mit dem
+    Namen des Felds, wenn der Tag im Kalender nicht vorkommt oder das Jahr nicht stimmen kann."""
+    if wert is None or wert == "":
+        return wert
+    if not isinstance(wert, str):
+        raise ApiFehler(f"{name}: Hier wird ein Datum erwartet.")
+    m = _DATUM_FORM.fullmatch(wert.strip())
+    if not m:
+        raise ApiFehler(f"{name}: „{wert[:25]}“ ist kein gültiges Datum.")
+    try:
+        date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        raise ApiFehler(f"{name}: Den {m.group(3)}.{m.group(2)}.{m.group(1)} gibt es im Kalender nicht.") from None
+    if not JAHR_VON <= int(m.group(1)) <= JAHR_BIS:
+        raise ApiFehler(f"{name}: Das Jahr {m.group(1)} kann nicht stimmen (erwartet wird ein Jahr zwischen {JAHR_VON} und {JAHR_BIS}).")
+    return wert.strip()
+
+
+def datumsfelder_pruefen(daten, bereich=""):
+    """Alle bekannten Datumsfelder einer Anfrage prüfen (nur die oberste Ebene; Importe prüfen ihre Zeilen selbst)."""
+    if not isinstance(daten, dict):
+        return
+    eigene = DATUMSFELDER_BEREICH.get(bereich) or {}
+    for k, v in daten.items():
+        name = DATUMSFELDER.get(k) or eigene.get(k)
+        if name and isinstance(v, str) and v:
+            daten[k] = datum_pruefen(v, name)
+
+
 def de_datum(iso):
     return f"{iso[8:10]}.{iso[5:7]}.{iso[:4]}" if iso and len(iso) >= 10 else ""
 

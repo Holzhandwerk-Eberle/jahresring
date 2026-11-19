@@ -356,7 +356,7 @@ async function lagerBuchen() {
   const ort = matFilter._lagerort || "";
   $("#inhalt").innerHTML = `
     <div class="titel"><h2>Lager buchen</h2><div class="such"><select id="lO">${opts(E.lagerorte || [], ort, "alle Lagerorte")}</select></div>
-      <div class="rechts"><button class="btn" id="lPdf" title="Lagerbestand mit Werten als PDF, z. B. für die Inventur zum Jahresende">📄 Lagerbestand als PDF</button></div></div>
+      <div class="rechts"><button class="btn" id="lPdf" title="Lagerbestand mit Werten als PDF, z. B. für die Inventur zum Jahresende">PDF</button></div></div>
     <div class="form" style="grid-template-columns:1fr 1fr">
       ${zeile("Material", `<input id="lMat" readonly placeholder="Material wählen …" style="cursor:pointer"><button class="btn" id="lMatW" title="Material aus dem Materialstamm wählen">🔍</button>`, true)}
       ${zeile("Buchung", `<div class="radio"><label><input type="radio" name="lA" value="zugang" checked> Lagerzugang</label><label><input type="radio" name="lA" value="abgang"> Lagerabgang</label><label><input type="radio" name="lA" value="inventur"> Inventur (Bestand setzen)</label></div>`, true)}
@@ -433,7 +433,7 @@ async function materialStatistik() {
       <div class="kachel"><div class="hinweis">Unter Mindestbestand</div><b style="font-size:22px" class="${s.knapp.length ? "rot" : ""}">${s.knapp.length}</b></div>
       <div class="kachel"><div class="hinweis">Auf Aufträge gebucht ${s.jahr}</div><b style="font-size:22px">${eur(s.kostenarten.reduce((a, x) => a + x.betrag, 0))}</b></div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr));gap:16px">
       <div><h3>Bestand je Materialart</h3><table class="liste"><tr><th>Art</th><th class="r">Einträge</th><th class="r">im Lager</th><th class="r">Lagerwert</th></tr>
         ${s.lagerwert.map(x => `<tr><td><a href="#/material/${x.kategorie}">${meta.kategorien[x.kategorie] || x.kategorie}</a></td><td class="r">${x.artikel}</td><td class="r">${x.gelagert}</td><td class="r">${eur(x.wert || 0)}</td></tr>`).join("") || `<tr><td colspan="4" class="hinweis">Noch kein Material angelegt.</td></tr>`}</table></div>
       <div><h3>Nachbestellen (unter Mindestbestand)</h3>${s.knapp.length ? `<table class="liste"><tr><th>Nummer</th><th>Bezeichnung</th><th class="r">Bestand</th><th class="r">Mindest</th></tr>

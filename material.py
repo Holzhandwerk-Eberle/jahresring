@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS auftragskosten (
     lager_abgang INTEGER DEFAULT 0, bemerkung TEXT DEFAULT '', angelegt TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_material_kat ON material(kategorie);
+CREATE INDEX IF NOT EXISTS ix_material_nummer ON material(nummer);
 CREATE INDEX IF NOT EXISTS ix_lager_mat ON lagerbewegungen(material_id);
 CREATE INDEX IF NOT EXISTS ix_ak_auftrag ON auftragskosten(auftrag_id);
 """
@@ -127,14 +128,23 @@ def zeilen(rows):
     return [dict(r) for r in rows]
 
 
-def naechste_nummer(con, kat):
+def naechste_zahl(con, kat):
+    """Nächste freie laufende Zahl der Materialart (höchste vergebene + 1)."""
     p = PRAEFIX.get(kat, "X")
     n = 1
     for r in con.execute("SELECT nummer FROM material WHERE nummer LIKE ?", (p + "%",)):
         rest = r["nummer"][len(p):]
         if rest.isdigit():
             n = max(n, int(rest) + 1)
-    return f"{p}{n:04d}"
+    return n
+
+
+def nummer_text(kat, n):
+    return f"{PRAEFIX.get(kat, 'X')}{n:04d}"
+
+
+def naechste_nummer(con, kat):
+    return nummer_text(kat, naechste_zahl(con, kat))
 
 
 def werte_aus(d):
@@ -226,8 +236,10 @@ def anlegen(con, d):
     return laden(con, cur.lastrowid)
 
 
-def aendern(con, mid, d):
-    alt = laden(con, mid)
+def aendern(con, mid, d, alt=None, zurueck=True):
+    """alt: schon geladene Zeile des Materials; zurueck=False: ohne erneutes Laden. Beides spart bei Massenänderungen
+    (Preisimport mit zehntausenden Preisen) drei Abfragen je Material."""
+    alt = alt or laden(con, mid)
     w = werte_aus(d)
     w.pop("kategorie", None) if d.get("kategorie") not in KATEGORIEN else None
     # Die Nummer ist der feste Schlüssel des Werkstoffs (Stücklisten, CAD-Import, Lagerbuchungen): nach dem Anlegen nicht änderbar
@@ -250,7 +262,7 @@ def aendern(con, mid, d):
         return alt
     w["geaendert"] = jetzt()
     con.execute(f"UPDATE material SET {','.join(k + '=?' for k in w)} WHERE id=?", list(w.values()) + [mid])
-    return laden(con, mid)
+    return laden(con, mid) if zurueck else None
 
 
 def kopieren(con, mid):

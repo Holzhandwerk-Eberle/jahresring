@@ -93,7 +93,7 @@ const gleich = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const archivDatei = fs.readdirSync(path.join(DATEN, 'belege', jahr)).filter(f => reNr && f.includes(reNr) && f.endsWith('.pdf'))[0] || 'fehlt.pdf';
   const archiv = fs.existsSync(path.join(DATEN, 'belege', jahr, archivDatei)) ? fs.readFileSync(path.join(DATEN, 'belege', jahr, archivDatei)) : Buffer.alloc(0);
   const pFest = await holen(`/druck/${re.id}.pdf`, 'fest.pdf'), pFest2 = await holen(`/druck/${re.id}.pdf`, 'fest2.pdf');
-  ok('„PDF ansehen“ einer festgeschriebenen Rechnung liefert Byte für Byte die Datei aus dem Archiv', archiv.length > 500 && archiv.equals(fs.readFileSync(pFest.datei)) && archiv.equals(fs.readFileSync(pFest2.datei)), [archiv.length, fs.statSync(pFest.datei).size]);
+  ok('„PDF“ einer festgeschriebenen Rechnung liefert Byte für Byte die Datei aus dem Archiv', archiv.length > 500 && archiv.equals(fs.readFileSync(pFest.datei)) && archiv.equals(fs.readFileSync(pFest2.datei)), [archiv.length, fs.statSync(pFest.datei).size]);
   ok('das Archiv-PDF bleibt dabei unverändert', archiv.length > 500 && archiv.equals(fs.readFileSync(path.join(DATEN, 'belege', jahr, archivDatei))));
   await vergleich('Drucken, festgeschriebene Rechnung', await drucke(`/druck/${re.id}?drucken=1`), pFest.datei);
 

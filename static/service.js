@@ -177,7 +177,7 @@ async function serviceSeite(z, sub) {
         ${zeile("Von / bis", `<input type="date" id="exVon" value="${vormonat[0]}"><input type="date" id="exBis" value="${vormonat[1]}">
           <span style="display:flex;gap:6px;flex-wrap:wrap;padding-top:2px"><button class="btn" data-zr="vm">Vormonat</button><button class="btn" data-zr="q">letztes Quartal</button><button class="btn" data-zr="vj">Vorjahr</button><button class="btn" data-zr="j">laufendes Jahr</button></span>`)}
       </div>
-      <div class="ex-karten" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:12px">
+      <div class="ex-karten" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:12px;margin-top:12px">
         <div class="kachel"><h3 style="margin-top:0">Belegpaket (Buchführung, Archiv, Steuerberater)</h3>
           <p>Alle festgeschriebenen Ausgangsrechnungen (PDF mit ZUGFeRD-Daten, ggf. XRechnung), alle Eingangsrechnungen im Originalformat und Listen als Excel-taugliche CSV:
           Rechnungsausgangsliste, Eingangsrechnungen, Zahlungseingänge. Dazu eine Prüfung, ob die Rechnungsnummern lückenlos sind.</p>
@@ -203,11 +203,11 @@ async function serviceSeite(z, sub) {
             <label title="Zugeordnete Kontoumsätze: Bank an Debitor/Kreditor bzw. an das Sachkonto. Nur, wenn die Kanzlei die Bankumsätze nicht selbst abruft."><input type="checkbox" id="dvK" ${dv.bankumsaetze ? "checked" : ""}> Bankumsätze</label>
             <label title="Nur zusammen mit den Bankumsätzen: gewährtes Skonto als Skontokonto an Debitor, erhaltenes als Kreditor an Skontokonto. Ohne diese Zeilen bleibt auf dem Personenkonto der Skontobetrag offen."><input type="checkbox" id="dvSk" ${dv.skonto ? "checked" : ""}> Skonto als eigene Buchung</label>`)}
         </div>
-        <table class="liste" style="margin-top:8px"><tr><th>Konto für</th><th>Kontonummer</th><th class="hinweis">Vorgabe SKR ${esc(dv.skr)}</th></tr>
+        <table class="liste" style="margin-top:8px"><tr><th>Konto für</th><th>Kontonummer</th><th>Vorgabe SKR ${esc(dv.skr)}</th></tr>
           ${Object.keys(dv.texte).map(k => `<tr><td>${esc(dv.texte[k])}</td><td><input data-dvk="${k}" value="${dv.konten[k]}" inputmode="numeric" style="width:110px"></td><td class="hinweis">${dv.standard[k]}</td></tr>`).join("")}</table>
         <p class="hinweis">Abweichende Aufwandskonten für einzelne Lieferanten (z. B. Fremdleistungen, Werkzeuge, Bürobedarf) beim Lieferanten unter „DATEV-Aufwandskonto“ eintragen.
           Die Vorgaben sind übliche Automatikkonten; maßgeblich ist der Kontenplan der Kanzlei.</p>
-        <button class="btn" id="dvSp">DATEV-Einstellungen speichern</button></details>
+        <button class="btn prim" id="dvSp">DATEV-Einstellungen speichern</button></details>
       <details class="kachel" style="margin-top:12px" id="kontenplan"><summary><b>Kontenplan (SKR ${esc(dv.skr)})</b> <span class="hinweis">– Sachkonten für Kontoumsätze und Lieferanten</span></summary>
         <div id="kpInhalt" style="margin-top:8px"></div></details>
       <div id="exErg" style="margin-top:12px"></div>
@@ -424,7 +424,7 @@ async function projektSicherungSeite(z) {
     </div>
     <div class="sektion" style="margin-top:18px">Dateien zurückholen</div>
     ${d.staende.length ? `<p class="hinweis">Stand wählen, zum gewünschten Ordner blättern und zurückholen. Die Dateien landen im Projektordner unter „_Wiederhergestellt“ – vorhandene Dateien werden nie überschrieben.</p>
-      <div class="zeile"><label>Stand</label><div><select id="psStand" style="max-width:520px">${d.staende.map(s => `<option value="${esc(s.stand)}">${esc(s.text)}</option>`).join("")}</select></div></div>
+      <div class="zeile"><label>Stand</label><div><select id="psStand" style="max-width:min(520px,100%)">${d.staende.map(s => `<option value="${esc(s.stand)}">${esc(s.text)}</option>`).join("")}</select></div></div>
       <div id="psInhalt" class="sich-liste" style="margin-top:8px"></div>` : `<p class="hinweis">Noch keine Sicherung des Projektordners vorhanden.</p>`}
     ${lauf.ergebnis && !lauf.laeuft ? `<p style="margin-top:10px">Zuletzt zurückgeholt: ${lauf.ergebnis.dateien} Dateien (${groesseText(lauf.ergebnis.bytes)}) nach <code>${esc(lauf.ergebnis.ordner || "")}</code>${lauf.ergebnis.fehler.length ? ` · <span style="color:var(--rot)">${lauf.ergebnis.fehler.length} Fehler: ${esc(lauf.ergebnis.fehler[0])}</span>` : ""}</p>` : ""}`;
   const neuLaden = () => { if (location.hash.includes("service/projekte")) projektSicherungSeite(z); };

@@ -66,7 +66,7 @@ async function vorlageDialog({a = null, titel = 0, pid = null, vorlageId = null,
         ${zahlen.map(p => `<label style="display:flex;flex-direction:column;gap:3px;font-size:13px"><span>${esc(p.name || p.k)} <span class="hinweis">${esc(p.k)}${p.einheit && p.typ !== "auswahl" ? ", " + esc(p.einheit) : ""}</span></span>
           ${p.typ === "auswahl" ? `<select data-vs="${esc(p.k)}">${vlOptionen(p).map(([w, t]) => `<option value="${w}" ${+ein[p.k] === w ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>`
             : `<input class="zahl" data-vp="${esc(p.k)}" value="${esc(vlZahl(ein[p.k]))}">`}</label>`).join("")}</div>
-      ${mats.length ? `<div class="sektion" style="font-size:13px">Material</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:6px 12px;margin-bottom:8px">
+      ${mats.length ? `<div class="sektion" style="font-size:13px">Material</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:6px 12px;margin-bottom:8px">
         ${mats.map(p => `<div style="display:flex;gap:6px;align-items:center"><span style="flex:0 0 120px;font-size:13px">${esc(p.name || p.k)}</span>
           <button class="btn" data-vm="${esc(p.k)}" style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ein[p.k] ? esc(namen[p.k] || "gewählt") : "wählen …"}</button>
           ${ein[p.k] ? `<button class="ib" data-vmx="${esc(p.k)}" title="ohne Material">✕</button>` : ""}</div>`).join("")}</div>` : ""}

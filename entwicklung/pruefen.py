@@ -189,8 +189,11 @@ def pruefung(name, skript, merkmal, frisch, grenze, wo):
     if not gut:
         if rc == -1:
             print(f"        Zeitgrenze von {grenze} Sekunden überschritten", flush=True)
-        zeilen = [z for z in text.splitlines() if z.startswith("FEHLER") or "Error" in z or "Traceback" in z][:30] or text.splitlines()[-30:]
-        print("\n".join("        " + z[:700] for z in zeilen), flush=True)
+        alle = text.splitlines()
+        zeilen = [z for z in alle if z.startswith("FEHLER")][:40]
+        if "Traceback (most recent call last)" in text or not zeilen:   # Abbruch: das Ende der Ausgabe zeigt, wo
+            zeilen += ["…"] + alle[-25:]
+        print("\n".join("        " + z[:900] for z in zeilen), flush=True)
     return gut
 
 

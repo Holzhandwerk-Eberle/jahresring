@@ -82,7 +82,8 @@ else:
         ok("Die Verknüpfung startet start.bat im Programmordner, ohne Fenster (kein-browser), minimiert", gleich(ziel[0], I + "/start.bat") and ziel[1] == "kein-browser" and gleich(ziel[2], I) and ziel[3] == "7", (aus, err))
         x = A("POST", "autostart", {"aktiv": True, "fenster": True})
         aus2 = ps("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:JR_L); Write-Output ('[' + $s.Arguments + ']')", env=dict(os.environ, JR_L=lnk))[0]
-        ok("Mit „Fenster öffnen“ startet die Verknüpfung ohne den Zusatz", aus2 == "[]" and x.get("fenster") is True, (aus2, x))
+        ok("Mit „Fenster öffnen“ startet die Verknüpfung ohne den Zusatz; die Antwort nennt den neuen Stand", aus2 == "[]" and x.get("fenster") is True, (aus2, x))
+        ok("Die Einstellungen zeigen danach denselben Stand", (A("GET", "einstellungen").get("_autostart") or {}).get("fenster") is True)
         x = A("POST", "autostart", {"aktiv": False, "fenster": False})
         ok("Autostart ausschalten entfernt die Verknüpfung", x["_s"] == 200 and x.get("aktiv") is False and not os.path.exists(lnk), x)
     finally:
@@ -145,7 +146,7 @@ except Exception as f:  # noqa: BLE001
 print("== Programmstart über start.bat")
 SB = T + "/v25/startbat"; ZP = SB + "/Jahresring"; PORT2 = 8795; U2 = f"http://127.0.0.1:{PORT2}"
 def stoppen_hart():
-    ps("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*startbat*Jahresring*app.py*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
+    ps("Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'python*' -and $_.CommandLine -like '*startbat*Jahresring*app.py*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
 roh_bat = open(Q + "/start.bat", "rb").read()
 ok("start.bat hat Windows-Zeilenenden (CRLF) und nur ASCII-Zeichen", roh_bat.count(b"\r\n") == roh_bat.count(b"\n") > 50 and all(b < 128 for b in roh_bat), (roh_bat.count(b"\r\n"), roh_bat.count(b"\n")))
 for dn in ("einrichten.bat", "Handy-Freigabe.bat"):
@@ -169,8 +170,10 @@ try:
             time.sleep(0.5)
     soll = re.search(r'^VERSION = "([^"]+)"', open(Q + "/app.py", encoding="utf-8").read(), re.M).group(1)
     ok("Das über start.bat gestartete Programm antwortet und nennt seine Version", oben and v.get("version") == soll, (oben, v if oben else ausgabe[-600:]))
-    aus, err, rc_ = ps("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*startbat*Jahresring*app.py*' } | ForEach-Object { Write-Output ($_.Name + '|' + $_.ExecutablePath + '|' + $_.CommandLine) }")
+    aus, err, rc_ = ps("Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'python*' -and $_.CommandLine -like '*startbat*Jahresring*app.py*' } | ForEach-Object { Write-Output ($_.Name + '|' + $_.ExecutablePath + '|' + $_.CommandLine) }")
     hinweis("Prozess nach start.bat: " + aus.replace("\r", "").replace("\n", " ;; ")[:500])
+    pyv = re.search(r"Python\\(\d+\.\d+\.\d+)\\", aus)
+    if pyv: hinweis(f"start.bat hat Python {pyv.group(1)} gewählt (das neueste auf diesem Rechner); das Programm läuft damit.")
     ok("Es läuft im Hintergrund über pythonw.exe (ohne Konsolenfenster) mit dem Zusatz --hintergrund", "pythonw.exe|" in aus.lower() and "--hintergrund" in aus and "--kein-browser" in aus, aus[:600])
     time.sleep(3)
     pt = ZP + "/daten/protokoll.txt"; ptext = open(pt, encoding="utf-8", errors="replace").read() if os.path.isfile(pt) else ""
@@ -193,7 +196,7 @@ try:
         try: urllib.request.urlopen(U2 + "/api/version", timeout=2).read(); time.sleep(0.5)
         except Exception: zu = True; break  # noqa: BLE001
     ok("„Beenden“ in der Oberfläche beendet das Programm samt Symbol", sb_ == 200 and zu, (sb_, bb_[:200], zu))
-    aus, _, _ = ps("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*startbat*Jahresring*app.py*' } | Measure-Object | ForEach-Object { $_.Count }")
+    aus, _, _ = ps("Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'python*' -and $_.CommandLine -like '*startbat*Jahresring*app.py*' } | Measure-Object | ForEach-Object { $_.Count }")
     ok("Danach läuft kein Prozess des Programms mehr", aus.strip() in ("0", ""), aus)
 except Exception as f:  # noqa: BLE001
     import traceback

@@ -532,6 +532,17 @@ def zahlungsauftraege(con, offen_nur=True):
         "FROM zahlungen z LEFT JOIN lieferanten l ON l.id=z.lieferant_id " + ("WHERE IFNULL(z.bezahlt,'')='' " if offen_nur else "") + "ORDER BY z.faellig, z.id"))
 
 
+def posten_vorbereiten(ops):
+    """Je offenem Posten einmal bereitlegen, was jeder Umsatz zum Vergleich braucht: die Nummer in Suchform, ihre Ziffern und den
+    Skontobetrag. Bis Version 151 entstand das je Umsatz und Posten neu – bei 2.000 offenen Rechnungen und 800 offenen Umsätzen
+    dauerte jeder Aufruf der Kontoauszüge gut zwei Sekunden (P5)."""
+    for o in ops:
+        if "_z" not in o:
+            n = _norm(o.get("nummer")).strip()
+            o["_n"], o["_z"], o["_sk"] = (n if len(n) >= 4 else ""), _ziffern(n), skonto_betrag(o)
+    return ops
+
+
 def vorschlag(u, ops, zas, alle_zas=None, konten=None, sepa=None):
     """Vorschlag für einen Umsatz: {"sicher": bool, "grund": text, "ziele": [{"art", "id", "betrag", "text"}]} oder None.
     konten: bekannte Zahlerkonten {(IBAN, Kunde)}; sepa: eigene SEPA-Dateien (für Sammelüberweisungen)."""
@@ -541,7 +552,10 @@ def vorschlag(u, ops, zas, alle_zas=None, konten=None, sepa=None):
     if u.get("rueck"):
         return None   # Rückbuchung: kein Vorschlag, liste() nennt die betroffene Zahlung
     if b > 0:
-        treffer = [o for o in ops if _kommt_vor(o["nummer"], text, ziffern)]
+        if ops and "_z" not in ops[0]:
+            posten_vorbereiten(ops)
+        # Vorprüfung über die Ziffern: Fehlen die Ziffern der Nummer im Text, kann die Nummer nicht vorkommen (spart das Suchmuster)
+        treffer = [o for o in ops if o["_n"] and o["_z"] in ziffern and _muster(o["_n"]).search(text)]
         if treffer:
             summe = kfm(sum(o["offen"] + o["mahnkosten"] for o in treffer))
             summe_ohne_mk = kfm(sum(o["offen"] for o in treffer))
@@ -583,7 +597,7 @@ def vorschlag(u, ops, zas, alle_zas=None, konten=None, sepa=None):
             return {"sicher": name_passt or konto_passt, "grund": grund,
                     "ziele": [{"art": "op", "id": o["id"], "betrag": b, "text": f"{o['art']} {o['nummer']} · {o['kurzname'] or ''}"}]}
         if not gleich:   # ohne Rechnungsnummer, aber der Betrag ist genau eine Rechnung abzüglich des vereinbarten Skontos
-            mit_skonto = [o for o in ops if skonto_betrag(o) and abs(b - (o["offen"] - skonto_betrag(o))) < 0.01]
+            mit_skonto = [o for o in ops if o["_sk"] and abs(b - (o["offen"] - o["_sk"])) < 0.01]
             if len(mit_skonto) == 1:
                 o = mit_skonto[0]
                 name_passt, konto_passt = kennt(o)

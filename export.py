@@ -62,6 +62,20 @@ def ordner():
     return p
 
 
+def _ablegen(ziel):
+    """Fertig geschriebene Datei (ziel + ".part") an ihren Platz legen. Ist eine frühere Fassung noch in einem anderen Programm
+    geöffnet, lässt Windows das Ersetzen nicht zu – dann eine verständliche Meldung statt „Zugriff verweigert“."""
+    try:
+        os.replace(ziel + ".part", ziel)
+    except PermissionError:
+        try:
+            os.remove(ziel + ".part")
+        except OSError:
+            pass
+        raise Fehler(f"Die Datei {os.path.basename(ziel)} aus einem früheren Export ist noch in einem anderen Programm geöffnet. "
+                     "Bitte dort schließen und den Export wiederholen.")
+
+
 # ---------------------------------------------------------------- Daten sammeln
 def rechnungen(con, von, bis):
     aus = []
@@ -207,7 +221,7 @@ def belegpaket(con, von, bis, wer=""):
                 "ggf. XRechnung-Datei. Eingangsrechnungen: unveränderte Originaldatei wie empfangen.",
                 "Die CSV-Dateien lassen sich mit Excel öffnen (Trennzeichen Semikolon)."]
         z.writestr("LIESMICH.txt", "\r\n".join(info).encode("utf-8"))
-    os.replace(ziel + ".part", ziel)
+    _ablegen(ziel)
     return {"datei": name, "groesse": os.path.getsize(ziel), "rechnungen": len(rech), "eingangsrechnungen": len(zahl),
             "zahlungseingaenge": len(eing), "luecken": luecken, "ohne_pdf": fehlende_pdf, "ohne_datei": fehlende_datei, "summen": summe}
 
@@ -378,7 +392,7 @@ def pruefer_export(con, von, bis, wer=""):
             "", "Belege/Ausgangsrechnungen: Archiv-PDF der festgeschriebenen Rechnungen (ZUGFeRD-Datensatz eingebettet), XRechnung.",
             "Belege/Eingangsrechnungen: Lieferantenrechnungen im Originalformat wie empfangen.",
             "Die Finanzbuchhaltung (Hauptbuch) führt der Steuerberater; deren Daten sind nicht Bestandteil dieses Exports."]).encode("utf-8"))
-    os.replace(ziel + ".part", ziel)
+    _ablegen(ziel)
     return {"datei": name, "groesse": os.path.getsize(ziel), "tabellen": {t[1]: len(t[5]) for t in tabellen}}
 
 
@@ -662,6 +676,6 @@ def datev_export(con, von, bis, wer=""):
             p = eingangsdatei(r)
             if p:
                 z.write(p, "Belege/Eingangsrechnungen/" + os.path.basename(p))
-    os.replace(ziel + ".part", ziel)
+    _ablegen(ziel)
     return {"datei": name, "groesse": os.path.getsize(ziel), "buchungen": len(buchungen), "ausgang": summe_aus, "eingang": summe_ein, "bank": n_bank,
             "warnungen": warnungen, "csv": csv_name}

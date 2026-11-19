@@ -202,10 +202,11 @@ skg = [l for l in zeilen if l[6] == "8736"]; ske = [l for l in zeilen if l[7] ==
 ok("gewährtes Skonto: 23,80 € Soll 8736 an Debitor 10000 mit der Rechnungsnummer", len(skg) == 1 and skg[0][0] == "23,80" and skg[0][1] == '"S"' and skg[0][7] == "10000" and f_["nummer"].replace("-", "") in skg[0][10].replace("-", ""), skg)
 ok("erhaltenes Skonto: 30,00 € Kreditor 70000 an 3736 mit der Belegnummer", len(ske) == 1 and ske[0][0] == "30,00" and ske[0][6] == "70000" and "LS-1" in ske[0][10], ske)
 ok("Zahlungsauftrag ohne Skonto erzeugt keine Skontozeile", not any("LS-2" in l[10] and (l[7] in ("3731", "3736", "3730")) for l in zeilen))
-info = z.read("LIESMICH.txt").decode("utf-8")
+info = z.read("LIESMICH.txt").decode("utf-8"); z.close()   # schließen: Unter Windows lässt sich eine geöffnete Datei nicht ersetzen
 ok("Begleittext nennt die Skontobuchungen und die Abstimmung mit der Kanzlei", "Skonto" in info and "Kanzlei" in info and "Gewährte Skonti 19 % USt: 8736" in info, info[-900:])
 A("PUT", "einstellungen", {"datev": {"berater": "12345", "mandant": "100", "skr": "04", "bankumsaetze": True, "skonto": False}})
 dv2 = A("POST", "service/datev", {"von": H[:4] + "-01-01", "bis": H[:4] + "-12-31"})
+ok("zweiter DATEV-Stapel für denselben Zeitraum ersetzt den ersten", dv2["_s"] == 200 and dv2.get("datei") == dv["datei"], dv2)
 z = zipfile.ZipFile(D + "/exporte/" + dv2["datei"]); zeilen2 = [l.split(";") for l in z.read(next(n for n in z.namelist() if n.startswith("EXTF"))).decode("cp1252").split("\r\n")[2:] if l]
 ok("abgeschaltet: keine Skontozeilen (SKR 04: 4736, 5736)", not any(l[6] in ("4736", "5736") or l[7] in ("4736", "5736") for l in zeilen2), [l[:8] for l in zeilen2])
 cfg = A("GET", "service/datev")

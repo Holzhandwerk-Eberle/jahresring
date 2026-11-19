@@ -108,7 +108,7 @@ async function ansichtBrief(id) {
   if (b.auftrag_id) await auftragUnterseite(b.auftrag_id, `Brief ${esc(b.nummer)} an ${esc(b.kunde || b.lieferant || "")} · ${esc(b.status || "")}`, "briefe");
   else kopf({krumen: [["Briefe", "#/briefe"]], zurueck, kontext: `Brief <b>${esc(b.nummer)}</b> an ${esc(b.kunde || b.lieferant || "")}${b.auftragsnr ? ` · Auftrag <a href="#/auftrag/${b.auftrag_id}">${esc(b.auftragsnr)}</a>` : ""} · ${esc(b.status || "")}`});
   z.innerHTML = `<div class="titel"><h2>Brief ${esc(b.nummer)}</h2><span class="speicher"></span>
-      <div class="rechts" style="flex-wrap:wrap"><button class="btn prim" id="brMail">✉ Per E-Mail senden</button><a class="btn" href="/druck/brief/${id}" target="_blank">Ansehen / Drucken</a>
+      <div class="rechts" style="flex-wrap:wrap"><button class="btn prim" id="brMail">✉ Per E-Mail senden</button><a class="btn" href="/druck/brief/${id}" target="_blank">Ansehen</a>
         <button class="btn" id="brPdf">PDF ablegen</button><button class="ib" id="brDel" title="Brief löschen">${ic("loeschen")}</button></div></div>
     <div class="form" id="brF">
       ${zeile("Datum", `<input type="date" data-f="datum" value="${esc(b.datum || "")}">`)}
@@ -198,7 +198,7 @@ async function ansichtStatistik() {
     ${statKachel("Ø Auftragswert", s.durchschnitt_auftrag ? eur(s.durchschnitt_auftrag) : "–")}
     ${statKachel("Zahlungsdauer", s.zahlungsdauer != null ? n2(s.zahlungsdauer, 0) + " Tage" : "–", "Ø vom Rechnungsdatum bis zur Zahlung")}
     ${statKachel("Offene Forderungen", eur(s.offen))}
-    <div class="kachel" style="grid-column:span 2"><h4>Top-Kunden nach Umsatz</h4>${s.top_kunden.length ? `<table class="liste"><tr><th>Kunde</th><th class="r">Umsatz</th><th class="r">Anteil</th></tr>
+    <div class="kachel breit2"><h4>Top-Kunden nach Umsatz</h4>${s.top_kunden.length ? `<table class="liste"><tr><th>Kunde</th><th class="r">Umsatz</th><th class="r">Anteil</th></tr>
       ${s.top_kunden.map(t => `<tr class="klick" data-hash="#/kunde/${t.id}/statistik"><td>${esc(t.nummer)} ${esc(t.kurzname)}</td><td class="r">${eur(t.umsatz)}</td><td class="r">${n2(t.anteil, 1)} %</td></tr>`).join("")}</table>` : `<span class="hinweis">noch keine Rechnungen</span>`}</div>
     ${umsatzBalken("Umsatz je Jahr (netto)", s.umsatz_jahr, "jahr")}${umsatzBalken("Umsatz nach Kundengruppe", s.umsatz_gruppe, "gruppe")}
     ${balken("Kunden nach Gruppe", s.kunden_gruppe, "gruppe")}${balken("Neukunden je Jahr", s.neukunden_jahr, "jahr")}

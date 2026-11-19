@@ -249,7 +249,7 @@ async function asGbDetail(id) {
   };
   const zeichnen = () => {
     z.innerHTML = `<div class="titel"><h2>${esc(g.nummer)} ${esc(g.titel)}</h2><span class="speicher"></span>
-      <div class="rechts"><a class="btn" href="/druck/arbeitsschutz/gb/${id}" target="_blank">Ansehen</a><a class="btn" href="/druck/arbeitsschutz/gb/${id}.pdf" target="_blank">📄 PDF</a>
+      <div class="rechts"><a class="btn" href="/druck/arbeitsschutz/gb/${id}" target="_blank">Ansehen</a><a class="btn" href="/druck/arbeitsschutz/gb/${id}.pdf" target="_blank">PDF</a>
         ${ICH.rechte.inhaber && g.status !== "archiv" ? `<button class="btn prim" id="gbFrei">✍ Freigeben</button>` : ""}
         ${asDarf() ? (g.status === "archiv" ? `<button class="btn" id="gbReakt">Wieder aufnehmen</button>` : g.fassungen.length ? `<button class="btn" id="gbArch">Archivieren</button>` : `<button class="btn pk rot" id="gbDel">${ic("loeschen")} Löschen</button>`) : ""}</div></div>
       <div id="gbStatus" class="hinweis" style="margin:-6px 0 10px"></div>
@@ -380,7 +380,7 @@ async function asBaDetail(id) {
   const reihenfolge = b.art === "gefahrstoff" ? ["GHS-Gefahrenpiktogramme", "Gebotszeichen", "Warnzeichen", "Verbotszeichen", "Rettungszeichen", "Brandschutzzeichen"]
     : ["Gebotszeichen", "Warnzeichen", "Verbotszeichen", "GHS-Gefahrenpiktogramme", "Rettungszeichen", "Brandschutzzeichen", "Leiter-Piktogramme"];
   z.innerHTML = `<div class="titel"><h2>${esc(b.nummer)} ${esc(b.titel)}</h2><span class="speicher"></span>
-      <div class="rechts"><a class="btn" href="/druck/arbeitsschutz/ba/${id}?entwurf=1" target="_blank">Vorschau</a><a class="btn" href="/druck/arbeitsschutz/ba/${id}.pdf" target="_blank">📄 PDF (freigegeben)</a>
+      <div class="rechts"><a class="btn" href="/druck/arbeitsschutz/ba/${id}?entwurf=1" target="_blank">Vorschau</a><a class="btn" href="/druck/arbeitsschutz/ba/${id}.pdf" target="_blank">PDF (freigegeben)</a>
         ${ICH.rechte.inhaber && b.status !== "archiv" ? `<button class="btn prim" id="baFrei">✍ Freigeben</button>` : ""}
         ${asDarf() ? (b.status === "archiv" ? `<button class="btn" id="baReakt">Wieder aufnehmen</button>` : b.fassungen.length ? `<button class="btn" id="baArch">Archivieren</button>` : `<button class="btn pk rot" id="baDel">${ic("loeschen")} Löschen</button>`) : ""}</div></div>
     <div class="hinweis" style="margin:-6px 0 10px"><span id="baSt">${asStatus(b.status)}</span> · ${esc(b.art_name)}${b.stand ? ` · Stand ${datum(b.stand)}` : ""}${b.material ? ` · <a href="#/mat/${b.material.id}/sicherheit">${esc(b.material.nummer)} ${esc(b.material.name)}</a>` : ""}${b.werkzeuge.length ? " · " + b.werkzeuge.map(w => esc(w.bezeichnung)).join(", ") : ""}</div>
@@ -506,7 +506,7 @@ async function asUnterweisungDetail(id) {
     const gesperrt = !offen || u.unterweiser_signatur || u.teilnehmer.some(t => t.unterschrieben);
     const ro = !darf("arbeitsschutz", 2);
     z.innerHTML = `<div class="titel"><h2>${esc(u.titel)}</h2><span class="speicher"></span>
-        <div class="rechts"><a class="btn" href="/druck/arbeitsschutz/unterweisung/${id}" target="_blank">Nachweis ansehen</a><a class="btn" href="/druck/arbeitsschutz/unterweisung/${id}.pdf" target="_blank">📄 PDF</a>
+        <div class="rechts"><a class="btn" href="/druck/arbeitsschutz/unterweisung/${id}" target="_blank">Nachweis ansehen</a><a class="btn" href="/druck/arbeitsschutz/unterweisung/${id}.pdf" target="_blank">PDF</a>
           ${offen && !gesperrt && asDarf() ? `<button class="btn pk rot" id="uwDel">${ic("loeschen")} Löschen</button>` : ""}</div></div>
       <div class="hinweis" style="margin:-6px 0 10px">${asStatus(u.status)} · Nr. ${esc(u.nummer)}${u.abgeschlossen ? " · abgeschlossen am " + datum(u.abgeschlossen) : ""}</div>
       <div class="form" id="uwF">
@@ -618,7 +618,7 @@ async function asGefahrstoffe() {
   const z = $("#inhalt");
   const liste = await api("arbeitsschutz/gefahrstoffe");
   const kann = asDarf() || darf("material", 2);
-  z.innerHTML = `<div class="titel"><h2>Gefahrstoffverzeichnis</h2><div class="rechts"><a class="btn" href="/druck/arbeitsschutz/gefahrstoffverzeichnis.pdf" target="_blank">📄 PDF</a>${kann ? `<button class="btn prim" id="gsNeu">＋ Gefahrstoff kennzeichnen</button>` : ""}</div></div>
+  z.innerHTML = `<div class="titel"><h2>Gefahrstoffverzeichnis</h2><div class="rechts"><a class="btn" href="/druck/arbeitsschutz/gefahrstoffverzeichnis.pdf" target="_blank">PDF</a>${kann ? `<button class="btn prim" id="gsNeu">＋ Gefahrstoff kennzeichnen</button>` : ""}</div></div>
     <p class="hinweis" style="margin-top:0">Alle Materialien, die als Gefahrstoff gekennzeichnet sind (Lacke, Beizen, Öle, Klebstoffe, Verdünnungen …). Sicherheitsdatenblatt und technisches Merkblatt liegen beim Material unter „Datenblätter &amp; Sicherheit“ und sind in der Werkstatt bei den Materialsummen anklickbar.</p>
     <table class="liste"><tr><th>Gefahrstoff</th><th>Piktogramme</th><th>Signalwort</th><th>H-Sätze</th><th>Arbeitsbereich</th><th>Sicherheitsdatenblatt</th><th>Betriebsanweisung</th></tr>
     ${liste.map(x => `<tr class="klick" data-m="${x.material_id}"><td><b>${esc(x.name)}</b><div class="hinweis">${esc(x.nummer)}${x.lieferant ? " · " + esc(x.lieferant) : ""}</div></td>
@@ -737,7 +737,7 @@ async function asNotfall() {
   let vb = [];
   if (ICH.rechte.inhaber) vb = await api("arbeitsschutz/verbandbuch");
   const ro = !asDarf();
-  z.innerHTML = `<div class="titel"><h2>Erste Hilfe &amp; Notfall</h2><span class="speicher"></span><div class="rechts"><a class="btn" href="/druck/arbeitsschutz/notfall" target="_blank">Aushang ansehen</a><a class="btn" href="/druck/arbeitsschutz/notfall.pdf" target="_blank">📄 PDF</a></div></div>
+  z.innerHTML = `<div class="titel"><h2>Erste Hilfe &amp; Notfall</h2><span class="speicher"></span><div class="rechts"><a class="btn" href="/druck/arbeitsschutz/notfall" target="_blank">Aushang ansehen</a><a class="btn" href="/druck/arbeitsschutz/notfall.pdf" target="_blank">PDF</a></div></div>
     <div class="sektion">Notfall-Aushang</div>
     <p class="hinweis" style="margin-top:0">Rufnummern und Ansprechpartner für den Aushang neben dem Erste-Hilfe-Material.${eh.length ? ` Ersthelfer laut Nachweisen: ${esc(eh.join(", "))} – erscheinen im Aushang, solange hier keine eingetragen sind.` : ""}</p>
     <div class="form" id="nfF">${v.notfall.map(([k, l]) => zeile(esc(l), `<input data-nf="${k}" value="${esc(o.notfall[k] || "")}" ${ro ? "readonly" : ""}>`)).join("")}</div>

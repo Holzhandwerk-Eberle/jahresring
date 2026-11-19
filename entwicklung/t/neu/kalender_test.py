@@ -1,6 +1,7 @@
 """Externe Kalender (iCal): Serientermine."""
 import sys, os, time
-os.environ["TZ"] = "Europe/Berlin"; time.tzset()
+os.environ["TZ"] = "Europe/Berlin"
+if hasattr(time, "tzset"): time.tzset()   # unter Windows gibt es tzset nicht; die geprüften Termine tragen ihre Zeitzone selbst
 sys.path.insert(0, "/home/claude/eberle-buero")
 import kalender as K
 from datetime import datetime

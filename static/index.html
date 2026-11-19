@@ -96,7 +96,7 @@ body.anmelde-body::before{content:"";position:fixed;left:50%;top:50%;width:min(9
 #inhalt{padding:16px 18px 20px}
 .titel{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px}
 .titel h2{margin:0;font-size:19px;min-width:150px}
-.titel .rechts{margin-left:auto;display:flex;gap:6px}
+.titel .rechts{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:100%}
 .such{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 input[type=text],input[type=number],input[type=date],input[type=time],input[type=month],input[type=datetime-local],input[type=email],input[type=url],input[type=tel],input[type=search],input[type=password],input:not([type]),select,textarea{
   border:1px solid #cfc6ba;border-radius:4px;padding:4px 7px;background:#fff}
@@ -109,10 +109,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--akzent2);outline
 textarea{resize:vertical;width:100%}
 .btn{border:1px solid #cfc6ba;background:#f3efe9;border-radius:4px;padding:4px 12px;cursor:pointer;line-height:20px}
 .btn:hover{background:#e8e1d7}
-a.btn{text-decoration:none;color:inherit}
+a.btn{text-decoration:none;color:inherit;display:inline-block}   /* gleiche Höhe wie <button>, auch mitten im Text oder in einer Tabellenzelle */
 .btn.prim{background:var(--akzent);border-color:var(--akzent);color:#fff}
 .btn.prim:hover{background:var(--akzent2)}
 .btn.rot{color:var(--rot)}
+td .btn{white-space:nowrap}
 .btn.pk{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .btn.pk svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8}
 table.liste{width:100%;border-collapse:separate;border-spacing:0 3px}
@@ -162,7 +163,8 @@ table.liste td a{color:var(--dunkel)}
 .modal h3{margin:0 0 12px}
 .modal .zeile{grid-template-columns:110px 1fr}
 .modal .knoepfe{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
-.raster{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.raster{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:14px}.raster>.breit2{grid-column:span 2}
+@media (max-width:600px){.raster>.breit2{grid-column:auto}}
 .kachel{background:var(--zeile);border-radius:6px;padding:12px}
 .kachel h4{margin:0 0 8px}
 .kachel .gross{font-size:26px;font-weight:700}
@@ -172,7 +174,7 @@ table.liste td a{color:var(--dunkel)}
 .notiz div{flex:1;white-space:pre-wrap}
 .ablage{border:2px dashed #cfc6ba;border-radius:6px;padding:18px;text-align:center;color:var(--leise);margin-bottom:12px}
 .ablage.drueber{border-color:var(--akzent);background:var(--hell)}
-@media (max-width:820px){.form{grid-template-columns:1fr}.zeile{grid-template-columns:110px 1fr}}
+@media (max-width:820px){.form{grid-template-columns:minmax(0,1fr)}.zeile{grid-template-columns:110px minmax(0,1fr)}}
 button:disabled{opacity:.45;cursor:default}
 
 /* Text-Editor */
@@ -275,7 +277,7 @@ a.sk:hover{border-color:var(--akzent2)}
 .st-u{font-size:12.5px;color:var(--leise);margin-top:2px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 .st-u a{color:var(--leise)}
 .st-akt{margin-left:auto;display:flex;gap:4px}
-.st-akt .btn{padding:1px 8px;font-size:12px}
+.st-akt .btn{padding:4px 10px}
 .dg-box{position:relative}
 .dg{width:100%;height:auto;display:block}
 .dg-grid{stroke:#ece6dd;stroke-width:1}.dg-null{stroke:#b9ae9f;stroke-width:1}
@@ -499,7 +501,7 @@ body.anmelde-body{display:grid;place-items:center;min-height:100vh;background:va
 .lb-ichm.offen{display:block}.lb-ichm a{display:block;padding:8px 12px;color:var(--text);text-decoration:none}.lb-ichm a:hover{background:var(--hell)}
 tr.inaktiv td{color:var(--leise)}
 .ma-raster{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:26px}
-@media (max-width:1100px){.ma-raster{grid-template-columns:1fr}}
+@media (max-width:1100px){.ma-raster{grid-template-columns:minmax(0,1fr)}}
 table.liste tr.markiert td{background:#fde9b8!important}
 .lb-hilfe{font-weight:700;font-size:17px;text-decoration:none;width:30px;height:30px;border-radius:50%;border:2px solid #bfb3a5;display:grid;place-items:center;line-height:1}
 /* Fertigungsleitstand */
@@ -548,7 +550,7 @@ table.liste tr.sum td{font-weight:700;border-top:2px solid var(--dunkel)}
 @media (max-width:760px){.mb-unterschriften{grid-template-columns:1fr}}
 .mb-pad{display:block;width:100%;height:170px;border:2px dashed #b9ad9d;border-radius:8px;background:#fff;touch-action:none;margin:4px 0}
 .mb-gross{font-size:17px;padding:12px 20px;width:100%;margin:10px 0 30px}
-table.ma-mod{table-layout:fixed;min-width:560px}table.ma-mod td,table.ma-mod th{padding:4px 3px;font-size:13px}
+table.ma-mod{table-layout:fixed;min-width:560px}table.ma-mod td,table.ma-mod th{padding:4px 3px}
 table.ma-mod th:first-child{width:128px}table.ma-mod th:nth-last-child(2){width:66px}table.ma-mod th:nth-last-child(3){width:54px}table.ma-mod th:last-child{width:20px}
 table.ma-mod input{width:100%!important;min-width:0;padding-left:3px;padding-right:3px}
 /* Breite Tabellen laufen nicht mehr aus der Box: eigener Scrollstreifen */
@@ -558,7 +560,7 @@ table.ma-mod input{width:100%!important;min-width:0;padding-left:3px;padding-rig
 /* Felder dürfen nie breiter werden als ihr Platz (sonst schieben sie sich über die Nachbarn) */
 input,select,textarea{min-width:0;max-width:100%}
 /* Raster aus „Beschriftung + Feld“: Spalten brechen von selbst um, Beschriftung und Feld teilen sich die Zelle */
-.feldraster{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:6px 14px;width:100%}
+.feldraster{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(270px,100%),1fr));gap:6px 14px;width:100%}
 .feldraster>*{min-width:0}
 .feldraster>label{display:grid;grid-template-columns:minmax(0,135px) minmax(0,1fr);gap:6px;align-items:center}
 .feldraster>label>span{overflow-wrap:anywhere;hyphens:auto}
@@ -579,7 +581,8 @@ input,select,textarea{min-width:0;max-width:100%}
   .reiter div.r2{padding-left:10px}
   #kopf{padding:8px 10px 10px}#inhalt{padding:12px 10px 16px}
 }
-@media (max-width:600px){.zeile{grid-template-columns:1fr}.zeile>label{padding-bottom:0}}
+@media (max-width:600px){.zeile{grid-template-columns:minmax(0,1fr)}.zeile>label{padding-bottom:0}}
+code{overflow-wrap:anywhere}
 .zeile>label{overflow-wrap:anywhere;hyphens:auto}
 @media (pointer:coarse) and (max-width:1200px){.mit-seite #haupt{grid-template-columns:minmax(0,1fr)!important}.mit-seite #seite{position:static!important;max-height:none!important}}
 table.zt tr.zt-tag td{background:var(--zeile2);padding-top:8px}table.zt tr.zt-tag.we td{background:#e6e0d6}
@@ -587,7 +590,7 @@ table.zt .zt-u{width:58px;text-align:center}table.zt tr.sum td,table.mb tr.sum t
 table.mb tr.we td{background:var(--zeile2)}
 .mb-konten{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:12px}.mb-konten>div{display:flex;flex-direction:column}.mb-konten b{font-size:1.25em}
 .mb-kst{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:6px}
-.ab-kal{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px 22px}
+.ab-kal{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:10px 22px}
 .ab-mon{font-size:12px}.ab-mn{font-weight:600;margin-bottom:2px}.ab-z{display:flex;align-items:center;gap:1px;height:15px}
 .ab-name{width:44px;flex:0 0 44px;overflow:hidden;white-space:nowrap;color:var(--leise)}
 .ab-z i{flex:1;height:12px;background:#f5f2ec;border-radius:1px;min-width:4px}
@@ -631,7 +634,7 @@ table.as-matrix td{text-align:center;font-size:13px;white-space:nowrap}table.as-
 .as-wahl label{display:flex;gap:6px;align-items:flex-start}
 .as-uw-inhalt section{background:var(--zeile);border-radius:6px;padding:10px 14px;margin:10px 0}.as-uw-inhalt h3{margin:0 0 6px}.as-uw-inhalt h4{margin:8px 0 2px;font-size:13px;color:var(--leise)}
 .as-uw-inhalt ul{margin:2px 0;padding-left:20px}.as-uw-inhalt li{margin:2px 0;font-size:15px}
-.as-tn{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.as-tn{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:8px}
 .as-tn-z{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--zeile);border-radius:6px;padding:10px 12px;min-height:52px}
 .as-tn-z .btn{font-size:15px;padding:9px 14px}.as-tn-uw{background:#ece6dc}
 .as-auftrag .as-az{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--zeile2);flex-wrap:wrap}.as-auftrag .as-az:last-child{border:0}
@@ -1252,6 +1255,61 @@ function kopfKunde(k, aktiv) {
     .map(([l, s]) => [l, `#/kunde/${k.id}/${s}`, s === aktiv]);
   kopf({krumen: [["Kunden","#/kunden"]], kontext: kontextKunde(k), reiter: r, zurueck: "#/kunden"});
 }
+
+// ---------- Nacharbeit an jeder aufgebauten Seite (eine Stelle für alle Ansichten) ----------
+// 1. Beschriftung und Feld einer Formularzeile verbinden: Ein Klick auf den Text setzt ins Feld, Vorlesehilfen lesen die Beschriftung.
+// 2. Felder ohne Beschriftung (Filter über Listen, Felder in Tabellen) bekommen eine für Vorlesehilfen: aus der Spaltenüberschrift,
+//    der ersten Auswahlmöglichkeit oder dem Text unmittelbar davor.
+// 3. Verweise auf Kunden- oder Lieferantenseiten werden zu gewöhnlichem Text, wenn dem Benutzer das Recht für den Bereich fehlt.
+let feldNr = 0;
+function seiteNacharbeiten(wurzel = document) {
+  const aus = ["checkbox", "radio", "hidden", "file", "button", "submit", "color", "range"];
+  wurzel.querySelectorAll(".zeile > label:not([for]):not([data-nb])").forEach(l => {
+    l.dataset.nb = "1";
+    if (!l.textContent.trim() || l.querySelector("input,select,textarea")) return;
+    const f = l.parentElement.querySelector(":scope > div input, :scope > div select, :scope > div textarea");
+    if (!f || aus.includes(f.type) || f.closest("label")) return;
+    if (!f.id) f.id = "zf" + (++feldNr);
+    l.htmlFor = f.id;
+  });
+  wurzel.querySelectorAll("input:not([data-nb]), select:not([data-nb]), textarea:not([data-nb])").forEach(f => {
+    f.dataset.nb = "1";
+    if (aus.includes(f.type) || (f.labels && f.labels.length) || f.getAttribute("aria-label") || f.getAttribute("aria-labelledby") || f.title || f.placeholder) return;
+    let text = "";
+    const td = f.closest("td");
+    if (td) {   // Feld in einer Tabelle: die Überschrift der Spalte (nur wenn Kopf und Zeile gleich viele Zellen haben)
+      const tr = td.parentElement, kopf = td.closest("table")?.querySelector("tr");
+      const i = [...tr.children].indexOf(td);
+      if (kopf && kopf !== tr && kopf.children.length === tr.children.length && kopf.children[i]?.tagName === "TH") text = kopf.children[i].textContent.trim();
+    }
+    if (!text && f.tagName === "SELECT" && f.options.length) text = (f.options[0].textContent || "").trim();
+    if (!text) {   // Text unmittelbar vor dem Feld („Jahr“, „von“, „bis“)
+      let v = f.previousSibling;
+      while (v && !(v.textContent || "").trim()) v = v.previousSibling;
+      if (v && (v.nodeType === 3 || ["SPAN", "B", "LABEL", "SMALL"].includes(v.nodeName))) text = v.textContent.trim().replace(/[:：]$/, "");
+    }
+    if (!text) text = (f.closest(".zeile")?.querySelector(":scope > label")?.textContent || "").trim();
+    if (text) f.setAttribute("aria-label", text.slice(0, 60));
+  });
+  // Verweise auf Seiten, die der angemeldete Benutzer nicht öffnen darf (dieselbe Regel wie beim Seitenwechsel):
+  // im Inhalt und im Kopf als Text zeigen; „Zurück“ führt dann auf die nächste erlaubte Seite
+  if (typeof ICH !== "undefined" && ICH && !ICH.rechte.inhaber && typeof darf === "function") {
+    const frei = h => { const b = ROUTE_BEREICH[(h || "").slice(2).split(/[/?]/)[0]]; return !b || darf(b); };
+    wurzel.querySelectorAll('#inhalt a[href^="#/"]:not([data-nb]), #kopf a[href^="#/"]:not([data-nb])').forEach(a => {
+      a.dataset.nb = "1";
+      if (frei(a.getAttribute("href"))) return;
+      if (a.classList.contains("zurueck")) {
+        a.setAttribute("href", $$("#kopf .krumen a").map(k => k.getAttribute("href")).find(frei) || startseiteFuer()); return;
+      }
+      const s = document.createElement("span");   // Kennung, Erklärtext und Gestaltung bleiben, damit Programmteile, die das Element suchen, es weiter finden
+      for (const at of a.attributes) if (!["href", "target", "rel", "class"].includes(at.name)) s.setAttribute(at.name, at.value);
+      s.className = a.className.replace(/\bbtn\b/, "").trim(); s.append(...a.childNodes); a.replaceWith(s);
+    });
+  }
+}
+let nacharbeitGeplant = 0;
+new MutationObserver(() => { if (!nacharbeitGeplant) nacharbeitGeplant = requestAnimationFrame(() => { nacharbeitGeplant = 0; seiteNacharbeiten(); }); })
+  .observe(document.documentElement, {childList: true, subtree: true});
 
 function zeile(label, inner, voll = false) {
   return `<div class="zeile${voll ? " voll" : ""}"><label>${label}</label><div>${inner}</div></div>`;
@@ -2089,7 +2147,7 @@ async function ansichtZahlung(id) {
       ${zeile("Vorsteuer", `<select data-f="vorsteuer" class="klein">${[19,7,0].map(v => `<option value="${v}"${+z.vorsteuer === v ? " selected" : ""}>${zahlDE(v)}</option>`).join("")}</select> %`)}
       <div class="zeile voll"><label></label><div id="rech" class="hinweis" style="padding-top:8px"></div></div>
       ${zeile("Bemerkung", inp(z, "bemerkung"), true)}
-      ${z.datei ? zeile("Rechnung", `<a class="btn" href="/api/zahlungen/${id}/datei" target="_blank">📄 Rechnung ansehen</a><button class="btn" type="button" id="zXml" style="flex:0 0 auto">🔍 XML</button><span class="hinweis" style="padding-top:6px">${esc(z.datei.split(/[\\/]/).pop())}</span>`, true) : ""}
+      ${z.datei ? zeile("Rechnung", `<a class="btn" href="/api/zahlungen/${id}/datei" target="_blank">Rechnung ansehen</a><button class="btn" type="button" id="zXml" style="flex:0 0 auto">🔍 XML</button><span class="hinweis" style="padding-top:6px">${esc(z.datei.split(/[\\/]/).pop())}</span>`, true) : ""}
       ${zeile("Auftrag", `<select data-f="auftrag_id"><option value="">kein Auftrag</option>${auftraege.map(a => `<option value="${a.id}"${a.id === z.auftrag_id ? " selected" : ""}>${esc(a.nummer)} · ${esc(a.bezeichnung)}</option>`).join("")}</select>`, true)}
       <div class="sektion">Zahlung</div>
       ${zeile("Fällig am", `<input type="date" data-f="faellig" value="${esc(z.faellig)}">`)}
@@ -2156,10 +2214,72 @@ async function zahlungsStatistik(ziel, lieferant) {
 }
 
 // ---------- Einstellungen ----------
+// ---------- Einstellungen > Kalkulation > Gesetzliche Werte: Sätze mit Stichtag ----------
+// Tabelle der Sätze mit „gültig ab“: hinterlegte Zeilen zeigen, eigene Einträge ergänzen und entfernen.
+// o: {zeilen (vollständige Liste), eigene, spalten [[feld, titel, einheit, nurAnzeige]], zeigen, halbjahr, speichern(liste)}
+function stichtagTabelle(el, o) {
+  const eigen = new Set((o.eigene || []).map(x => x.ab));
+  const zeilen = (o.zeilen || []).slice(-(o.zeigen || 6));
+  const j = new Date().getFullYear(), hj = [];
+  for (let y = j - 2; y <= j + 1; y++) hj.push(`${y}-01-01`, `${y}-07-01`);
+  const letzter = (o.zeilen || []).length ? o.zeilen[o.zeilen.length - 1].ab : "";
+  const vorgabe = hj.find(x => x > letzter) || hj[hj.length - 1];
+  el.innerHTML = `<table class="liste stichtag" style="max-width:660px"><tr><th style="width:150px">gültig ab</th>${o.spalten.map(s => `<th class="r">${esc(s[1])}</th>`).join("")}<th style="width:120px"></th></tr>
+    ${zeilen.map(x => `<tr><td>${datum(x.ab)}</td>${o.spalten.map(s => `<td class="r">${zahlDE(x[s[0]])} ${s[2]}</td>`).join("")}
+      <td>${eigen.has(x.ab) ? `<button type="button" class="btn" data-weg="${esc(x.ab)}" title="Eigenen Eintrag entfernen">Entfernen</button>` : `<span class="hinweis">hinterlegt</span>`}</td></tr>`).join("")}
+    <tr><td>${o.halbjahr ? `<select data-neu="ab" aria-label="gültig ab">${hj.map(x => `<option value="${x}" ${x === vorgabe ? "selected" : ""}>${datum(x)}</option>`).join("")}</select>`
+        : `<input type="date" data-neu="ab" aria-label="gültig ab">`}</td>
+      ${o.spalten.map(s => s[3] ? "<td></td>" : `<td class="r"><input class="zahl" data-neu="${s[0]}" aria-label="${esc(s[1])}" style="width:84px"> ${s[2]}</td>`).join("")}
+      <td><button type="button" class="btn" data-neu="ok">Eintragen</button></td></tr></table>`;
+  $$("[data-weg]", el).forEach(b => b.onclick = async () => {
+    if (!await frage(`Eigenen Eintrag ab ${datum(b.dataset.weg)} entfernen?\n\nDanach gilt wieder der hinterlegte Satz, falls es für diesen Tag einen gibt.`)) return;
+    o.speichern((o.eigene || []).filter(x => x.ab !== b.dataset.weg));
+  });
+  $('[data-neu="ok"]', el).onclick = () => {
+    const neu = {ab: $('[data-neu="ab"]', el).value};
+    if (!neu.ab) return toast("Bitte den Tag angeben, ab dem der Satz gilt.", true);
+    for (const s of o.spalten) if (!s[3]) {
+      const roh = $(`[data-neu="${s[0]}"]`, el).value.trim();
+      if (!roh || isNaN(zahlEin(roh))) return toast(`Bitte „${s[1]}“ als Zahl angeben.`, true);
+      neu[s[0]] = zahlEin(roh);
+    }
+    o.speichern([...(o.eigene || []).filter(x => x.ab !== neu.ab), neu]);
+  };
+}
+function rechtswerteVorgabe(z) {
+  const rw = E._rechtswerte || {};
+  const sichern = async body => {
+    try { E = {...E, ...(await api("einstellungen", {method: "PUT", body}))}; toast("Gespeichert"); rechtswerteVorgabe(z); }
+    catch (e) { toast(e.message, true); }
+  };
+  z.innerHTML = `<div class="titel"><h2>Gesetzliche Werte</h2></div>
+    <p class="hinweis" style="margin-top:-6px;max-width:860px">Sätze, die der Gesetzgeber festlegt und die sich zu einem Stichtag ändern. Hinterlegt ist der Stand dieser Programmversion.
+    Ändert sich ein Satz, hier den neuen Wert mit dem Tag eintragen, ab dem er gilt. Für die Zeit davor rechnet das Programm weiter mit dem alten Satz.</p>
+    <div class="kachel" style="margin-bottom:12px"><h4>Umsatzsteuersätze</h4>
+      <p class="hinweis" style="max-width:820px">Beim Kunden steht der Regelsatz oder der ermäßigte Satz. Ein Beleg rechnet mit dem Satz, der am Leistungsdatum gilt, ohne Leistungsdatum am Belegdatum.
+      Passt der Satz eines Entwurfs nicht mehr zum Leistungsdatum, fragt das Programm vor dem Festschreiben nach. Für einen neuen Satz gibt es im DATEV-Export noch kein Erlöskonto, das ist mit der Kanzlei abzustimmen.</p>
+      <div id="rwSteuer"></div></div>
+    <div class="kachel" style="margin-bottom:12px"><h4>Basiszinssatz (§ 247 BGB)</h4>
+      <p class="hinweis" style="max-width:820px">Grundlage der Verzugszinsen im Mahnwesen: Basiszinssatz plus 5 Prozentpunkte bei Verbrauchern, plus 9 bei Geschäftskunden. Die Deutsche Bundesbank gibt ihn
+      zum 1. Januar und zum 1. Juli bekannt. Ein neues Halbjahr bitte auch dann eintragen, wenn der Satz gleich bleibt. Läuft ein Verzug über einen Stichtag, rechnet die Mahnung jeden Zeitraum mit seinem Satz.</p>
+      ${rw.basiszins_offen ? `<p class="hinweis" id="rwZinsOffen" style="color:#8a5a00">⚠ Für das Halbjahr ab ${datum(rw.basiszins_offen)} ist noch kein Satz eingetragen; gerechnet wird mit ${zahlDE(rw.basiszins)} %.</p>` : ""}
+      <div id="rwZins"></div></div>
+    <div class="kachel" style="margin-bottom:12px"><h4>Gesetzlicher Mindestlohn</h4>
+      <p class="hinweis" style="max-width:820px">Für die Hinweise in der Lohnübersicht (Stundenlohn oder Gehalt unter dem Mindestlohn, Verdienst über der Minijob-Grenze). Die Minijob-Grenze folgt aus dem Mindestlohn:
+      130 Stunden im Vierteljahr, auf volle Euro aufgerundet.</p>
+      <div id="rwLohn"></div></div>`;
+  stichtagTabelle($("#rwSteuer", z), {zeilen: rw.steuersaetze, eigene: E.steuersaetze || [], spalten: [["regel", "Regelsatz", "%"], ["ermaessigt", "ermäßigter Satz", "%"]], zeigen: 4,
+    speichern: liste => sichern({steuersaetze: liste})});
+  stichtagTabelle($("#rwZins", z), {zeilen: rw.basiszinsen, eigene: (E.mahnwesen || {}).basiszinsen || [], spalten: [["satz", "Basiszinssatz", "%"]], zeigen: 5, halbjahr: true,
+    speichern: liste => sichern({mahnwesen: {...(E.mahnwesen || {}), basiszinsen: liste}})});
+  stichtagTabelle($("#rwLohn", z), {zeilen: rw.mindestlohn, eigene: E.mindestlohn || [], spalten: [["satz", "Mindestlohn je Stunde", "€"], ["minijob", "Minijob-Grenze im Monat", "€", true]], zeigen: 4,
+    speichern: liste => sichern({mindestlohn: liste})});
+}
+
 const EINST_TABS = [["firma", "Firma"], ["belege", "Belege & Briefbogen"], ["texte", "Texte"], ["kalkulation", "Kalkulation"],
   ["auftraege", "Kunden & Aufträge"], ["lieferanten", "Lieferanten & Zahlungen"], ["mail", "E-Mail"], ["werkstatt", "Werkstatt & Material"],
   ["kalender", "Kalender"], ["arbeitszeit", "Arbeitszeit"], ["programm", "Programm"], ["benutzer", "Benutzer & Netzwerk"], ["import", "Datenimport"], ["service", "Service"]];
-const EINST_UNTER = {kalkulation: [["loehne", "Löhne"], ["zuschlaege", "Zuschläge"], ["taetigkeiten", "Tätigkeiten"], ["vorlagen", "Positionsvorlagen"], ["unproduktiv", "Unproduktive Tätigkeiten"]],
+const EINST_UNTER = {kalkulation: [["loehne", "Löhne"], ["zuschlaege", "Zuschläge"], ["taetigkeiten", "Tätigkeiten"], ["vorlagen", "Positionsvorlagen"], ["unproduktiv", "Unproduktive Tätigkeiten"], ["rechtswerte", "Gesetzliche Werte"]],
   texte: [["belegtexte", "Belegtexte"], ["belegarten", "Eigene Belegarten"], ["variablen", "Belegvariablen"], ["mahnungen", "Mahnungen"], ["textbausteine", "Textbausteine"]],
   import: [["kunden", "Kunden"], ["werkzeuge", "Werkzeuge"]],
   arbeitszeit: [["feiertage", "Feiertage"], ["frei", "Arbeitsfreie Tage"], ["plaene", "Sollstundenpläne"]],
@@ -2189,6 +2309,7 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
     if (sub === "belegarten") return belegartenVorgabe(z);
     if (sub === "variablen") return belegvariablenVorgabe(z);
     if (sub === "mahnungen") return mahnEinstellungen(z);
+    if (sub === "rechtswerte") return rechtswerteVorgabe(z);
     return auftragsWerte(z, {teil: sub});
   }
   einstKopf(tab);
@@ -2249,14 +2370,14 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
         <span class="hinweis">Platzhalter: {anzahlung} (Prozent, am Beleg eingetragen), {anzahlung_betrag} (Betrag brutto), {rest_tage}</span></div>`, true)}
       ${zeile("Lieferzeit", `<div class="spalte"><input name="zahlungsplan_lieferung" value="${esc(E.zahlungsplan_lieferung || "")}">
         <span class="hinweis">wird angehängt, wenn am Beleg Wochen eingetragen sind; Platzhalter {lieferwochen}</span></div>`, true)}
-      ${zeile("Restzahlung", `<input name="zahlungsplan_rest" type="number" min="0" value="${esc(String(E.zahlungsplan_rest ?? 10))}" class="klein"> Tage nach Leistungserbringung (Vorgabe)`)}
+      ${zeile("Restzahlung", `<input name="zahlungsplan_rest" type="number" min="0" max="365" step="1" value="${esc(String(E.zahlungsplan_rest ?? 10))}" class="klein"> Tage nach Leistungserbringung (Vorgabe)`)}
       <div class="sektion">Briefbogen und AGB</div>
       ${zeile("Briefbogen", `<label class="pchk"><input type="checkbox" name="briefvorlage_aktiv" ${E.briefvorlage_aktiv !== false ? "checked" : ""}> Belege auf den hinterlegten Briefbogen drucken</label>`, true)}
       <div class="zeile voll"><label>Vorlagen</label><div id="vorlagenBox" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;padding:8px"></div></div>
       ${zeile("AGB anhängen bei", `<div class="radio">${[["angebot","Angebot"],["kv","Kostenvoranschlag"],["ab","Auftragsbestätigung"],["rechnung","Rechnung"]].map(([v, l]) => `<label class="pchk"><input type="checkbox" data-agb value="${v}" ${(E.agb_bei || ["angebot"]).includes(v) ? "checked" : ""}> ${l}</label>`).join("")}</div>`, true)}
       ${zeile("Seitenzahlen", `<div class="spalte"><label><input type="checkbox" name="seitenzahlen" ${E.seitenzahlen !== false ? "checked" : ""}> „Seite 1 von 2“ ins PDF drucken (ab zwei Seiten, AGB-Seiten zählen nicht mit)</label>
-        <div style="display:flex;gap:14px;flex-wrap:wrap"><label style="display:flex;gap:6px;align-items:center">Abstand von unten (mm) <input name="seitenzahl_unten" type="number" step="0.5" value="${E.seitenzahl_unten ?? 6}" style="width:70px"></label>
-        <label style="display:flex;gap:6px;align-items:center">Abstand von rechts (mm) <input name="seitenzahl_rechts" type="number" step="0.5" value="${E.seitenzahl_rechts ?? 18}" style="width:70px"></label></div></div>`, true)}
+        <div style="display:flex;gap:14px;flex-wrap:wrap"><label style="display:flex;gap:6px;align-items:center">Abstand von unten (mm) <input name="seitenzahl_unten" type="number" min="0" max="60" step="0.5" value="${E.seitenzahl_unten ?? 6}" style="width:70px"></label>
+        <label style="display:flex;gap:6px;align-items:center">Abstand von rechts (mm) <input name="seitenzahl_rechts" type="number" min="0" max="150" step="0.5" value="${E.seitenzahl_rechts ?? 18}" style="width:70px"></label></div></div>`, true)}
       ${zeile("Letzte Seite unten bündig", `<label class="pchk"><input type="checkbox" name="unten_buendig" ${E.unten_buendig !== false ? "checked" : ""}> Summen, Konditionen, Schlusstext und Gruß unten auf der letzten Seite (Vorgabe für neue und offene Belege, im Beleg unter Druckeinstellungen änderbar)</label>`, true)}
       ${zeile("Übertrag", `<label class="pchk"><input type="checkbox" name="uebertrag" ${E.uebertrag !== false ? "checked" : ""}> Bei mehrseitigen Belegen mit Preisen die Zwischensumme am Seitenende und oben auf der nächsten Seite drucken (Vorgabe für neue und offene Belege, im Beleg unter Druckeinstellungen änderbar)</label>`, true)}
       ${zeile("Verbraucher-AGB für", `<input id="agbGruppen" value="${esc((E.agb_verbraucher_gruppen || ["Privatkunde"]).join(", "))}"><span class="hinweis" style="padding-top:5px">Kundengruppen, alle anderen bekommen die Unternehmer-AGB</span>`, true)}
@@ -2278,7 +2399,7 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
       <div class="sektion">Aufbewahrung und Löschen</div>
       ${zeile("Aufbewahrungsfrist", `<div class="spalte"><select name="frist_rechnung_jahre" data-zahl="1" style="max-width:260px">${[[10, "10 Jahre (Vorgabe)"], [9, "9 Jahre"], [8, "8 Jahre"]].map(([v, l]) => `<option value="${v}" ${+(E.frist_rechnung_jahre || 10) === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="hinweis">Gilt für Rechnungen und Kontoauszüge: Erst nach Ablauf schlägt die Löschprüfung (Service › Löschprüfung) Kunden zum Anonymisieren und Kontoauszüge zum Löschen vor. Für Buchungsbelege gelten seit 2025 acht Jahre, für Bücher, Aufzeichnungen und den Jahresabschluss weiterhin zehn. Im Zweifel bei zehn Jahren bleiben oder die Steuerberatung fragen.</span></div>`, true)}
       <div class="sektion">Nummern</div>
-      ${zeile("Kundennr. ab", `<input name="kundennr_start" type="number" value="${E.kundennr_start}" class="klein">`)}
+      ${zeile("Kundennr. ab", `<input name="kundennr_start" type="number" min="1" max="99999999" step="1" value="${E.kundennr_start}" class="klein">`)}
       ${zeile("Auftragsnr.", `<span class="hinweis" style="padding-top:4px">Jahr-laufende Nummer, z. B. ${new Date().getFullYear()}-0001</span>`)}
       ${zeile("Rechnungsnr.", `<span class="hinweis" style="padding-top:4px">Jahr-laufende Nummer, z. B. ${new Date().getFullYear()}-0001 (Rechnungen, Abschläge, Stornos)</span>`)}
       <div class="sektion">Auswahllisten <span class="hinweis" style="font-weight:400">· ein Eintrag pro Zeile</span></div>
@@ -2299,18 +2420,18 @@ async function ansichtEinstellungen(tab = "firma", sub, extra) {
             <span class="hinweis" style="padding-top:6px">sobald das Datum im Auftrag eingetragen wird (von Hand oder durch den Lieferschein)</span>`)).join(""); })()}
       <div class="sektion">Controlling (Startseite)</div>
       ${zeile("Umsatz zählt", `<select name="umsatz_basis" style="flex:0 0 auto">${[["zahlung", "mit dem Zahlungseingang (bezahlt)"], ["rechnung", "mit dem Rechnungsdatum (festgeschrieben)"]].map(([v, l]) => `<option value="${v}" ${(E.umsatz_basis || "zahlung") === v ? "selected" : ""}>${l}</option>`).join("")}</select>`, true)}
-      ${zeile("Nachfassen nach", `<input name="nachfass_tage" type="number" value="${E.nachfass_tage ?? 10}" class="klein"> Tagen ohne Rückmeldung auf ein Angebot`, true)}
-      ${zeile("Anfragen", `<input name="anfrage_tage" type="number" value="${E.anfrage_tage ?? 7}" class="klein"> Tage, bis eine Anfrage ohne Angebot markiert wird`, true)}
+      ${zeile("Nachfassen nach", `<input name="nachfass_tage" type="number" min="0" max="365" step="1" value="${E.nachfass_tage ?? 10}" class="klein"> Tagen ohne Rückmeldung auf ein Angebot`, true)}
+      ${zeile("Anfragen", `<input name="anfrage_tage" type="number" min="0" max="365" step="1" value="${E.anfrage_tage ?? 7}" class="klein"> Tage, bis eine Anfrage ohne Angebot markiert wird`, true)}
       <div class="sektion">Wiedervorlagen nach Abschluss <span class="hinweis" style="font-weight:400">· beim Festschreiben einer Rechnung, gerechnet ab Leistungsdatum; fällige stehen auf der Startseite</span></div>
       ${(E.wiedervorlage_regeln || []).map((r, i) => zeile(esc({nachfrage: "Nachfrage", pflege: "Pflege", gewaehrleistung: "Gewährleistung"}[r.art] || "Wiedervorlage"),
         `<label style="flex:0 0 auto"><input type="checkbox" data-wv="${i}" data-wk="aktiv" ${r.aktiv ? "checked" : ""}> nach</label><input type="number" data-wv="${i}" data-wk="tage" value="${r.tage}" class="klein" min="1" max="3650"> Tagen:
          <input data-wv="${i}" data-wk="text" value="${esc(r.text)}" style="flex:1 1 260px">`, true)).join("")}
       ${zeile("Nicht im Rohertrag", `<textarea name="rohertrag_ohne_gruppen" rows="4">${esc((E.rohertrag_ohne_gruppen || []).join("\n"))}</textarea><span class="hinweis" style="padding-top:5px">Lieferantengruppen, deren Rechnungen nicht als Material/Einkauf vom Umsatz abgezogen werden (eine je Zeile). Alle anderen bezahlten Zahlungsaufträge zählen, ebenso jede Zahlung mit Auftrag. Lohnzahlungen zählen nie.</span>`, true)}
-      ${zeile("Ziel-Ertrag je Stunde", `<input name="ziel_stundensatz" type="number" value="${E.ziel_stundensatz || ""}" class="klein" placeholder="z. B. 65"> € Rohertrag je gebuchter Stunde`, true)}
+      ${zeile("Ziel-Ertrag je Stunde", `<input name="ziel_stundensatz" type="number" min="0" max="1000" value="${E.ziel_stundensatz || ""}" class="klein" placeholder="z. B. 65"> € Rohertrag je gebuchter Stunde`, true)}
     </div>
     <div class="form einst-pane" data-pane="lieferanten">
       <div class="sektion">Lieferanten</div>
-      ${zeile("Lieferantennr. ab", `<input name="lieferantennr_start" type="number" value="${E.lieferantennr_start}" class="klein">`)}
+      ${zeile("Lieferantennr. ab", `<input name="lieferantennr_start" type="number" min="1" max="99999999" step="1" value="${E.lieferantennr_start}" class="klein">`)}
       ${zeile("Lieferantengruppen", liste("lieferantengruppen"))}
       <div class="sektion">Zahlungen</div>
       ${zeile("Zahlungsaufträge", `<span class="hinweis" style="padding-top:4px">Z + Jahr-laufende Nummer, z. B. Z${new Date().getFullYear()}-0001</span>`)}
@@ -2499,7 +2620,7 @@ function mailEinstellungen() {
     ${zeile("Hinweistext", `<div class="spalte"><textarea data-m="signatur_hinweis" id="sgHinweis" rows="5">${v("signatur_hinweis")}</textarea><span class="hinweis">kleiner gedruckt unter der Signatur, z. B. Vertraulichkeitshinweis; leer lassen, wenn keiner gewünscht</span></div>`, true)}
     ${zeile("Vorschau", `<div class="spalte" style="width:100%"><div id="sgVorschau" style="background:#fff;border:1px solid var(--linie);border-radius:6px;padding:14px;font-family:Arial,sans-serif;color:#222"></div><button class="btn" type="button" id="sgAkt" style="align-self:flex-start">Vorschau aktualisieren</button><span class="hinweis">So erscheint die Signatur unter jeder E-Mail aus dem Programm (Belege, Mahnungen, Briefe, Rundmails). Erst speichern, dann aktualisieren.</span></div>`, true)}
     <div class="sektion">Posteingang (Korrespondenz)</div>
-    ${zeile("Prüfen alle", `<input name="posteingang_minuten" type="number" min="0" value="${E.posteingang_minuten ?? 15}" class="klein"> Minuten <span class="hinweis" style="padding-top:5px">0 = nur auf Knopfdruck. Gelesen werden Posteingang und Gesendet; Mails von und an hinterlegte Kunden-/Lieferantenadressen erscheinen unter Korrespondenz. Im Postfach wird nichts verändert.</span>`, true)}
+    ${zeile("Prüfen alle", `<input name="posteingang_minuten" type="number" min="0" max="1440" step="1" value="${E.posteingang_minuten ?? 15}" class="klein"> Minuten <span class="hinweis" style="padding-top:5px">0 = nur auf Knopfdruck. Gelesen werden Posteingang und Gesendet; Mails von und an hinterlegte Kunden-/Lieferantenadressen erscheinen unter Korrespondenz. Im Postfach wird nichts verändert.</span>`, true)}
     ${zeile("Weitere Ordner", `<div class="spalte"><textarea name="posteingang_ordner" rows="2">${esc((E.posteingang_ordner || ["Kundenkontakt"]).join("\n"))}</textarea><span class="hinweis">Ordner im Postfach, die zusätzlich zum Posteingang gelesen werden, z. B. „Kundenkontakt“, ein Name je Zeile. Verschobene Mails werden nicht doppelt erfasst.</span></div>`, true)}
     ${zeile("Rechnungsordner", `<div class="spalte"><textarea name="rechnung_ordner" rows="2">${esc((E.rechnung_ordner || []).join("\n"))}</textarea><span class="hinweis">Ordner im Postfach, in dem Lieferantenrechnungen gesammelt werden (z. B. „Rechnungen“), ein Name je Zeile. Dort wird jeder PDF- oder XML-Anhang als Rechnung vorgeschlagen; im Posteingang nur Anhänge von Mailadressen (oder Domains) der hinterlegten Lieferanten. Die Vorschläge erscheinen unter Lieferanten › Zahlungsaufträge.</span></div>`, true)}
     <div class="sektion">Zahlungsbestätigung</div>
@@ -2509,7 +2630,7 @@ function mailEinstellungen() {
     ${zeile("Schlusssatz Rechnung", `<input name="zahlbest_schluss_rechnung" value="${esc(E.zahlbest_schluss_rechnung || "")}">`, true)}
     ${zeile("Schlusssatz Abschlag", `<div class="spalte"><input name="zahlbest_schluss_abschlag" value="${esc(E.zahlbest_schluss_abschlag || "")}"><span class="hinweis">Wird für {schlusssatz} eingesetzt: bei Abschlagsrechnungen der zweite, sonst der erste Satz.</span></div>`, true)}
     <div class="sektion">Geburtstage</div>
-    ${zeile("Vorschau", `<input name="geburtstag_tage" type="number" min="0" value="${E.geburtstag_tage ?? 14}" class="klein"> Tage im Voraus auf der Startseite`, true)}
+    ${zeile("Vorschau", `<input name="geburtstag_tage" type="number" min="0" max="90" step="1" value="${E.geburtstag_tage ?? 14}" class="klein"> Tage im Voraus auf der Startseite`, true)}
     ${zeile("Betreff", `<input name="geburtstag_betreff" value="${esc(E.geburtstag_betreff || "")}">`, true)}
     ${zeile("Text", `<div class="spalte"><textarea name="geburtstag_text" data-text="1" rows="5">${esc(E.geburtstag_text || "")}</textarea><span class="hinweis">Platzhalter {anrede}, {vorname}, {name}. Die Signatur wird angehängt.</span></div>`, true)}`;
 }
@@ -2609,7 +2730,7 @@ function hilfeZiel() {
   const [a, b, c] = (location.hash.slice(2) || "start").split("/");
   const auftragReiter = {positionen: "positionen", belege: "belege", werkstatt: "werkstatt", stunden: "stunden", sollist: "stunden",
     auswertung: "stunden", titel: "positionsliste", op: "op", briefe: "briefe", anhaenge: "auftrag-reiter", kunde: "kunde"};
-  const einst = {firma: "einrichtung", belege: "druckeinstellungen", texte: {_: "einstellungen", belegarten: "eigene-belegarten", variablen: "belegvariablen"}, arbeitszeit: "arbeitszeit-einstellungen", kalkulation: {_: "auftragswerte", taetigkeiten: "taetigkeiten"}, auftraege: "auftraege",
+  const einst = {firma: "einrichtung", belege: "druckeinstellungen", texte: {_: "einstellungen", belegarten: "eigene-belegarten", variablen: "belegvariablen"}, arbeitszeit: "arbeitszeit-einstellungen", kalkulation: {_: "auftragswerte", taetigkeiten: "taetigkeiten", rechtswerte: "gesetzliche-werte"}, auftraege: "auftraege",
     lieferanten: "zahlungen", mail: "pdf-mail", werkstatt: "zuschnitt", kalender: "kalender", programm: "autostart", benutzer: "benutzer",
     service: {infos: "infos", sicherung: "datensicherung", projekte: "projektsicherung", ruecksicherung: "ruecksicherung", relationen: "relationen", protokoll: "protokoll", loeschen: "loeschpruefung", export: "export", testdaten: "testdaten"}};
   const mat = {reste: "reste", werkzeuge: "werkzeuge", sets: "sets", lager: "lagerbuchen", auftrag: "lagerbuchen", statistik: "lagerbuchen", beschlaege: "materialstamm"};
@@ -2789,7 +2910,7 @@ async function render() {
   }
 }
 window.addEventListener("hashchange", render);
-const VERSION = "2026.11.01-151";
+const VERSION = "2026.11.01-152";
 (async () => {
   try {
     const v = await api("version").catch(() => ({}));
